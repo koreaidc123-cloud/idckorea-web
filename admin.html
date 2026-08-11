@@ -181,6 +181,20 @@ a{color:inherit;text-decoration:none}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{font-style:normal;width:11px;height:11px;border-radius:4px;display:inline-block}
 .dirnote{font-size:11.5px;color:var(--ink4);padding:0 18px 12px;text-align:right}
+.floor .flcnt{width:44px;font-size:11px;color:var(--ink4);text-align:left;flex:none}
+/* 랙 구조 편집 패널 */
+.editpanel{border-bottom:1px solid var(--line2);background:#FBFCFE;padding:14px 18px}
+.ep-h{margin-bottom:10px}
+.ep-h b{font-size:14px;font-weight:800}
+.ep-h span{display:block;font-size:12px;color:var(--ink4)}
+.ep-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
+.ep-row b{width:34px;font-weight:800;color:var(--ink2)}
+.ep-row input{width:74px;height:34px;border:1px solid var(--line);border-radius:8px;
+  padding:0 10px;text-align:center;font-weight:800;background:#fff}
+.ep-row input:focus{outline:0;border-color:var(--blue)}
+.ep-row span{color:var(--ink4);font-size:12px}
+.ep-dim{color:var(--ink4);font-size:12px}
+.ep-acts{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
 
 /* 드로어 */
 .drawer{position:fixed;top:0;right:-460px;bottom:0;width:440px;background:#fff;z-index:120;
@@ -412,6 +426,16 @@ const DEFSET={setup:5000, downSec:60, notiDay:5, off60:3, off90:5};
 let SET=Object.assign({},DEFSET);
 try{ SET=Object.assign({},DEFSET,JSON.parse(localStorage.getItem('kvc-set')||'{}')) }catch(e){}
 
+/* 랙 구성 — 하드코딩 금지.
+   랙마다 층수가 다를 수 있고, 층마다 자리 수도 다를 수 있다 (예: 7·7·7·5).
+   배열 = 층별 자리 수, [0]번이 1층. 관리자에서 추가·수정하면 즉시 반영·보존된다. */
+function defRacks(){const o={};for(const r of ROOMS){o[r.k]=Array.from({length:r.racks},()=>[SLOTS,SLOTS,SLOTS,SLOTS])}return o}
+let RACKS=defRacks();
+try{const s=JSON.parse(localStorage.getItem('kvc-racks')||'null');if(s&&s.K&&s.Y&&s.D)RACKS=s}catch(e){}
+const saveRacks=()=>localStorage.setItem('kvc-racks',JSON.stringify(RACKS));
+const rackOcc=(room,rack)=>PCS.filter(p=>p.room===room&&p.rack===rack);
+const floorMaxSlot=(room,rack,fl)=>rackOcc(room,rack).filter(p=>p.fl===fl).reduce((m,p)=>Math.max(m,p.slot),0);
+
 /* 열람 기록 */
 let VLOG=[];
 try{ VLOG=JSON.parse(localStorage.getItem('kvc-vlog')||'[]') }catch(e){}
@@ -545,41 +569,73 @@ function vVerify(){
   </div>`;
 }
 
-/* ═══════════════ 화면: 랙맵 ═══════════════ */
-let RSEL={room:'Y',rack:1};
+/* ═══════════════ 화면: 랙맵 (구조 편집 포함) ═══════════════ */
+let RSEL={room:'Y',rack:1,edit:false};
 function vRack(){
   const r=ROOMS.find(x=>x.k===RSEL.room);
+  const cfgList=RACKS[r.k];
+  if(RSEL.rack>cfgList.length)RSEL.rack=cfgList.length;
+  const cfg=cfgList[RSEL.rack-1];
   const inRoom=PCS.filter(p=>p.room===r.k);
+  const inRack=rackOcc(r.k,RSEL.rack);
   const roomCard=rm=>{
     const l=PCS.filter(p=>p.room===rm.k);
     const seg=(st,c)=>{const n=l.filter(p=>p.st===st).length;
       return n?'<i style="width:'+(n/l.length*100)+'%;background:'+c+'"></i>':''};
     return `<div class="card roomcard ${RSEL.room===rm.k?'on':''}" data-room="${rm.k}">
       <b>${rm.name} <span style="font-size:12px;color:var(--ink4)">(${rm.k})</span></b>
-      <div class="sub">${rm.racks}랙 · ${l.length}대 · 다운 ${l.filter(p=>p.st==='down').length}</div>
+      <div class="sub">${RACKS[rm.k].length}랙 · ${l.length}대 · 다운 ${l.filter(p=>p.st==='down').length}</div>
       <div class="bar">${seg('rent','#3B62E8')}${seg('ok','#12B76A')}${seg('fix','#E08B00')}${seg('down','#E2233C')}${seg('unv','#8A94A6')}${seg('new','#8A4DE8')}</div>
     </div>`};
-  const rackBtns=Array.from({length:r.racks},(_,i)=>{
+  const rackBtns=cfgList.map((c,i)=>{
     const n=i+1, down=inRoom.some(p=>p.rack===n&&p.st==='down');
-    return `<button class="rackbtn ${RSEL.rack===n?'on':''}" data-rack="${n}">${n}번 랙${down?'<span class="d"></span>':''}</button>`}).join('');
-  /* 층은 4→1 (1층이 맨 아래) · 자리는 왼쪽에 14, 오른쪽 끝이 1 */
+    return `<button class="rackbtn ${RSEL.rack===n?'on':''}" data-rack="${n}">${n}번 랙${down?'<span class="d"></span>':''}</button>`}).join('')
+    +`<button class="rackbtn" data-rkadd style="border-style:dashed;color:var(--blue)">＋ 랙 추가</button>`;
+  /* 층은 위에서부터 높은 층 → 1층이 맨 아래 · 자리는 오른쪽 끝이 1번 */
   let map='';
-  for(let fl=FLOORS;fl>=1;fl--){
+  for(let fl=cfg.length;fl>=1;fl--){
+    const sc=cfg[fl-1];
     let cells='';
-    for(let slot=SLOTS;slot>=1;slot--){
-      const p=inRoom.find(x=>x.rack===RSEL.rack&&x.fl===fl&&x.slot===slot);
+    for(let slot=sc;slot>=1;slot--){
+      const p=inRack.find(x=>x.fl===fl&&x.slot===slot);
       cells += p
         ? `<div class="slot s-${p.st}" data-pc="${p.pn||p.ad}" title="${p.pn||'미등록'} · ${ST[p.st]}">${slot}</div>`
         : `<div class="slot s-empty" title="빈 자리">${slot}</div>`;
     }
-    map+=`<div class="floor"><span class="fl">${fl}층</span><div class="slots">${cells}</div></div>`;
+    map+=`<div class="floor"><span class="fl">${fl}층</span><div class="slots">${cells}</div>
+      <span class="flcnt num">${inRack.filter(x=>x.fl===fl).length}/${sc}</span></div>`;
   }
+  /* 구조 편집 패널 */
+  const canDel=inRack.length===0 && RSEL.rack===cfgList.length && cfgList.length>1;
+  const edit=!RSEL.edit?'':`
+  <div class="editpanel">
+    <div class="ep-h"><b>${r.name} ${RSEL.rack}번 랙 구조 수정</b>
+      <span>층마다 자리 수가 달라도 됩니다 (예: 7·7·7·5) · 이미 PC가 있는 자리보다 줄일 수 없습니다</span></div>
+    ${cfg.map((sc,i)=>{const fl=i+1, mx=floorMaxSlot(r.k,RSEL.rack,fl), used=inRack.filter(x=>x.fl===fl).length;
+      return `<div class="ep-row"><b>${fl}층</b>
+        <input type="number" min="${Math.max(mx,1)}" max="30" value="${sc}" data-flslot="${fl}">
+        <span>자리 · 사용중 ${used}대${mx?` · 최대 점유 자리 ${mx}번`:''}</span>
+        ${fl===cfg.length&&cfg.length>1? (used===0
+          ? `<button class="btn btn-o btn-sm" data-flrm>맨 위층 제거</button>`
+          : `<span class="ep-dim">PC가 있어 제거 불가</span>`):''}
+      </div>`}).reverse().join('')}
+    <div class="ep-acts">
+      <button class="btn btn-o btn-sm" data-fladd>＋ 층 추가 (맨 위)</button>
+      <button class="btn btn-b btn-sm" data-rksave>구조 저장</button>
+      ${canDel? `<button class="btn btn-o btn-sm" data-rkdel style="color:var(--red);border-color:#F7CDD3">이 랙 삭제</button>`
+        : `<span class="ep-dim">랙 삭제는 비어 있는 마지막 번호 랙만 가능합니다</span>`}
+      <span id="ep-msg" style="color:var(--gr);font-weight:700;font-size:12.5px"></span>
+    </div>
+  </div>`;
   return `
   <div class="top"><h1>랙맵</h1>
-    <span class="live">칸을 누르면 PC 상세가 열립니다</span></div>
+    <span class="live">칸을 누르면 PC 상세 · 랙 구조는 여기서 직접 추가·수정합니다</span>
+    <div class="sp"><button class="btn ${RSEL.edit?'btn-b':'btn-o'} btn-sm" data-rkedit>
+      ${RSEL.edit?'편집 닫기':'🛠 이 랙 구조 수정'}</button></div></div>
   <div class="grid rooms3" style="margin-bottom:14px">${ROOMS.map(roomCard).join('')}</div>
   <div class="card">
     <div class="rackrow">${rackBtns}</div>
+    ${edit}
     <div class="rackmap">${map}</div>
     <div class="dirnote">▶ 자리 번호는 <b>오른쪽 끝이 1번</b>입니다 (랙 정면 기준) · 1층이 맨 아래</div>
     <div class="legend">
@@ -861,9 +917,46 @@ document.addEventListener('click',e=>{
   if(od&&!t.closest('button')){openOrd(od.dataset.ord);return}
 
   const rm=t.closest('[data-room]');
-  if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;route();return}
+  if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;RSEL.edit=false;route();return}
   const rk=t.closest('[data-rack]');
   if(rk){RSEL.rack=+rk.dataset.rack;route();return}
+
+  /* ── 랙 구조 편집 ── */
+  if(t.closest('[data-rkedit]')){RSEL.edit=!RSEL.edit;route();return}
+  if(t.closest('[data-rkadd]')){
+    RACKS[RSEL.room].push([SLOTS,SLOTS,SLOTS,SLOTS]);
+    RSEL.rack=RACKS[RSEL.room].length; RSEL.edit=true;
+    saveRacks(); route(); return;
+  }
+  if(t.closest('[data-fladd]')){
+    RACKS[RSEL.room][RSEL.rack-1].push(SLOTS);
+    saveRacks(); route(); return;
+  }
+  if(t.closest('[data-flrm]')){
+    const c=RACKS[RSEL.room][RSEL.rack-1];
+    if(c.length<=1)return;
+    if(rackOcc(RSEL.room,RSEL.rack).some(p=>p.fl===c.length)){alert('맨 위층에 PC가 있어 제거할 수 없습니다.');return}
+    c.pop(); saveRacks(); route(); return;
+  }
+  if(t.closest('[data-rksave]')){
+    const c=RACKS[RSEL.room][RSEL.rack-1];
+    const inputs=document.querySelectorAll('[data-flslot]');
+    for(const inp of inputs){
+      const fl=+inp.dataset.flslot, v=parseInt(inp.value,10);
+      const mx=floorMaxSlot(RSEL.room,RSEL.rack,fl);
+      if(!(v>=1&&v<=30)){alert(fl+'층 자리 수는 1~30 사이여야 합니다.');return}
+      if(v<mx){alert(fl+'층에는 '+mx+'번 자리까지 PC가 있어 '+v+'자리로 줄일 수 없습니다.');return}
+    }
+    inputs.forEach(inp=>{c[+inp.dataset.flslot-1]=parseInt(inp.value,10)});
+    saveRacks(); RSEL.edit=false; route(); return;
+  }
+  if(t.closest('[data-rkdel]')){
+    if(rackOcc(RSEL.room,RSEL.rack).length){alert('PC가 있는 랙은 삭제할 수 없습니다.');return}
+    if(RSEL.rack!==RACKS[RSEL.room].length){alert('마지막 번호 랙만 삭제할 수 있습니다. (중간 랙을 지우면 뒤 랙들의 위치 표기가 전부 밀립니다)');return}
+    if(!confirm(RSEL.rack+'번 랙을 삭제할까요?'))return;
+    RACKS[RSEL.room].pop(); RSEL.rack=RACKS[RSEL.room].length; RSEL.edit=false;
+    saveRacks(); route(); return;
+  }
 
   const pg=t.closest('[data-pg]');
   if(pg&&!pg.disabled){PF.pg=+pg.dataset.pg;route();return}
