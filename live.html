@@ -29,8 +29,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .num{font-variant-numeric:tabular-nums}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;padding:0 20px;
   border-radius:7px;font-weight:700;font-size:14.5px;transition:.15s;white-space:nowrap}
-.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-b{background:var(--red);color:#fff}.btn-b:hover{background:#C41B32}
 .btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
+.stk .btn{color:var(--red)!important}
 .btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
 .btn-sm{height:34px;padding:0 13px;font-size:13px}
 .dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;
@@ -237,13 +238,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 <script>
 /* ═══ 실제 판매 상품 7종 ═══ */
 const G=[
- {g:1,n:'인텔I5 4690',cpu:'Intel Core i5-4690',core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
- {g:2,n:'라이젠 2200',cpu:'AMD Ryzen 3 2200G', core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
- {g:3,n:'라이젠 3200',cpu:'AMD Ryzen 3 3200G', core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
- {g:4,n:'라이젠 5600',cpu:'AMD Ryzen 5 5600G', core:'6코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가가능)',gk:'내장',list:120000,p:55000},
- {g:5,n:'라이젠 1700',cpu:'AMD Ryzen 7 1700',  core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX1050TI / 1060 6GB',gk:'NVIDIA',list:140000,p:60000},
- {g:6,n:'라이젠 5700',cpu:'AMD Ryzen 7 5700G', core:'8코어',ct:8,ram:32,ssd:240,gpu:'내장그래픽 (추가가능)',gk:'내장',list:140000,p:60000},
- {g:7,n:'라이젠 3700X',cpu:'AMD Ryzen 7 3700X',core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX1050TI / 1060 6GB',gk:'NVIDIA',list:160000,p:65000},
+ {g:1,n:'인텔I5 4690',    cpu:'Intel Core i5-4690',    core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX 650~760TI',        gk:'NVIDIA',list:90000, p:40000},
+ {g:2,n:'라이젠 2200G~2400G',cpu:'AMD Ryzen 2200G~2400G',core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',   gk:'내장',  list:90000, p:40000},
+ {g:3,n:'라이젠 3200G',   cpu:'AMD Ryzen 3 3200G',     core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',     gk:'내장',  list:90000, p:40000},
+ {g:4,n:'라이젠 5600G',   cpu:'AMD Ryzen 5 5600G',     core:'6코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
+ {g:5,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI / 1060 6GB',gk:'NVIDIA',list:140000,p:60000},
+ {g:6,n:'라이젠 5700G',   cpu:'AMD Ryzen 7 5700G',     core:'8코어',ct:8,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:140000,p:60000},
+ {g:7,n:'라이젠 3700X',   cpu:'AMD Ryzen 7 3700X',     core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI / 1060 6GB',gk:'NVIDIA',list:160000,p:65000},
 ];
 const USE=[
  ['game','고사양게임',[5,6,7]],['mobile','모바일게임 다중구동',[4,5,6,7]],

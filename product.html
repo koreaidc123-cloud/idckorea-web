@@ -32,7 +32,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .num{font-variant-numeric:tabular-nums}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 20px;
   border-radius:7px;font-weight:700;font-size:15px;transition:.15s;white-space:nowrap}
-.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-b{background:var(--red);color:#fff}.btn-b:hover{background:#C41B32}
 .btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
 .btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
 .btn-sm{height:36px;padding:0 14px;font-size:13.5px}
@@ -280,7 +280,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
           <div class="sr"><span>설치비</span><b class="free">0원</b></div>
           <div class="sr"><span>보증금</span><b class="free">0원</b></div>
           <div class="stot"><span>결제 금액</span><b class="num" id="s-o">—</b></div>
-          <div class="svat">부가세 별도 · 적립 포인트 <span class="num" id="s-pt">650</span>P</div>
+          <div class="svat">부가세 별도</div>
           <div class="acts">
             <button class="btn btn-r" id="go">결제하고 바로 이용하기</button>
             <button class="btn btn-o">장바구니</button>
@@ -408,7 +408,6 @@ function calc(){
  $('s-dn').textContent=m.o?`장기 할인 ${m.o}%`:'장기 할인';
  $('s-d').textContent=dc?'−'+w(dc)+'원':'0원';
  $('s-o').textContent=w(tot)+'원';
- $('s-pt').textContent=w(Math.round(tot*0.01));
  $('stk-p').textContent=w(tot)+'원';
  $('go').textContent=S.p==='vb'?'계좌 받고 바로 이용하기':'결제하고 바로 이용하기';
 }
