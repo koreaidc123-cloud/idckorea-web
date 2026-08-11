@@ -10,7 +10,7 @@
    실시간 PC 선택 — 컴뷰어스 필터 구조 + 하트비트 실시간
    · 사양은 각 PC의 프로그램이 직접 읽어 올린 값
    · 신호 끊긴 PC는 목록에서 자동 제외
-   · 서버실 실명은 노출하지 않는다 (제1·2·3 서버실)
+   · 서버실 위치는 고객에게 노출하지 않는다 (품번 앞글자만)
    ═══════════════════════════════════════════════════════════════ */
 :root{
   --blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;
@@ -221,7 +221,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
       접속 주소와 비밀번호가 화면에 바로 나오고 문자로도 보내드립니다.</p></div>
     <div><b>🌐 PC마다 개별 공인IP</b><p>여러 대를 쓰셔도 IP가 겹치지 않아
       계정이 서로 묶일 걱정이 없습니다.</p></div>
-    <div><b>🛟 문제가 생기면 바로 조치</b><p>서버실에 관리자가 24시간 상주합니다.
+    <div><b>🛟 문제가 생기면 바로 조치</b><p>관리자가 24시간 상주합니다.
       연락 주시면 즉시 확인해 드립니다.</p></div>
     <div><b>📅 무약정 · 무보증</b><p>30일만 써보시고 그만두셔도 됩니다.
       설치비와 보증금도 없습니다.</p></div>
@@ -321,7 +321,7 @@ function filters(){
     row('메모리','ram',[['8','8GB'],['32','32GB']])+
     row('SSD','ssd',[['120','120GB'],['240','240GB'],['480','480GB']])+
     row('그래픽','gpu',[['NVIDIA','NVIDIA'],['내장','내장그래픽']])+
-    row('서버실','room',[['1','K 서버실'],['2','Y 서버실'],['3','D 서버실']]);
+    ;
 }
 function chips(){
   const L=[];
@@ -362,7 +362,7 @@ function draw(){
       <div>그래픽</div><div>임대 상태</div><div style="text-align:right">30일 요금</div><div></div></div>`
    + V.map(x=>{const g=gOf(x), ok=x.st==='free';
      return `<div class="tr ${sel===x.id?'sel':''} ${ok?'':'off'}" data-id="${x.id}" data-ok="${ok?1:0}">
-       <div class="id">${x.id}<span>${ROOM[x.room-1].cust}</span></div>
+       <div class="id">${x.id}</div>
        <div class="cpu"><b>${g.cpu}</b><span>${g.core} · Windows 10 Pro · 공인IP ${x.ip}</span></div>
        <div class="num">${g.ram}GB</div>
        <div class="num">SSD ${x.ssd}GB</div>
