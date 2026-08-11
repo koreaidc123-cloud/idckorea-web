@@ -347,17 +347,52 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .pop{position:fixed;inset:0;z-index:200;background:rgba(6,9,18,.72);backdrop-filter:blur(4px);
   display:grid;place-items:center;padding:22px}
 .pop.off{display:none}
-.pop-in{width:min(410px,100%);background:#12151C;border:1px solid rgba(255,255,255,.12);
-  border-radius:18px;overflow:hidden;color:#fff;box-shadow:0 30px 70px rgba(0,0,0,.5)}
-.pop-h{background:var(--red);padding:16px 22px;font-size:16px;font-weight:800;letter-spacing:-.04em}
-.pop-b{padding:26px 24px;text-align:center}
-.pop-b .ic{font-size:46px;margin-bottom:14px}
-.pop-b p{font-size:14.5px;line-height:1.75;color:rgba(255,255,255,.78)}
-.pop-b p b{color:#FF8A93}
+.pop{background:rgba(4,6,12,.82);backdrop-filter:blur(8px)}
+.pop-in{position:relative;width:min(460px,100%);border-radius:20px;overflow:hidden;color:#fff;
+  border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(0,0,0,.65);
+  background:#0A0C12;animation:popIn .42s cubic-bezier(.2,.8,.3,1)}
+@keyframes popIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
+/* 배경 실사 — 붉은 조명이 깔린 서버실 */
+.pop-bg{position:absolute;inset:0}
+.pop-bg img{width:100%;height:100%;object-fit:cover;opacity:.55}
+.pop-bg::after{content:'';position:absolute;inset:0;background:
+  linear-gradient(180deg,rgba(10,4,8,.62) 0%,rgba(8,9,14,.9) 52%,rgba(8,9,14,.97) 100%)}
+.pop-in>*:not(.pop-bg){position:relative;z-index:2}
+/* 상단 경고 라인 */
+.pop-h{display:flex;align-items:center;gap:10px;padding:18px 24px;font-size:14px;font-weight:800;
+  letter-spacing:-.03em;border-bottom:1px solid rgba(255,255,255,.1);
+  background:linear-gradient(90deg,rgba(226,35,60,.9),rgba(226,35,60,.25))}
+.pop-h .bar{display:flex;gap:3px;flex:none}
+.pop-h .bar i{width:12px;height:4px;border-radius:2px;background:#fff;opacity:.35;
+  animation:blip 1.4s infinite}
+.pop-h .bar i:nth-child(2){animation-delay:.2s}
+.pop-h .bar i:nth-child(3){animation-delay:.4s}
+@keyframes blip{0%,100%{opacity:.25}50%{opacity:1}}
+.pop-b{padding:34px 30px 30px;text-align:center}
+.pop-b .ic{width:88px;height:88px;margin:0 auto 22px;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle,rgba(226,35,60,.35),rgba(226,35,60,0) 70%);position:relative}
+.pop-b .ic::before{content:'';position:absolute;inset:14px;border-radius:50%;
+  border:3px solid #FF4D62;box-shadow:0 0 24px rgba(255,77,98,.5)}
+.pop-b .ic::after{content:'';position:absolute;width:52px;height:3px;background:#FF4D62;
+  transform:rotate(-45deg);box-shadow:0 0 14px rgba(255,77,98,.7)}
+.pop-b h3{font-size:22px;font-weight:800;letter-spacing:-.045em;line-height:1.4;margin-bottom:14px}
+.pop-b h3 em{font-style:normal;color:#FF6B7C}
+.pop-b p{font-size:14.5px;line-height:1.8;color:rgba(255,255,255,.7)}
+.pop-b .rule{margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;gap:9px;text-align:left}
+.pop-b .rule div{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;
+  color:rgba(255,255,255,.62);line-height:1.6}
+.pop-b .rule div i{font-style:normal;flex:none;width:17px;height:17px;border-radius:50%;
+  background:rgba(226,35,60,.25);border:1px solid rgba(255,107,124,.5);color:#FF8A96;
+  font-size:10px;font-weight:800;display:grid;place-items:center;margin-top:2px}
+.pop-b .rule b{color:#fff;font-weight:700}
 .pop-f{display:flex;border-top:1px solid rgba(255,255,255,.1)}
-.pop-f button{flex:1;padding:15px;font-size:14.5px;font-weight:700;transition:.14s}
-.pop-f button:hover{background:rgba(255,255,255,.07)}
-.pop-f button+button{border-left:1px solid rgba(255,255,255,.1);color:#fff;background:rgba(255,255,255,.05)}
+.pop-f button{flex:1;padding:17px;font-size:14.5px;font-weight:700;transition:.14s;
+  color:rgba(255,255,255,.55)}
+.pop-f button:hover{background:rgba(255,255,255,.06);color:#fff}
+.pop-f button+button{border-left:1px solid rgba(255,255,255,.1);color:#fff;
+  background:var(--red);flex:1.3}
+.pop-f button+button:hover{background:#C41B32}
 
 @media(max-width:1100px){
   .prods{grid-template-columns:repeat(2,1fr)}
@@ -528,7 +563,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
       <div>24시간 Full가동 · 6년 무중단<br>결제 확인 즉시 자동 개통</div>
     </div>
     <div><h4>서비스</h4><a href="#about">회사소개</a><a href="#price">요금제</a>
-      <a href="live.html">실시간 PC</a><a href="#price">공식스토어</a></div>
+      <a href="live.html">실시간 PC임대</a></div>
     <div><h4>고객지원</h4><a href="#qa">Q&amp;A안내</a>
       <a href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">카카오톡 상담</a>
       <a href="#">이용약관</a><a href="#">개인정보처리방침</a></div>
@@ -564,13 +599,18 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 
 <!-- ═══ 불법사용 경고 팝업 ═══ -->
 <div class="pop" id="pop"><div class="pop-in">
-  <div class="pop-h">불법 스트리밍 · 사설도박 · 해킹 금지</div>
+  <div class="pop-bg"><img src="img/pop-warn.png" alt=""
+       onerror="this.src='img/idc-rack.png'"></div>
+  <div class="pop-h"><span class="bar"><i></i><i></i><i></i></span> 이용 제한 안내</div>
   <div class="pop-b">
-    <div class="ic">🚫</div>
-    <p>불법 스트리밍, 사설도박, 해킹 및<br>
-       <b>불법용도의 사용은 즉시 이용중지</b>됩니다.<br><br>
-       적발 시 사전 통보 없이 서비스가 중단되며<br>
-       환불되지 않고 관련 기관에 자료가 제공됩니다.</p>
+    <div class="ic"></div>
+    <h3>불법 용도로는<br><em>이용하실 수 없습니다</em></h3>
+    <p>아래 용도로 사용이 확인되면 사전 통보 없이<br>즉시 서비스가 중지됩니다.</p>
+    <div class="rule">
+      <div><i>!</i><span><b>불법 스트리밍 · 사설도박 · 해킹</b> 등 위법 행위</span></div>
+      <div><i>!</i><span>중지 시 <b>환불되지 않으며</b> 관련 기관에 자료가 제공됩니다</span></div>
+      <div><i>!</i><span>모든 PC는 개별 공인IP로 <b>접속 기록이 남습니다</b></span></div>
+    </div>
   </div>
   <div class="pop-f">
     <button id="pop-today">오늘 하루 안 보기</button>
