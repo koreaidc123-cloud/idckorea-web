@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>회사소개 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;--red:#E2233C;--red-l:#FDEEF0;
+ --gold:#FFB808;--gr:#0FA45E;--ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+ --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+ --sh:0 1px 2px rgba(11,14,20,.04),0 12px 34px rgba(11,14,20,.08);
+ --sh-l:0 2px 8px rgba(11,14,20,.06),0 30px 68px rgba(11,14,20,.14)}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+ background:#fff;color:var(--ink);font-size:16px;line-height:1.65;letter-spacing:-.022em}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+.shell{max-width:1140px;margin:0 auto;padding:0 24px}
+.num{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:50px;padding:0 24px;
+ border-radius:7px;font-weight:700;font-size:15.5px;transition:.15s;white-space:nowrap}
+.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-w{background:#fff;color:var(--ink)}.btn-w:hover{transform:translateY(-1px)}
+.btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:38px;padding:0 15px;font-size:13.5px}
+.dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;
+ box-shadow:0 0 0 0 rgba(18,208,110,.55);animation:pp 2s infinite}
+@keyframes pp{70%{box-shadow:0 0 0 8px rgba(18,208,110,0)}100%{box-shadow:0 0 0 0 rgba(18,208,110,0)}}
+
+.tb{background:var(--ink);color:#fff;font-size:13px;text-align:center;padding:8px 0;font-weight:600}
+.tb b{color:var(--gold)}
+.hd{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.95);
+ backdrop-filter:blur(16px);border-bottom:1px solid var(--line2)}
+.hd .shell{max-width:1240px;display:flex;align-items:center;height:72px;gap:36px}
+.lg{display:flex;align-items:center;gap:10px}.lg b{font-size:19px;font-weight:800;letter-spacing:-.06em}
+.gnb{display:flex;gap:2px;margin-right:auto}
+.gnb a{padding:9px 15px;border-radius:6px;font-weight:600;font-size:15.5px;color:var(--ink2)}
+.gnb a:hover{background:var(--bg2);color:var(--blue)}
+.gnb a.on{color:var(--blue);font-weight:700}
+
+/* 히어로 */
+.ph{position:relative;overflow:hidden;background:#050912;color:#fff}
+.ph-bg{position:absolute;inset:0}
+.ph-bg img{width:100%;height:100%;object-fit:cover}
+.ph-bg::after{content:'';position:absolute;inset:0;background:
+ linear-gradient(94deg,rgba(3,5,12,.95) 0%,rgba(3,5,12,.86) 40%,rgba(3,5,12,.5) 100%)}
+.ph-in{position:relative;z-index:2;padding:96px 0 90px;max-width:680px}
+.ph-in .lb{font-size:13px;font-weight:800;color:#8CA6FF;margin-bottom:16px}
+.ph-in h1{font-size:clamp(30px,3.9vw,46px);line-height:1.26;letter-spacing:-.055em;font-weight:800;
+ text-shadow:0 2px 24px rgba(0,0,0,.5)}
+.ph-in h1 em{font-style:normal;color:var(--gold)}
+.ph-in p{margin-top:20px;font-size:17px;line-height:1.8;color:rgba(255,255,255,.8)}
+
+.sec{padding:92px 0}
+.sec-g{background:var(--bg2)}
+.sh{margin-bottom:44px}
+.sh .lb{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;
+ color:var(--blue);margin-bottom:13px}
+.sh .lb::before{content:'';width:22px;height:2px;background:var(--blue)}
+.sh h2{font-size:clamp(25px,3vw,34px);line-height:1.34;letter-spacing:-.05em;font-weight:800}
+.sh p{margin-top:13px;font-size:16px;color:var(--ink3);max-width:660px;line-height:1.78}
+.sh.c{text-align:center}.sh.c .lb{justify-content:center}.sh.c .lb::before{display:none}
+.sh.c p{margin-left:auto;margin-right:auto}
+
+/* 원문 인사말 */
+.greet{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+.greet img{border-radius:16px;border:1px solid var(--line);box-shadow:var(--sh)}
+.greet .q{font-size:clamp(22px,2.6vw,30px);font-weight:800;letter-spacing:-.05em;
+ line-height:1.5;margin-bottom:24px}
+.greet .q em{font-style:normal;color:var(--blue)}
+.greet p{font-size:16.5px;line-height:1.9;color:var(--ink2);margin-bottom:15px}
+.greet p:last-child{color:var(--ink3)}
+
+/* 숫자 */
+.nums{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+ border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.nums div{background:#fff;padding:34px 24px;text-align:center}
+.nums b{display:block;font-size:36px;font-weight:800;letter-spacing:-.055em;line-height:1;
+ color:var(--blue)}
+.nums span{display:block;margin-top:9px;font-size:14.5px;color:var(--ink3);font-weight:600}
+
+/* 강점 */
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.f{border:1px solid var(--line);border-radius:16px;padding:30px 28px;background:#fff;transition:.18s}
+.f:hover{transform:translateY(-4px);box-shadow:var(--sh-l)}
+.f .i{width:50px;height:50px;border-radius:14px;background:var(--blue-l);color:var(--blue);
+ display:grid;place-items:center;font-size:22px;margin-bottom:18px}
+.f:nth-child(2) .i,.f:nth-child(5) .i{background:var(--red-l);color:var(--red)}
+.f h3{font-size:18px;font-weight:800;letter-spacing:-.042em}
+.f p{margin-top:10px;font-size:14.5px;color:var(--ink3);line-height:1.72}
+
+/* 서버실 */
+.rooms{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.r{border-radius:16px;overflow:hidden;position:relative;aspect-ratio:4/3;background:#0B0E14}
+.r img{width:100%;height:100%;object-fit:cover;transition:.5s}
+.r:hover img{transform:scale(1.06)}
+.r::after{content:'';position:absolute;inset:0;
+ background:linear-gradient(0deg,rgba(5,8,16,.9) 4%,rgba(5,8,16,.25) 55%,transparent 100%)}
+.r .tx{position:absolute;left:24px;right:24px;bottom:22px;z-index:2;color:#fff}
+.r .tx b{font-size:19px;font-weight:800;letter-spacing:-.045em;display:block}
+.r .tx span{font-size:13.5px;color:rgba(255,255,255,.7)}
+
+/* 연혁 */
+.hist{max-width:760px}
+.h{display:grid;grid-template-columns:96px 1fr;gap:22px;padding:20px 0;
+ border-bottom:1px solid var(--line2)}
+.h:last-child{border-bottom:0}
+.h .y{font-size:17px;font-weight:800;color:var(--blue);letter-spacing:-.04em}
+.h .c b{display:block;font-size:16.5px;font-weight:700;letter-spacing:-.035em}
+.h .c span{font-size:14.5px;color:var(--ink3)}
+
+/* 사업자정보 */
+.biz{border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.bz{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid var(--line2);font-size:15px}
+.bz:last-child{border-bottom:0}
+.bz .k{background:var(--bg2);padding:14px 20px;font-weight:700;color:var(--ink2);font-size:14px;
+ border-right:1px solid var(--line2)}
+.bz .v{padding:14px 20px;color:var(--ink2)}
+
+.cta{background:var(--blue);color:#fff;padding:80px 0;text-align:center;position:relative;overflow:hidden}
+.cta::after{content:'';position:absolute;width:520px;height:520px;border-radius:50%;
+ background:radial-gradient(circle,rgba(226,35,60,.5),transparent 68%);right:-140px;top:-190px}
+.cta .shell{position:relative;z-index:1}
+.cta h2{font-size:clamp(26px,3.2vw,38px);line-height:1.36;letter-spacing:-.05em;font-weight:800}
+.cta p{margin-top:14px;font-size:16.5px;color:rgba(255,255,255,.75)}
+.cta .btn{margin-top:28px}
+
+.ft{background:#0B0E14;color:#89919C;padding:44px 0 38px;font-size:13px;line-height:1.85}
+.ft b{color:#A4ACB6;font-weight:600}
+
+@media(max-width:900px){
+ .gnb{display:none}.greet{grid-template-columns:1fr;gap:32px}
+ .nums{grid-template-columns:repeat(2,1fr)}
+ .feats,.rooms{grid-template-columns:1fr}
+ .sec{padding:64px 0}.ph-in{padding:64px 0 60px}
+ .bz{grid-template-columns:1fr}.bz .k{border-right:0;border-bottom:1px solid var(--line2)}
+}
+</style>
+</head>
+<body>
+
+<div class="tb">빠른물량 소진중 <b>10대 이상은 별도문의!</b></div>
+
+<header class="hd"><div class="shell">
+  <a class="lg" href="index.html">
+    <img src="img/logo.png" alt="" width="36" height="36"><b>한국 가상컴</b></a>
+  <nav class="gnb">
+    <a href="#" class="on">회사소개</a>
+    <a href="index.html#price">요금제</a>
+    <a href="live.html">실시간 PC임대</a>
+    <a href="qa.html">Q&amp;A안내</a>
+  </nav>
+  <a class="btn btn-b btn-sm" href="live.html">바로 임대하기</a>
+</div></header>
+
+<section class="ph">
+  <div class="ph-bg"><img src="img/hero3.png" alt="한국 가상컴 자체 서버실"></div>
+  <div class="shell"><div class="ph-in">
+    <div class="lb">회사소개</div>
+    <h1>가동을 시작한 이후 <em>6년</em>,<br>단 한 번도 멈추지 않았습니다</h1>
+    <p>한국 가상컴은 가상컴퓨터 임대솔루션 전문회사입니다.<br>
+       자체 서버실 3곳을 직접 운영하며 약 1,000대의 임대용 PC를 관리하고 있습니다.</p>
+  </div></div>
+</section>
+
+<!-- 인사말 — 기존 홈페이지 원문 -->
+<section class="sec">
+  <div class="shell">
+    <div class="sh c"><div class="lb">인사말</div><h2>한국 가상컴을 소개합니다.</h2></div>
+    <div class="greet">
+      <div>
+        <div class="q">장소와 시간에 구애받지 않는<br><em>완벽한 자유도</em>를 드립니다.</div>
+        <p>한국 가상컴은 원격 데스크탑을 이용해 안전한 공인IP로 원격접속 프로그램을 활용,
+           고객님이 원하시는 서비스를 제공합니다.</p>
+        <p>한국 가상컴에서 제공하는 서비스는 고사양게임부터 모바일게임, 개인 재택 업무를 포함해
+           각종 마케팅 프로그램 사용까지 다양한 분야에서 활용 가능합니다.</p>
+        <p>목적하시는 용도에 따라 저사양부터 고사양까지 모든 종류의 PC들이 구비되어 있으며,
+           장소와 시간에 구애받지 않는 원격 접속 방식으로 완벽한 자유도를 드립니다.</p>
+        <p>24시간 Full가동되는 서버실은 가장 중요한 고객님과의 ‘신용’을 바탕으로 이루어졌다고
+           자신합니다. 언제나 안전한 서버 운영으로 고객님의 믿음에 보답하겠습니다. 감사합니다.</p>
+      </div>
+      <img src="img/idc-hall.png" alt="24시간 Full가동되는 서버실">
+    </div>
+  </div>
+</section>
+
+<!-- 숫자 -->
+<section class="sec sec-g" style="padding-top:0;padding-bottom:92px;background:#fff">
+  <div class="shell">
+    <div class="nums">
+      <div><b class="num">6년</b><span>무중단 가동</span></div>
+      <div><b class="num">3곳</b><span>자체 서버실 직접 운영</span></div>
+      <div><b class="num">1,000대</b><span>보유 임대 PC</span></div>
+      <div><b class="num">24시간</b><span>Full 가동 · 상주 관리</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 강점 -->
+<section class="sec sec-g">
+  <div class="shell">
+    <div class="sh c"><div class="lb">서비스 강점</div>
+      <h2>한국 가상컴이 다른 이유</h2>
+      <p>원격PC 임대 업체 중 유일하게 네이버 스마트스토어 빅파워 등급을 유지하고 있습니다.</p></div>
+    <div class="feats">
+      <div class="f"><div class="i">🏢</div><h3>자체 서버실 3곳 직접 운영</h3>
+        <p>남의 공간을 빌려 쓰지 않습니다. 서버실을 직접 짓고 직접 관리합니다.</p></div>
+      <div class="f"><div class="i">🕐</div><h3>365일 상주 관리</h3>
+        <p>주말·공휴일에도 임직원이 상주합니다. 문제가 생기면 사람이 직접 갑니다.</p></div>
+      <div class="f"><div class="i">🌐</div><h3>PC마다 개별 공인IP</h3>
+        <p>여러 대를 쓰셔도 IP가 겹치지 않습니다. 계정이 서로 묶이지 않습니다.</p></div>
+      <div class="f"><div class="i">⚡</div><h3>결제 확인 즉시 자동 개통</h3>
+        <p>담당자 확인을 기다리지 않습니다. 접속 정보가 화면에 바로 표시됩니다.</p></div>
+      <div class="f"><div class="i">🔌</div><h3>기업용 전용회선 · 무정전 전원</h3>
+        <p>가정용 회선이 아닙니다. 정전에도 서버가 꺼지지 않습니다.</p></div>
+      <div class="f"><div class="i">💳</div><h3>무약정 · 무보증 · 설치비 없음</h3>
+        <p>30일마다 갱신이라 한 달만 써보고 그만두셔도 됩니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 서버실 -->
+<section class="sec">
+  <div class="shell">
+    <div class="sh"><div class="lb">서버 인프라</div>
+      <h2>자체 서버실 3곳을 직접 운영합니다</h2>
+      <p>보안상 정확한 위치는 공개하지 않습니다. 세 곳 모두 임직원이 상주하며,
+         각 PC의 신호를 실시간으로 감시하고 있습니다.</p></div>
+    <div class="rooms">
+      <div class="r"><img src="img/hero3.png" alt="제1서버실">
+        <div class="tx"><b>제1서버실</b><span>랙 단위 관리 · 층별 전용 랜허브</span></div></div>
+      <div class="r"><img src="img/idc-wide.png" alt="제2서버실">
+        <div class="tx"><b>제2서버실</b><span>주력 운영 · 최대 수용</span></div></div>
+      <div class="r"><img src="img/idc-rack.png" alt="제3서버실">
+        <div class="tx"><b>제3서버실</b><span>고사양 전용 · 별도 냉방</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 연혁 -->
+<section class="sec sec-g">
+  <div class="shell">
+    <div class="sh"><div class="lb">연혁</div><h2>한국 가상컴이 걸어온 길</h2></div>
+    <div class="hist">
+      <div class="h"><div class="y">2018</div><div class="c"><b>한국 가상컴 설립</b>
+        <span>가상컴퓨터 임대솔루션 사업 시작</span></div></div>
+      <div class="h"><div class="y">2020</div><div class="c"><b>서버실 가동 시작</b>
+        <span>이후 현재까지 무중단 운영</span></div></div>
+      <div class="h"><div class="y">2023</div><div class="c"><b>통신판매업 신고 · 공식스토어 개설</b>
+        <span>네이버 스마트스토어 병행 운영 시작</span></div></div>
+      <div class="h"><div class="y">2025</div><div class="c"><b>스마트스토어 빅파워 등급 달성</b>
+        <span>원격PC 임대 업계 유일 · 리뷰 336건 평점 4.95</span></div></div>
+      <div class="h"><div class="y">2026</div><div class="c"><b>실시간 관제 · 자동 개통 시스템 도입</b>
+        <span>결제 확인 즉시 PC 자동 배정 · 접속 정보 자동 발급</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 사업자정보 -->
+<section class="sec">
+  <div class="shell" style="max-width:860px">
+    <div class="sh c"><div class="lb">사업자정보</div><h2>정식 등록된 사업자입니다</h2></div>
+    <div class="biz">
+      <div class="bz"><div class="k">상호</div><div class="v">한국가상컴</div></div>
+      <div class="bz"><div class="k">대표</div><div class="v">서민영</div></div>
+      <div class="bz"><div class="k">사업자등록번호</div><div class="v num">102-05-08486</div></div>
+      <div class="bz"><div class="k">통신판매업신고</div><div class="v">제2023-경기파주-0488호</div></div>
+      <div class="bz"><div class="k">주소</div><div class="v">경기도 파주시 평화로 45</div></div>
+      <div class="bz"><div class="k">전화</div><div class="v num">010-8446-8710</div></div>
+      <div class="bz"><div class="k">이메일</div><div class="v">Abc11009977@gmail.com</div></div>
+      <div class="bz"><div class="k">개인정보관리책임자</div><div class="v">서민영</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta"><div class="shell">
+  <h2>지금 켜져 있는 PC를 직접 확인해 보세요</h2>
+  <p>무약정이라 30일만 이용해 보셔도 됩니다. 결제하면 바로 켜집니다.</p>
+  <a class="btn btn-w" href="live.html">실시간 PC임대 보기 →</a>
+</div></section>
+
+<footer class="ft"><div class="shell">
+  상호 한국가상컴 · 대표 서민영 · 개인정보관리책임자 서민영 · 전화 010-8446-8710<br>
+  주소 경기도 파주시 평화로 45 · 사업자등록번호 102-05-08486 · 통신판매업신고 제2023-경기파주-0488<br>
+  <b>COPYRIGHT© 한국 가상컴. ALL RIGHTS RESERVED.</b>
+</div></footer>
+
+</body>
+</html>

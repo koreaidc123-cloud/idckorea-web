@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Q&amp;A안내 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{--blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;--red:#E2233C;--red-l:#FDEEF0;
+ --gold:#FFB808;--gr:#0FA45E;--ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+ --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+ --sh:0 1px 2px rgba(11,14,20,.04),0 12px 34px rgba(11,14,20,.08);
+ --sh-l:0 2px 8px rgba(11,14,20,.06),0 30px 68px rgba(11,14,20,.14)}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth;scroll-padding-top:96px}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+ background:#fff;color:var(--ink);font-size:16px;line-height:1.65;letter-spacing:-.022em}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+.shell{max-width:1100px;margin:0 auto;padding:0 24px}
+.num{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 22px;
+ border-radius:7px;font-weight:700;font-size:15px;transition:.15s;white-space:nowrap}
+.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:38px;padding:0 15px;font-size:13.5px}
+.btn-kk{background:#FEE500;color:#3C1E1E}.btn-kk:hover{background:#F2DA00}
+
+.tb{background:var(--ink);color:#fff;font-size:13px;text-align:center;padding:8px 0;font-weight:600}
+.tb b{color:var(--gold)}
+.hd{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.95);
+ backdrop-filter:blur(16px);border-bottom:1px solid var(--line2)}
+.hd .shell{max-width:1240px;display:flex;align-items:center;height:72px;gap:36px}
+.lg{display:flex;align-items:center;gap:10px}.lg b{font-size:19px;font-weight:800;letter-spacing:-.06em}
+.gnb{display:flex;gap:2px;margin-right:auto}
+.gnb a{padding:9px 15px;border-radius:6px;font-weight:600;font-size:15.5px;color:var(--ink2)}
+.gnb a:hover{background:var(--bg2);color:var(--blue)}
+.gnb a.on{color:var(--blue);font-weight:700}
+
+.ph{background:linear-gradient(180deg,#F2F5FE,#fff);border-bottom:1px solid var(--line2);
+ padding:44px 0 36px;text-align:center}
+.ph .lb{font-size:13px;font-weight:800;color:var(--blue);margin-bottom:12px}
+.ph h1{font-size:34px;font-weight:800;letter-spacing:-.05em;line-height:1.3}
+.ph p{margin-top:12px;font-size:16px;color:var(--ink3)}
+
+.sec{padding:64px 0}
+.sh{margin-bottom:32px}
+.sh h2{font-size:24px;font-weight:800;letter-spacing:-.045em}
+.sh p{margin-top:8px;font-size:15px;color:var(--ink3)}
+
+/* 안내 카드 */
+.guide{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.g{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;transition:.2s;
+ display:block}
+.g:hover{transform:translateY(-4px);box-shadow:var(--sh-l);border-color:#CBD3E0}
+.g .cap{aspect-ratio:1/1;overflow:hidden;background:#080D1E}
+.g .cap img{width:100%;height:100%;object-fit:cover;transition:.45s}
+.g:hover .cap img{transform:scale(1.05)}
+.g .bb{padding:14px 16px 17px}
+.g .bb b{font-size:15px;font-weight:800;letter-spacing:-.04em;display:block}
+.g .bb span{font-size:12.5px;color:var(--ink4)}
+
+/* 상세 안내 블록 */
+.art{border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:18px;
+ scroll-margin-top:96px}
+.art>button{width:100%;display:flex;align-items:center;gap:16px;padding:20px 24px;text-align:left}
+.art>button .n{width:34px;height:34px;border-radius:10px;background:var(--blue-l);color:var(--blue);
+ display:grid;place-items:center;font-size:14px;font-weight:800;flex:none}
+.art>button .t{flex:1}
+.art>button .t b{display:block;font-size:17.5px;font-weight:800;letter-spacing:-.04em}
+.art>button .t span{font-size:13px;color:var(--ink4)}
+.art>button i{font-style:normal;font-size:22px;color:var(--ink4);transition:.2s;flex:none}
+.art.on>button i{transform:rotate(45deg);color:var(--blue)}
+.art.on>button{border-bottom:1px solid var(--line2)}
+.art .body{display:none;padding:24px}
+.art.on .body{display:block}
+.art .body p{font-size:15.5px;line-height:1.85;color:var(--ink2);margin-bottom:12px}
+.art .body p:last-child{margin-bottom:0}
+.art .body b{color:var(--ink);font-weight:700}
+.art .body ol,.art .body ul{margin:6px 0 14px;list-style:none;counter-reset:s}
+.art .body ol li{counter-increment:s;position:relative;padding-left:34px;margin-bottom:9px;
+ font-size:15.5px;line-height:1.75;color:var(--ink2)}
+.art .body ol li::before{content:counter(s);position:absolute;left:0;top:2px;width:23px;height:23px;
+ border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:800;
+ display:grid;place-items:center}
+.art .body ul li{position:relative;padding-left:16px;margin-bottom:7px;font-size:15.5px;
+ line-height:1.75;color:var(--ink2)}
+.art .body ul li::before{content:'';position:absolute;left:3px;top:11px;width:5px;height:5px;
+ border-radius:50%;background:var(--ink4)}
+.art .body .tip{background:var(--bg2);border-radius:10px;padding:15px 18px;font-size:14.5px;
+ color:var(--ink2);line-height:1.75;margin-top:6px}
+.art .body .tip b{color:var(--blue)}
+.art .body .warn{background:var(--red-l);border:1px solid #F7CDD3;border-radius:10px;
+ padding:15px 18px;font-size:14.5px;color:#8E1424;line-height:1.75}
+.art .body table{width:100%;border-collapse:collapse;font-size:14.5px;margin:4px 0 14px}
+.art .body th,.art .body td{border:1px solid var(--line);padding:10px 13px;text-align:left}
+.art .body th{background:var(--bg2);font-weight:800;color:var(--ink2);font-size:13.5px}
+.art .body td b{color:var(--red)}
+
+/* FAQ */
+.faq{border-top:1px solid var(--line)}
+.fq{border-bottom:1px solid var(--line)}
+.fq button{width:100%;display:flex;align-items:center;gap:14px;padding:20px 4px;text-align:left}
+.fq button .q{width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;
+ font-size:12.5px;font-weight:800;display:grid;place-items:center;flex:none}
+.fq button span{flex:1;font-size:16.5px;font-weight:700;letter-spacing:-.035em}
+.fq button i{font-style:normal;font-size:19px;color:var(--ink4);transition:.2s}
+.fq.on button i{transform:rotate(45deg);color:var(--blue)}
+.fq .a{display:none;padding:0 4px 22px 40px;font-size:15.5px;color:var(--ink2);line-height:1.85}
+.fq.on .a{display:block}
+.fq .a b{color:var(--ink);font-weight:700}
+
+/* 문의 */
+.ask{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:34px;
+ text-align:center;margin-top:44px}
+.ask b{display:block;font-size:21px;font-weight:800;letter-spacing:-.045em}
+.ask p{margin-top:9px;font-size:15px;color:var(--ink3);line-height:1.7}
+.ask .btns{display:flex;gap:9px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+
+.ft{background:#0B0E14;color:#89919C;padding:44px 0 38px;font-size:13px;line-height:1.85;margin-top:70px}
+.ft b{color:#A4ACB6;font-weight:600}
+
+@media(max-width:900px){.guide{grid-template-columns:repeat(2,1fr)}.gnb{display:none}}
+@media(max-width:520px){.guide{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="tb">빠른물량 소진중 <b>10대 이상은 별도문의!</b></div>
+
+<header class="hd"><div class="shell">
+  <a class="lg" href="index.html">
+    <img src="img/logo.png" alt="" width="36" height="36"><b>한국 가상컴</b></a>
+  <nav class="gnb">
+    <a href="about.html">회사소개</a>
+    <a href="index.html#price">요금제</a>
+    <a href="live.html">실시간 PC임대</a>
+    <a href="#" class="on">Q&amp;A안내</a>
+  </nav>
+  <a class="btn btn-b btn-sm" href="live.html">바로 임대하기</a>
+</div></header>
+
+<div class="ph"><div class="shell">
+  <div class="lb">Q&amp;A안내</div>
+  <h1>처음이셔도 괜찮습니다</h1>
+  <p>이용 방법부터 요금, 문제가 생겼을 때까지 순서대로 정리해 두었습니다.</p>
+</div></div>
+
+<section class="sec"><div class="shell">
+  <div class="guide" id="guide"></div>
+</div></section>
+
+<section class="sec" style="padding-top:0"><div class="shell">
+  <div class="sh"><h2>안내 자세히 보기</h2>
+    <p>제목을 누르시면 내용이 열립니다.</p></div>
+  <div id="arts"></div>
+</div></section>
+
+<section class="sec" style="padding-top:0"><div class="shell">
+  <div class="sh"><h2>자주 묻는 질문</h2>
+    <p>가장 많이 주시는 질문만 모았습니다.</p></div>
+  <div class="faq" id="faq"></div>
+
+  <div class="ask">
+    <b>찾으시는 답이 없으신가요?</b>
+    <p>카카오톡으로 문의 주시면 가장 빠르게 도와드립니다.<br>
+       상담 가능 시간 오전 09:00 ~ 오후 12:00 (점심 12:00~13:00) · 유선 상담도 운영합니다.</p>
+    <div class="btns">
+      <a class="btn btn-kk" href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">카카오톡 상담하기</a>
+      <a class="btn btn-o" href="tel:01084468710">010-8446-8710</a>
+      <a class="btn btn-o" href="live.html">실시간 PC 보기</a>
+    </div>
+  </div>
+</div></section>
+
+<footer class="ft"><div class="shell">
+  상호 한국가상컴 · 대표 서민영 · 개인정보관리책임자 서민영 · 전화 010-8446-8710<br>
+  주소 경기도 파주시 평화로 45 · 사업자등록번호 102-05-08486 · 통신판매업신고 제2023-경기파주-0488<br>
+  <b>COPYRIGHT© 한국 가상컴. ALL RIGHTS RESERVED.</b>
+</div></footer>
+
+<script>
+const ARTS=[
+ {img:'qa1',t:'가상컴 활용방법',s:'무엇에 쓸 수 있나요',
+  b:`<p>한국 가상컴은 서버실에 있는 실제 컴퓨터를 통째로 빌려 드리는 서비스입니다.
+     내 컴퓨터를 꺼둬도 빌린 컴퓨터는 24시간 계속 돌아갑니다.</p>
+     <ul><li><b>고사양 게임</b> — 게임을 여러 개 동시에 띄우고 밤새 돌릴 수 있습니다</li>
+     <li><b>모바일게임 다중구동</b> — 에뮬레이터를 여러 개 실행해 계정을 함께 관리합니다</li>
+     <li><b>각종 마케팅 프로그램</b> — PC마다 공인IP가 따로라 계정이 서로 묶이지 않습니다</li>
+     <li><b>개인 재택 업무</b> — 회사 밖 어디서 접속해도 같은 작업 환경이 그대로 열립니다</li>
+     <li><b>웹툰 · 영상 · 개발</b> — 무거운 작업을 내 노트북 대신 서버 컴퓨터가 처리합니다</li></ul>
+     <div class="tip">전기요금 누진세 걱정 없이 여러 대를 24시간 켜둘 수 있다는 점이
+     직접 사서 쓰는 것과 가장 큰 차이입니다.</div>`},
+ {img:'qa2',t:'가상컴 접속방법',s:'결제 후 어떻게 연결하나요',
+  b:`<p>결제가 확인되면 <b>접속 주소와 비밀번호</b>가 화면에 바로 표시되고, 같은 내용이 문자로도
+     발송됩니다. 안내해 드리는 원격접속 프로그램만 설치하시면 됩니다.</p>
+     <ol><li>결제 완료 화면 또는 문자에서 접속 주소·비밀번호를 확인합니다</li>
+     <li>안내된 무료 원격접속 프로그램을 설치합니다</li>
+     <li>접속 주소를 입력하고 연결한 뒤 비밀번호를 입력합니다</li>
+     <li>바로 내 가상컴 화면이 열립니다</li></ol>
+     <p>윈도우 · 맥 · 아이폰 · 안드로이드 · 태블릿 어디서든 접속하실 수 있습니다.
+     한 대의 가상컴에 여러 기기로 번갈아 접속하셔도 됩니다.</p>`},
+ {img:'qa3',t:'멀티컴퓨터 활용방법',s:'여러 대를 한 번에 쓰려면',
+  b:`<p>여러 대를 빌리시면 <b>내 컴퓨터 한 대에서 창을 여러 개 띄워</b> 동시에 조작할 수 있습니다.
+     모니터 한 대로도 충분합니다.</p>
+     <ul><li>가상컴마다 공인IP가 따로 부여되어 계정이 서로 묶이지 않습니다</li>
+     <li>창을 나란히 배치해 여러 대를 동시에 보실 수 있습니다</li>
+     <li>대수가 많아지면 만료일을 하나로 맞춰 관리하실 수 있습니다</li></ul>
+     <div class="tip"><b>10대 이상</b>은 별도 문의 주시면 대량 구매 조건을 안내해 드립니다.</div>`},
+ {img:'qa4',t:'원격접속 사용방법',s:'프로그램 설치와 설정',
+  b:`<p>원격접속 프로그램은 <b>무료</b>이며 설치가 간단합니다. 결제 후 안내드리는 링크에서
+     내려받아 설치하시면 됩니다.</p>
+     <ol><li>안내 링크에서 프로그램을 내려받아 설치합니다</li>
+     <li>실행 후 안내받은 접속 주소를 입력합니다</li>
+     <li>연결 요청 후 비밀번호를 입력하면 접속됩니다</li>
+     <li>파일 전송, 화면 크기 조절, 소리 전달 등이 모두 지원됩니다</li></ol>
+     <div class="tip">접속이 안 되실 때는 <b>내 인터넷 상태</b>를 먼저 확인해 주시고,
+     그래도 안 되면 카카오톡으로 문의 주시면 원격으로 도와드립니다.</div>`},
+ {img:'qa5',t:'이벤트 프로모션',s:'진행 중인 혜택',
+  b:`<p>신규 회원과 장기 이용 고객을 위한 혜택을 운영하고 있습니다.</p>
+     <table><tr><th>구분</th><th>혜택</th></tr>
+     <tr><td>60일 결제</td><td><b>3% 할인</b></td></tr>
+     <tr><td>90일 결제</td><td><b>5% 할인</b></td></tr>
+     <tr><td>포인트 적립</td><td>결제 금액의 <b>1%</b> 적립 (다음 결제에 사용)</td></tr>
+     <tr><td>10대 이상</td><td>별도 협의</td></tr></table>
+     <p>진행 중인 이벤트는 카카오톡 채널에 먼저 공지됩니다. 채널 추가해 두시면 놓치지 않습니다.</p>`},
+ {img:'qa6',t:'요금제 이용안내',s:'가격과 결제 방법',
+  b:`<p>임대컴퓨터 <b>30일 기준</b> 요금입니다. 모든 기종은 메모리 · SSD · 그래픽카드 추가가
+     별도 협의로 가능합니다.</p>
+     <table>
+     <tr><th>상품</th><th>사양</th><th>정가</th><th>판매가</th></tr>
+     <tr><td>인텔I5 4690 4코어</td><td>램 8G · SSD 120G</td><td>90,000원</td><td><b>40,000원</b></td></tr>
+     <tr><td>라이젠 2200 4코어</td><td>램 8G · SSD 120G</td><td>90,000원</td><td><b>40,000원</b></td></tr>
+     <tr><td>라이젠 3200 4코어</td><td>램 8G · SSD 120G</td><td>90,000원</td><td><b>40,000원</b></td></tr>
+     <tr><td>라이젠 5600 6코어</td><td>램 32G · SSD 240G</td><td>120,000원</td><td><b>55,000원</b></td></tr>
+     <tr><td>라이젠 1700 8코어</td><td>램 32G · SSD 240~480G</td><td>140,000원</td><td><b>60,000원</b></td></tr>
+     <tr><td>라이젠 5700G 8코어</td><td>램 32G · SSD 240G</td><td>140,000원</td><td><b>60,000원</b></td></tr>
+     <tr><td>라이젠 3700X 8코어</td><td>램 32G · SSD 480G</td><td>160,000원</td><td><b>65,000원</b></td></tr>
+     </table>
+     <p><b>무약정 · 무보증 · 30일마다 갱신</b>입니다. 설치비와 보증금이 없습니다.
+     결제는 가상계좌 · 신용카드 · 카카오페이 · 네이버페이로 하실 수 있으며,
+     어느 쪽이든 <b>결제 확인 즉시 자동으로 개통</b>됩니다.</p>`},
+ {img:'qa7',t:'대량구매 할인안내',s:'10대 이상 이용 시',
+  b:`<p>10대 이상 이용하시는 경우 별도 조건으로 안내해 드립니다.</p>
+     <ul><li>대수와 사양에 따라 단가를 따로 책정해 드립니다</li>
+     <li>여러 대의 만료일을 하나로 맞춰 관리해 드립니다</li>
+     <li>세금계산서 발행이 필요하시면 함께 안내해 드립니다</li>
+     <li>필요하신 사양이 재고에 없어도 미리 준비해 드릴 수 있습니다</li></ul>
+     <div class="tip">대량 이용은 카카오톡 상담으로 문의 주시면
+     담당자가 사용 목적을 확인하고 맞는 구성을 제안해 드립니다.</div>`},
+ {img:'qa8',t:'불편사항 발생 시',s:'문제가 생겼을 때',
+  b:`<p>저희 가상컴은 항상 원활한 서버관리를 위해 <b>24시간 모니터링</b> 중이며,
+     고객의 불편사항을 최대한 줄이고자 지속적으로 관리시스템을 업데이트하며 노력하고 있습니다.</p>
+     <p>문제가 발생하시면 가장 먼저 <b>카카오톡 문의</b>를 이용해 불편사항을 접수해 주시면
+     순차적으로 해결해 드리고 있습니다. 유선 상담도 운영 중이오니 부담 없이 문의 주시기 바랍니다.</p>
+     <ol><li>화면이 멈췄을 때 — 내 가상컴 화면에서 <b>재부팅</b> 버튼을 눌러 주세요</li>
+     <li>접속이 안 될 때 — 내 인터넷 상태를 먼저 확인해 주세요</li>
+     <li>그래도 안 될 때 — 카카오톡으로 접수해 주시면 서버실에서 직접 확인합니다</li></ol>
+     <div class="tip">서버실에 임직원이 상주하고 있습니다. PC 신호가 끊기면
+     <b>저희가 먼저 확인하고 조치</b>합니다. 수리가 길어지면 동급 이상 PC로 우선 교체해 드립니다.</div>`},
+];
+const FAQ=[
+ ['결제하면 정말 바로 쓸 수 있나요?',
+  '네. 결제가 확인되는 즉시 시스템이 자동으로 PC를 배정하고, 접속 주소와 비밀번호를 화면에 바로 띄웁니다. 담당자가 확인하고 연락드리는 방식이 아닙니다.'],
+ ['무통장으로 넣어도 자동인가요?',
+  '가상계좌를 발급해 드리기 때문에 입금하시면 시스템이 자동으로 확인합니다. 사람이 통장을 보고 처리하는 방식이 아니라, 입금 후 곧바로 접속 정보가 문자로 갑니다.'],
+ ['결제한 사람과 실제 쓰는 사람이 달라도 되나요?',
+  '됩니다. 신청서에 <b>실제 사용자 성함과 연락처</b>를 따로 적는 칸이 있습니다. 나중에 문의하실 때 두 분 어느 쪽 이름으로 연락하셔도 바로 찾아드립니다.'],
+ ['최소 얼마나 빌려야 하나요?',
+  '최소 30일부터이며 최대 90일까지 한 번에 결제하실 수 있습니다. 무약정이라 30일만 써보시고 그만두셔도 됩니다.'],
+ ['중간에 그만두면 환불되나요?',
+  '됩니다. 위약금이 없습니다. 남은 기간은 일할로 계산해 환불해 드립니다. 7일 이내에는 현금 90% 또는 포인트 100% 중 선택하실 수 있습니다.'],
+ ['사양을 나중에 올릴 수 있나요?',
+  '가능합니다. 차액만 결제하시면 상위 사양 PC로 옮겨 드리며, 기존 자료도 그대로 옮겨 드립니다.'],
+ ['PC가 갑자기 꺼지면 어떻게 되나요?',
+  '서버실에 임직원이 365일 상주합니다. 관리 화면에서 각 PC 상태를 실시간으로 보고 있어서, 신호가 끊기면 저희가 먼저 확인하고 조치합니다. 중단된 기간만큼 이용 기간을 연장해 드립니다.'],
+ ['여러 대를 빌리면 IP가 겹치지 않나요?',
+  '겹치지 않습니다. PC마다 개별 공인IP가 부여됩니다. 여러 대를 쓰셔도 서로 다른 IP로 접속됩니다.'],
+ ['세금계산서 발행이 되나요?',
+  '됩니다. 사업자 정보를 주시면 발행해 드립니다. 대량 이용 시에는 담당자가 함께 안내해 드립니다.'],
+ ['불법적인 용도로도 쓸 수 있나요?',
+  '안 됩니다. 불법 스트리밍 · 사설도박 · 해킹 등에 사용하시면 사전 통보 없이 즉시 이용이 중지되며 환불되지 않습니다. 관련 기관에 자료가 제공됩니다.'],
+];
+const $=i=>document.getElementById(i);
+$('guide').innerHTML=ARTS.map((a,i)=>
+ `<a class="g" href="#q${i+1}"><div class="cap"><img src="img/${a.img}.png" alt="${a.t}"></div>
+   <div class="bb"><b>${a.t}</b><span>${a.s}</span></div></a>`).join('');
+$('arts').innerHTML=ARTS.map((a,i)=>
+ `<div class="art ${i===0?'on':''}" id="q${i+1}">
+   <button><span class="n">${i+1}</span><span class="t"><b>${a.t}</b><span>${a.s}</span></span><i>+</i></button>
+   <div class="body">${a.b}</div></div>`).join('');
+$('faq').innerHTML=FAQ.map(([q,a])=>
+ `<div class="fq"><button><span class="q">Q</span><span>${q}</span><i>+</i></button>
+   <div class="a">${a}</div></div>`).join('');
+document.addEventListener('click',e=>{
+ const a=e.target.closest('.art>button'); if(a){a.parentElement.classList.toggle('on');return}
+ const f=e.target.closest('.fq button'); if(f){f.parentElement.classList.toggle('on');return}
+ const g=e.target.closest('.g[href^="#q"]');
+ if(g){const el=document.querySelector(g.getAttribute('href'));
+   if(el){el.classList.add('on')}}
+});
+if(location.hash.startsWith('#q')){const el=document.querySelector(location.hash);
+ if(el){el.classList.add('on');setTimeout(()=>el.scrollIntoView(),60)}}
+</script>
+</body>
+</html>

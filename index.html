@@ -88,8 +88,10 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .sl img{width:100%;height:100%;object-fit:cover;transform:scale(1.06);
   transition:transform 7s linear}
 .sl.on img{transform:scale(1)}
+/* 글이 얹히는 왼쪽을 확실히 어둡게 눌러 카피가 항상 읽히게 한다 */
 .sl::after{content:'';position:absolute;inset:0;background:
-  linear-gradient(96deg,rgba(4,7,16,.92) 0%,rgba(4,7,16,.72) 40%,rgba(4,7,16,.15) 78%)}
+  linear-gradient(94deg,rgba(3,5,12,.96) 0%,rgba(3,5,12,.9) 34%,rgba(3,5,12,.55) 62%,rgba(3,5,12,.28) 100%),
+  linear-gradient(0deg,rgba(3,5,12,.55) 0%,transparent 40%)}
 /* 슬라이드가 바뀌어도 글·버튼 자리가 흔들리지 않도록 각 줄 높이를 고정한다 */
 .hero-tx{position:absolute;inset:0;z-index:3;display:flex;align-items:center}
 .ht{width:100%;max-width:680px;color:#fff}
@@ -99,9 +101,10 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .ht .kk-wrap{height:32px;margin-bottom:20px}
 .ht h1{font-size:clamp(30px,3.9vw,48px);line-height:1.24;letter-spacing:-.058em;font-weight:800;
   min-height:calc(2 * 1.24em);display:flex;flex-direction:column;justify-content:center}
-.ht h1 span{color:#8CA6FF}
-.ht p{margin-top:18px;font-size:16.5px;line-height:1.72;color:rgba(255,255,255,.76);
-  min-height:calc(2 * 1.72em)}
+.ht h1{text-shadow:0 2px 24px rgba(0,0,0,.55)}
+.ht h1 span{color:var(--gold);text-shadow:0 2px 28px rgba(0,0,0,.6)}
+.ht p{margin-top:18px;font-size:16.5px;line-height:1.72;color:rgba(255,255,255,.88);
+  min-height:calc(2 * 1.72em);text-shadow:0 1px 14px rgba(0,0,0,.6)}
 .ht .cta{display:flex;gap:10px;margin-top:28px;flex-wrap:wrap;min-height:58px}
 .ht .cta .btn{min-width:172px}
 .hero-tx .ht{opacity:0;transform:translateY(12px);transition:.65s .2s}
@@ -125,7 +128,22 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .live .c b{font-size:15px;font-weight:800;color:#fff}
 .live .c.few b{color:#FF9AA2}
 
-/* ══ 퀵메뉴 ══ */
+/* ══ 회사소개 띠 ══ */
+.ab-band{position:relative;overflow:hidden;background:#050912;color:#fff;text-align:center}
+.ab-bg{position:absolute;inset:0}
+.ab-bg img{width:100%;height:100%;object-fit:cover}
+.ab-bg::after{content:'';position:absolute;inset:0;background:rgba(4,7,16,.82)}
+.ab-in{position:relative;z-index:2}
+.ab-in .lb{font-size:13px;font-weight:800;color:#8CA6FF;margin-bottom:14px}
+.ab-in h2{font-size:clamp(26px,3.2vw,38px);line-height:1.38;letter-spacing:-.05em;font-weight:800}
+.ab-in h2 em{font-style:normal;color:var(--gold)}
+.ab-in p{margin-top:16px;font-size:16.5px;line-height:1.8;color:rgba(255,255,255,.72)}
+.ab-n{display:flex;justify-content:center;gap:52px;margin-top:34px;padding-top:28px;
+  border-top:1px solid rgba(255,255,255,.16);flex-wrap:wrap}
+.ab-n b{display:block;font-size:28px;font-weight:800;letter-spacing:-.05em}
+.ab-n span{font-size:13.5px;color:rgba(255,255,255,.56)}
+
+/* ══ 퀵메뉴(미사용) ══ */
 .quick{padding:52px 0 8px}
 .quick .shell{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .quick a{display:flex;flex-direction:column;align-items:center;gap:11px;padding:14px 4px;
@@ -143,25 +161,32 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .pc{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff;
   transition:.2s;display:flex;flex-direction:column}
 .pc:hover{transform:translateY(-5px);box-shadow:var(--sh-l);border-color:#CBD3E0}
-.pc-top{background:var(--red);color:#fff;font-size:11.5px;font-weight:700;text-align:center;
-  padding:6px;letter-spacing:-.03em}
 .pc-img{position:relative;aspect-ratio:4/3;background:#14161C;overflow:hidden}
 .pc-img img{width:100%;height:100%;object-fit:cover;transition:.5s}
 .pc:hover .pc-img img{transform:scale(1.06)}
 .pc-ov{position:absolute;inset:0;padding:16px 18px;color:#fff;
   background:linear-gradient(90deg,rgba(10,12,18,.9) 0%,rgba(10,12,18,.55) 52%,transparent 100%)}
-.pc-ov .kk{font-size:10.5px;font-weight:800;color:var(--gold);letter-spacing:-.02em}
-.pc-ov .nn{font-size:21px;font-weight:800;letter-spacing:-.05em;line-height:1.15;margin-top:2px}
-.pc-ov .cc{display:inline-block;margin-top:5px;font-size:11px;font-weight:800;
+.pc-ov .nn{font-size:22px;font-weight:800;letter-spacing:-.05em;line-height:1.15}
+.pc-ov .cc{display:inline-block;margin-top:7px;font-size:11.5px;font-weight:800;
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);
-  padding:2px 8px;border-radius:99px}
-.pc-ov ul{margin-top:11px;list-style:none}
-.pc-ov li{font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.62}
-.pc-badge{position:absolute;right:11px;bottom:11px;width:44px;height:44px;border-radius:50%;
-  background:var(--blue);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;
-  box-shadow:0 6px 16px rgba(0,0,0,.35)}
-.pc-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px;flex:1}
-.pc-b .pn{font-size:15.5px;font-weight:700;letter-spacing:-.038em}
+  padding:3px 9px;border-radius:99px}
+.pc-ov ul{margin-top:12px;list-style:none}
+.pc-ov li{font-size:12px;color:rgba(255,255,255,.74);line-height:1.65}
+.pc-badge{position:absolute;right:12px;top:12px;background:var(--gold);color:#231B00;
+  font-size:11px;font-weight:800;padding:5px 11px;border-radius:99px;letter-spacing:-.03em;
+  box-shadow:0 6px 16px rgba(0,0,0,.3)}
+.pc-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:9px;flex:1}
+.pc-b .pu{align-self:flex-start;font-size:11.5px;font-weight:800;padding:3px 10px;
+  border-radius:99px;letter-spacing:-.03em}
+.pc-b .pn{font-size:14.5px;font-weight:600;color:var(--ink3);letter-spacing:-.03em}
+/* 맞춤 문의 카드 — 7개 상품 뒤 8번째 칸을 채워 격자를 닫는다 */
+.pc-ask{border:1px dashed #C6CEDC;background:var(--bg2);align-items:center;justify-content:center;
+  text-align:center;padding:34px 26px;gap:9px;color:var(--ink2)}
+.pc-ask:hover{border-color:var(--blue);background:#F4F6FE;transform:translateY(-5px)}
+.pc-ask i{font-style:normal;font-size:32px}
+.pc-ask b{font-size:16.5px;font-weight:800;letter-spacing:-.04em}
+.pc-ask span{font-size:13.5px;color:var(--ink3);line-height:1.65}
+.pc-ask em{font-style:normal;margin-top:6px;font-size:14px;font-weight:800;color:var(--blue)}
 .pc-b .pp{display:flex;align-items:baseline;gap:8px}
 .pc-b .pp b{font-size:22px;font-weight:800;color:var(--red);letter-spacing:-.05em}
 .pc-b .pp s{font-size:13px;color:var(--ink4)}
@@ -344,10 +369,10 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
     <span class="tx"><b>한국 가상컴</b><span>가상컴퓨터 임대솔루션 전문회사</span></span>
   </a>
   <nav class="gnb">
-    <a href="#about">회사소개</a>
+    <a href="about.html">회사소개</a>
     <a href="#price">요금제</a>
     <a href="live.html">실시간 PC임대<i class="nw"></i></a>
-    <a href="#qa">Q&amp;A안내</a>
+    <a href="qa.html">Q&amp;A안내</a>
   </nav>
   <div class="r">
     <a class="btn btn-o btn-sm" href="#">로그인</a>
@@ -372,27 +397,17 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   <a class="btn btn-gh btn-sm" href="live.html">PC 직접 고르기 →</a>
 </div></div>
 
-<!-- ═══ 퀵메뉴 ═══ -->
-<nav class="quick"><div class="shell">
-  <a href="#about"><i>🏢</i><span>회사소개</span></a>
-  <a href="#price"><i>💰</i><span>요금제</span></a>
-  <a href="live.html"><i>⚡</i><span>실시간 PC</span></a>
-  <a href="#price"><i>🛒</i><span>공식스토어</span></a>
-  <a href="https://blog.naver.com/PostList.naver?blogId=rlagkstp" target="_blank" rel="noopener"><i>📗</i><span>N블로그</span></a>
-  <a href="https://open.kakao.com/o/sm9KAE3e" target="_blank" rel="noopener"><i>💬</i><span>커뮤니티</span></a>
-  <a href="#qa"><i>📢</i><span>공지사항</span></a>
-</div></nav>
-
 <!-- ═══ 인기 서비스 ═══ -->
 <section class="sec" id="price">
   <div class="shell">
     <div class="sh">
       <span class="kick">재구매율 97% 베스트 상품들 🔥</span>
       <h2>인기 서비스 <em>ing</em></h2>
-      <p>임대컴퓨터 30일 기준 · 모든기종 메모리, SSD, 그래픽카드 추가 별도협의</p>
+      <p>임대컴퓨터 30일 기준 · 용도에 맞는 사양을 고르세요</p>
     </div>
     <div class="prods" id="prods"></div>
-    <div class="pnote"><b>무약정, 무보증 30일마다 갱신!</b> · 설치비 · 보증금 없음</div>
+    <div class="pnote"><b>무약정, 무보증 30일마다 갱신!</b> · 설치비 · 보증금 없음 ·
+      모든 기종 메모리 · SSD · 그래픽카드 추가 별도협의</div>
   </div>
 </section>
 
@@ -428,37 +443,21 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   <a class="btn btn-o" href="tel:01084468710">📞 010-8446-8710</a>
 </div></div>
 
-<!-- ═══ 회사소개 ═══ -->
-<section class="sec" id="about">
-  <div class="shell">
-    <div class="sh"><h2>한국 가상컴을 소개합니다.</h2></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center" class="ab">
-      <div>
-        <div style="font-size:clamp(23px,2.7vw,32px);font-weight:800;letter-spacing:-.05em;line-height:1.45;margin-bottom:22px">
-          한국 가상컴은 가동이 시작된 이후<br>
-          <span style="color:var(--blue)">6년 동안 단 한번도 멈춘 적이 없습니다.</span>
-        </div>
-        <p style="font-size:16.5px;line-height:1.85;color:var(--ink2);margin-bottom:14px">
-          한국 가상컴은 원격 데스크탑을 이용해 안전한 공인IP로 원격접속 프로그램을 활용,
-          고객님이 원하시는 서비스를 제공합니다.</p>
-        <p style="font-size:16.5px;line-height:1.85;color:var(--ink2);margin-bottom:14px">
-          목적하시는 용도에 따라 저사양부터 고사양까지 모든 종류의 PC들이 구비되어 있으며,
-          장소와 시간에 구애받지 않는 원격 접속 방식으로 완벽한 자유도를 드립니다.</p>
-        <p style="font-size:16.5px;line-height:1.85;color:var(--ink3)">
-          24시간 Full가동되는 서버실은 가장 중요한 고객님과의 ‘신용’을 바탕으로 이루어졌다고
-          자신합니다. 언제나 안전한 서버 운영으로 고객님의 믿음에 보답하겠습니다. 감사합니다.</p>
-        <div style="display:flex;gap:38px;margin-top:30px;padding-top:26px;border-top:1px solid var(--line)">
-          <div><b style="display:block;font-size:27px;font-weight:800;letter-spacing:-.05em">6년</b>
-            <span style="font-size:13.5px;color:var(--ink3)">무중단 가동</span></div>
-          <div><b style="display:block;font-size:27px;font-weight:800;letter-spacing:-.05em">3곳</b>
-            <span style="font-size:13.5px;color:var(--ink3)">자체 서버실 운영</span></div>
-          <div><b style="display:block;font-size:27px;font-weight:800;letter-spacing:-.05em">24시간</b>
-            <span style="font-size:13.5px;color:var(--ink3)">Full 가동</span></div>
-        </div>
-      </div>
-      <img src="img/idc-wide.png" alt="24시간 Full가동되는 자체 서버실"
-           style="border-radius:16px;border:1px solid var(--line);box-shadow:var(--sh)">
+<!-- ═══ 회사소개 요약 (자세한 내용은 서브페이지) ═══ -->
+<section class="sec ab-band">
+  <div class="ab-bg"><img src="img/idc-wide.png" alt="24시간 Full가동되는 자체 서버실"></div>
+  <div class="shell ab-in">
+    <div class="lb">회사소개</div>
+    <h2>가동을 시작한 이후 <em>6년</em>,<br>단 한 번도 멈추지 않았습니다</h2>
+    <p>24시간 Full 가동되는 자체 서버실을 직접 운영합니다.<br>
+       고객님과의 ‘신용’을 무엇보다 중요하게 생각합니다.</p>
+    <div class="ab-n">
+      <div><b class="num">6년</b><span>무중단 가동</span></div>
+      <div><b class="num">3곳</b><span>자체 서버실 운영</span></div>
+      <div><b class="num">1,000대</b><span>보유 임대 PC</span></div>
+      <div><b class="num">24시간</b><span>Full 가동</span></div>
     </div>
+    <a class="btn btn-w" href="about.html" style="margin-top:30px">회사소개 자세히 보기 →</a>
   </div>
 </section>
 
@@ -485,8 +484,11 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 <section class="sec" id="qa">
   <div class="shell">
     <div class="sh"><h2>Q&amp;A 안내 <em>tip</em></h2>
-      <p>궁금하신 내용을 미리 정리해 두었습니다.</p></div>
+      <p>궁금하신 내용을 미리 정리해 두었습니다. 자주 묻는 질문도 함께 담았습니다.</p></div>
     <div class="qa" id="qalist"></div>
+    <div style="text-align:center;margin-top:34px">
+      <a class="btn btn-o btn-lg" href="qa.html">Q&amp;A 안내 전체 보기 →</a>
+    </div>
   </div>
 </section>
 
@@ -550,14 +552,21 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 
 <script>
 /* ═══ 실제 판매 상품 7종 — 기존 가격표·공식스토어 원문 ═══ */
+/* 사양 출처 = 공식스토어 상품카드 + 서비스 가격표.
+   두 자료가 어긋나는 곳은 주석으로 표시했다 (대표님 확인 필요). */
+const USECAT={
+ basic:{t:'입문 · 가성비',c:'#0FA45E',bg:'#E9FBF1'},
+ multi:{t:'다중 구동',   c:'#0B2FE8',bg:'#EEF1FE'},
+ game: {t:'고사양 게임', c:'#E2233C',bg:'#FDEEF0'},
+};
 const P=[
- {n:'인텔I5 4690',c:'4코어',ram:8, ssd:'SSD 120GB',  gpu:'GTX660 · VEGA 내장그래픽', list:90000, p:40000,k:47,all:168,img:'pc-cpu',  d:'내가바로 가성비 끝판왕!'},
- {n:'라이젠 2200',c:'4코어',ram:8, ssd:'SSD 120GB',  gpu:'GTX660 · VEGA 내장그래픽', list:90000, p:40000,k:40,all:144,img:'pc-white',d:'내가바로 가성비 끝판왕!'},
- {n:'라이젠 3200',c:'4코어',ram:8, ssd:'SSD 120GB',  gpu:'GTX660 · VEGA 내장그래픽', list:90000, p:40000,k:55,all:196,img:'pc-white',d:'재구매 1위 서비스',hot:1},
- {n:'라이젠 5600',c:'6코어',ram:32,ssd:'SSD 240GB',  gpu:'내장그래픽 (추가가능)',    list:120000,p:55000,k:37,all:132,img:'pc-duo',  d:'고사양 게임, 프로그램 사용자용'},
- {n:'라이젠 1700',c:'8코어',ram:32,ssd:'SSD 240~480GB',gpu:'GTX1050TI · 1060 6GB',  list:140000,p:60000,k:44,all:156,img:'pc-black',d:'고사양 게임, 프로그램 사용자용'},
- {n:'라이젠 5700G',c:'8코어',ram:32,ssd:'SSD 240GB',  gpu:'내장그래픽 (추가가능)',    list:140000,p:60000,k:33,all:118,img:'pc-duo',  d:'고사양 게임, 프로그램 사용자용'},
- {n:'라이젠 3700X',c:'8코어',ram:32,ssd:'SSD 480GB', gpu:'GTX1050TI · 1060 6GB',   list:160000,p:65000,k:24,all:86, img:'pc-black',d:'고사양 게임, 프로그램 사용자용'},
+ {n:'인텔I5 4690',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'GTX 650~760TI',        list:90000, p:40000,k:47,all:168,img:'pc-cpu',  u:'basic',d:'문서·웹서핑·가벼운 업무'},
+ {n:'라이젠 2200G',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'VEGA 내장그래픽',      list:90000, p:40000,k:40,all:144,img:'pc-white',u:'basic',d:'가성비 입문용'},
+ {n:'라이젠 3200G',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'VEGA 내장그래픽',      list:90000, p:40000,k:55,all:196,img:'pc-white',u:'basic',d:'가장 많이 찾는 기본형',tag:'재구매 1위'},
+ {n:'라이젠 5600G',c:'6코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:120000,p:55000,k:37,all:132,img:'pc-duo',  u:'multi',d:'창 여러 개 동시 작업'},
+ {n:'라이젠 5700G',c:'8코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:140000,p:60000,k:33,all:118,img:'pc-duo',  u:'multi',d:'모바일게임 다중 구동'},
+ {n:'라이젠 1700', c:'8코어',ram:32,ssd:'SSD 240~480GB',gpu:'GTX 1050TI · 1060 6GB',list:140000,p:60000,k:44,all:156,img:'pc-black',u:'game', d:'고사양 게임 · 무거운 작업'},
+ {n:'라이젠 3700X',c:'8코어',ram:32,ssd:'SSD 480GB',    gpu:'GTX 1050TI · 1060 6GB',list:160000,p:65000,k:24,all:86, img:'pc-black',u:'game', d:'가장 높은 사양',tag:'최고 사양'},
 ];
 /* 슬라이드 카피 — 세 장 모두 같은 뼈대(한 줄 라벨 / 두 줄 제목 / 두 줄 설명 / 버튼 둘) */
 const SLIDES=[
@@ -595,27 +604,31 @@ const $=i=>document.getElementById(i);
 
 /* 상품 카드 */
 function prods(){
-  $('prods').innerHTML=P.map((x,i)=>{
-    const off=Math.round((1-x.p/x.list)*100), few=x.k<=10;
+  $('prods').innerHTML=P.map(x=>{
+    const off=Math.round((1-x.p/x.list)*100), few=x.k<=10, u=USECAT[x.u];
     return `<div class="pc">
-      <div class="pc-top">모든기종 메모리, SSD, 그래픽카드 추가 별도협의</div>
       <div class="pc-img">
         <img src="img/${x.img}.png" alt="${x.n}">
         <div class="pc-ov">
-          <div class="kk">인기 서비스</div>
           <div class="nn">${x.n}</div>
-          <div class="cc">${x.c}</div>
-          <ul><li>메모리 ${x.ram}GB</li><li>${x.ssd}</li><li>${x.gpu}</li></ul>
+          <div class="cc">${x.c} · 램 ${x.ram}GB</div>
+          <ul><li>${x.ssd}</li><li>${x.gpu}</li></ul>
         </div>
-        <div class="pc-badge">${x.hot?'재구매<br>1위':'베스트'}</div>
+        ${x.tag?`<div class="pc-badge">${x.tag}</div>`:''}
       </div>
       <div class="pc-b">
-        <div class="pn">${x.n} ${x.c} 가상컴 솔루션</div>
+        <span class="pu" style="color:${u.c};background:${u.bg}">${u.t}</span>
+        <div class="pn">${x.d}</div>
         <div class="pp"><b class="num">${w(x.p)}원</b><s class="num">${w(x.list)}원</s><em>${off}%</em></div>
         <div class="pk ${few?'few':''}">${few?'':'<span class="dot"></span>'}${x.k>0?`${x.k}대 임대 가능`:'전량 임대중'}<i>/ 보유 ${x.all}대</i></div>
         <a class="btn ${few?'btn-r':'btn-b'}" href="live.html">바로 임대하기</a>
       </div>
-    </div>`}).join('');
+    </div>`}).join('')
+   +`<a class="pc pc-ask" href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">
+      <i>💬</i><b>원하시는 사양이 없으신가요?</b>
+      <span>메모리 · SSD · 그래픽카드 추가는 별도 협의로 가능합니다.<br>
+        10대 이상 대량 이용도 문의해 주세요.</span>
+      <em>카카오톡으로 문의하기 →</em></a>`;
 }
 /* 활용 분야 */
 $('uses').innerHTML=USES.map(([t,d,img])=>
@@ -623,8 +636,9 @@ $('uses').innerHTML=USES.map(([t,d,img])=>
    onerror="this.src='img/s1-game.png'">
    <div class="tx"><b>${t}<i>→</i></b><span>${d}</span></div></a>`).join('');
 /* Q&A */
-$('qalist').innerHTML=QA.map(([t,img])=>
- `<a class="q" href="#"><div class="cap"><img src="img/${img}.png" alt="${t}"></div>
+$('qalist').innerHTML=QA.map(([t,img],i)=>
+ `<a class="q" href="qa.html#q${i+1}">
+   <div class="cap"><img src="img/${img}.png" alt="${t}"></div>
    <div class="bb"><b>${t}</b><span>자세히 보기 →</span></div></a>`).join('');
 
 /* 실시간 재고 띠 */
