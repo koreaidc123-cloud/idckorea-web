@@ -240,35 +240,40 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 const G=[
  {g:1,n:'인텔I5 4690',    cpu:'Intel Core i5-4690',    core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX 650~760TI',        gk:'NVIDIA',list:90000, p:40000},
  {g:2,n:'라이젠 2200G~2400G',cpu:'AMD Ryzen 2200G~2400G',core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',   gk:'내장',  list:90000, p:40000},
- {g:3,n:'라이젠 3200G',   cpu:'AMD Ryzen 3 3200G',     core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',     gk:'내장',  list:90000, p:40000},
- {g:4,n:'라이젠 5600G',   cpu:'AMD Ryzen 5 5600G',     core:'6코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
+ {g:4,n:'라이젠 5600G~5700G',cpu:'AMD Ryzen 5600G~5700G',core:'6~8코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
  {g:5,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI / 1060 6GB',gk:'NVIDIA',list:140000,p:60000},
- {g:6,n:'라이젠 5700G',   cpu:'AMD Ryzen 7 5700G',     core:'8코어',ct:8,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:140000,p:60000},
  {g:7,n:'라이젠 3700X',   cpu:'AMD Ryzen 7 3700X',     core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI / 1060 6GB',gk:'NVIDIA',list:160000,p:65000},
 ];
 const USE=[
- ['game','고사양게임',[5,6,7]],['mobile','모바일게임 다중구동',[4,5,6,7]],
- ['work','개인 재택 업무',[1,2,3]],['mkt','각종 마케팅 프로그램',[2,3,4,6]],
- ['office','가상공유오피스',[1,2,3,4]],['store','N스토어 운영',[2,3,4]],
- ['webtoon','웹툰 · 콘텐츠',[5,6,7]],['dev','개발 · 연구',[4,5,6,7]],
+ ['game','고사양게임',[5,7]],['mobile','모바일게임 다중구동',[4,5,7]],
+ ['work','개인 재택 업무',[1,2]],['mkt','각종 마케팅 프로그램',[2,4]],
+ ['office','가상공유오피스',[1,2,4]],['store','N스토어 운영',[2,4]],
+ ['webtoon','웹툰 · 콘텐츠',[5,7]],['dev','개발 · 연구',[4,5,7]],
 ];
 const RENT=[['4','4만원대',[40000]],['5','5만원대',[55000]],['6','6만원대',[60000,65000]]];
 const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
-const AL=['한국','경기','서울','인천','파주'];
+/* 품번 체계 — 서버실 알파벳 + 일련번호
+   K = 금촌 / Y = 영태리 / D = 등원리
+   ※ 서버실 실명은 관리자 화면 전용. 고객에게는 알파벳만 보인다.
+   ※ 관리자에서 배정한 품번이 그대로 이 목록에 실시간 반영된다. */
+const ROOM=[{k:'K',cust:'K 서버실'},{k:'Y',cust:'Y 서버실'},{k:'D',cust:'D 서버실'}];
+const pad=n=>String(n).padStart(3,'0');
 
 /* 보유 PC 전량을 등록한다. 임대중인 PC도 목록에 남는다 —
    관리자 화면과 같은 대장을 보고 있어야 재고·장애가 어긋나지 않는다. */
 let seed=20260811; const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
-const CNT={1:168,2:144,3:196,4:132,5:156,6:118,7:86};   // 합계 1,000대
-const PCS=[]; let sn=1000;
+const CNT={1:168,2:340,4:250,5:156,7:86};   // 합계 1,000대
+const PCS=[]; const seq={K:0,Y:0,D:0};
 for(const g of G) for(let i=0;i<CNT[g.g];i++){
   const r=rnd();
   const st = r<.70 ? 'busy' : r<.98 ? 'free' : 'fix';   // 임대중 70% · 임대가능 28% · 점검 2%
+  const room = 1+Math.floor(rnd()*3);
+  const rk = ROOM[room-1].k;
   PCS.push({
-    id:`${AL[Math.floor(rnd()*AL.length)]}${++sn}`,
+    id:`${rk}-${pad(++seq[rk])}`,
     g:g.g, st, up: st==='fix'?0:Math.floor(rnd()*1900)+21,
     ssd: g.g===5 ? (rnd()<.5?240:480) : g.ssd,
-    room: 1+Math.floor(rnd()*3),
+    room,
     left: st==='busy' ? 1+Math.floor(rnd()*30) : 0,
     ip:`${[59,121,175,211,220][Math.floor(rnd()*5)]}.${10+Math.floor(rnd()*80)}.*.**`,
   });
@@ -316,13 +321,13 @@ function filters(){
     row('메모리','ram',[['8','8GB'],['32','32GB']])+
     row('SSD','ssd',[['120','120GB'],['240','240GB'],['480','480GB']])+
     row('그래픽','gpu',[['NVIDIA','NVIDIA'],['내장','내장그래픽']])+
-    row('서버실','room',[['1','제1서버실'],['2','제2서버실'],['3','제3서버실']]);
+    row('서버실','room',[['1','K 서버실'],['2','Y 서버실'],['3','D 서버실']]);
 }
 function chips(){
   const L=[];
   const lab={st:v=>ST[v][0], use:v=>USE.find(u=>u[0]===v)[1], rent:v=>RENT.find(r=>r[0]===v)[1],
     g:v=>G.find(g=>String(g.g)===v).n, core:v=>v, ram:v=>v+'GB', ssd:v=>v+'GB',
-    gpu:v=>v, room:v=>'제'+v+'서버실'};
+    gpu:v=>v, room:v=>ROOM[v-1].cust};
   for(const k in F) F[k].forEach(v=>L.push([k,v,lab[k](v)]));
   $('chips').innerHTML=L.map(([k,v,l])=>
     `<span class="chip">${l}<button data-x="${k}|${v}">×</button></span>`).join('')+
@@ -353,11 +358,11 @@ function draw(){
   const V=L.slice((page-1)*PER, page*PER);
   $('list').innerHTML = !V.length
    ? `<div class="empty"><b>조건에 맞는 PC가 없습니다</b>필터를 조금 풀어 보세요.</div>`
-   : `<div class="tr h"><div>관리번호</div><div>CPU · 사양</div><div>메모리</div><div>저장장치</div>
+   : `<div class="tr h"><div>품번</div><div>CPU · 사양</div><div>메모리</div><div>저장장치</div>
       <div>그래픽</div><div>임대 상태</div><div style="text-align:right">30일 요금</div><div></div></div>`
    + V.map(x=>{const g=gOf(x), ok=x.st==='free';
      return `<div class="tr ${sel===x.id?'sel':''} ${ok?'':'off'}" data-id="${x.id}" data-ok="${ok?1:0}">
-       <div class="id">${x.id}<span>제${x.room}서버실</span></div>
+       <div class="id">${x.id}<span>${ROOM[x.room-1].cust}</span></div>
        <div class="cpu"><b>${g.cpu}</b><span>${g.core} · Windows 10 Pro · 공인IP ${x.ip}</span></div>
        <div class="num">${g.ram}GB</div>
        <div class="num">SSD ${x.ssd}GB</div>

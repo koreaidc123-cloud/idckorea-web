@@ -159,7 +159,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .quick span{font-size:14.5px;font-weight:700;letter-spacing:-.035em}
 
 /* ══ 상품 카드 ══ */
-.prods{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.prods{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .pc{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff;
   transition:.2s;display:flex;flex-direction:column}
 .pc:hover{transform:translateY(-5px);box-shadow:var(--sh-l);border-color:#CBD3E0}
@@ -584,10 +584,8 @@ const USECAT={
 };
 const P=[
  {n:'인텔I5 4690',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'GTX 650~760TI',        list:90000, p:40000,k:47,all:168,img:'p1-i5',   br:'intel',u:'basic',d:'문서·웹서핑·가벼운 업무',tag:'재구매 베스트셀러'},
- {n:'라이젠 2200G~2400G',c:'4코어',ram:8, ssd:'SSD 120GB',gpu:'VEGA 내장그래픽',   list:90000, p:40000,k:40,all:144,img:'p2-2200',br:'ryzen',u:'basic',d:'가성비 입문용',tag:'재구매 베스트셀러'},
- {n:'라이젠 3200G',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'VEGA 내장그래픽',      list:90000, p:40000,k:55,all:196,img:'p3-3200',br:'ryzen',u:'basic',d:'가장 많이 찾는 기본형',tag:'재구매 베스트셀러'},
- {n:'라이젠 5600G',c:'6코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:120000,p:55000,k:37,all:132,img:'p4-5600', br:'ryzen',u:'multi',d:'창 여러 개 동시 작업'},
- {n:'라이젠 5700G',c:'8코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:140000,p:60000,k:33,all:118,img:'p6-5700', br:'ryzen',u:'multi',d:'모바일게임 다중 구동'},
+ {n:'라이젠 2200G~2400G',c:'4코어',ram:8, ssd:'SSD 120GB',gpu:'VEGA 내장그래픽',   list:90000, p:40000,k:95,all:340,img:'p2-2200', br:'ryzen',u:'basic',d:'가성비 입문용',tag:'재구매 베스트셀러'},
+ {n:'라이젠 5600G~5700G',c:'6~8코어',ram:32,ssd:'SSD 240GB',gpu:'내장그래픽 (추가 가능)',list:120000,p:55000,k:70,all:250,img:'p6-5700',br:'ryzen',u:'multi',d:'창 여러 개 · 다중 구동'},
  {n:'라이젠 1700', c:'8코어',ram:32,ssd:'SSD 240~480GB',gpu:'GTX 1050TI · 1060 6GB',list:140000,p:60000,k:44,all:156,img:'p5-1700', br:'ryzen',u:'game', d:'고사양 게임 · 무거운 작업'},
  {n:'라이젠 3700X',c:'8코어',ram:32,ssd:'SSD 480GB',    gpu:'GTX 1050TI · 1060 6GB',list:160000,p:65000,k:24,all:86, img:'p7-3700x',br:'ryzen',u:'game', d:'가장 높은 사양',tag:'최고 인기사양'},
 ];
