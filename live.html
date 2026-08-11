@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>실시간 PC — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   실시간 PC 선택 — 컴뷰어스 필터 구조 + 하트비트 실시간
+   · 사양은 각 PC의 프로그램이 직접 읽어 올린 값
+   · 신호 끊긴 PC는 목록에서 자동 제외
+   · 서버실 실명은 노출하지 않는다 (제1·2·3 서버실)
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;
+  --red:#E2233C;--red-l:#FDEEF0;--gr:#0FA45E;--gold:#FFB808;
+  --ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+  --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+  --sh:0 1px 2px rgba(11,14,20,.04),0 12px 34px rgba(11,14,20,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+  background:#fff;color:var(--ink);font-size:15.5px;line-height:1.6;letter-spacing:-.022em;
+  padding-bottom:110px}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+.shell{max-width:1340px;margin:0 auto;padding:0 24px}
+.num{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;padding:0 20px;
+  border-radius:7px;font-weight:700;font-size:14.5px;transition:.15s;white-space:nowrap}
+.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
+.btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:34px;padding:0 13px;font-size:13px}
+.dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;
+  box-shadow:0 0 0 0 rgba(18,208,110,.55);animation:pp 2s infinite}
+@keyframes pp{70%{box-shadow:0 0 0 7px rgba(18,208,110,0)}100%{box-shadow:0 0 0 0 rgba(18,208,110,0)}}
+
+/* 헤더 */
+.tb{background:var(--ink);color:#fff;font-size:13px;text-align:center;padding:8px 0;font-weight:600}
+.tb b{color:var(--gold)}
+.hd{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.95);
+  backdrop-filter:blur(16px);border-bottom:1px solid var(--line2)}
+.hd .shell{display:flex;align-items:center;height:70px;gap:36px}
+.lg{display:flex;align-items:center;gap:10px}
+.lg b{font-size:19px;font-weight:800;letter-spacing:-.06em}
+.gnb{display:flex;gap:2px;margin-right:auto}
+.gnb a{padding:9px 15px;border-radius:6px;font-weight:600;font-size:15.5px;color:var(--ink2)}
+.gnb a:hover{background:var(--bg2);color:var(--blue)}
+.gnb a.on{color:var(--blue);font-weight:700}
+
+/* 페이지 헤드 */
+.ph{background:linear-gradient(180deg,#F2F5FE,#fff);border-bottom:1px solid var(--line2);padding:34px 0 28px}
+.ph h1{font-size:30px;font-weight:800;letter-spacing:-.05em;line-height:1.3}
+.ph p{margin-top:8px;font-size:15px;color:var(--ink3);max-width:820px}
+.ph .bar{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.ph .pill{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:99px;
+  background:#fff;border:1px solid var(--line);font-size:13.5px;font-weight:700}
+.ph .pill.hot{background:var(--blue);border-color:var(--blue);color:#fff}
+
+/* 필터 테이블 — 컴뷰어스 구조 */
+.ft{margin:22px 0 18px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  background:#fff}
+.fr{display:grid;grid-template-columns:104px 1fr;border-bottom:1px solid var(--line2)}
+.fr:last-child{border-bottom:0}
+.fr>.k{background:var(--bg2);display:flex;align-items:center;padding:10px 14px;font-size:12.5px;
+  font-weight:800;color:var(--ink2);border-right:1px solid var(--line2)}
+.fr>.v{display:flex;flex-wrap:wrap;gap:5px;padding:9px 12px}
+.fv{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;
+  padding:5px 10px;font-size:13px;transition:.13s;background:#fff;cursor:pointer}
+.fv:hover{border-color:#A9B4E8;background:#FAFBFF}
+.fv.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+.fv b{font-size:11px;color:var(--ink4);font-weight:700}
+.fv.on b{color:rgba(255,255,255,.75)}
+.fv.zero{opacity:.35;cursor:not-allowed}
+.fr.acc>.k{background:#FFF6E5;color:#8A6100}
+
+/* 툴바 */
+.tool{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.tool .c{font-size:15px;color:var(--ink3)}
+.tool .c b{color:var(--ink);font-weight:800;font-size:18px}
+.tool .s{margin-left:auto;display:flex;gap:5px}
+.tool .s button{border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:13px;
+  font-weight:600;color:var(--ink3);background:#fff}
+.tool .s button.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:700}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--blue-l);color:var(--blue);
+  border-radius:99px;padding:5px 11px;font-size:13px;font-weight:700}
+.chip button{font-size:14px;line-height:1;opacity:.6}.chip button:hover{opacity:1}
+
+/* 목록 */
+.tbl{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tr{display:grid;grid-template-columns:112px 1fr 74px 96px 150px 108px 116px 96px;
+  align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line2);
+  font-size:13.5px;transition:.12s}
+.tr:last-child{border-bottom:0}
+.tr:hover{background:#FAFBFE}
+.tr.h{background:var(--bg2);padding:10px 16px;font-size:12px;font-weight:800;color:var(--ink3)}
+.tr.h:hover{background:var(--bg2)}
+.tr.sel{background:var(--blue-l);box-shadow:inset 3px 0 0 var(--blue)}
+.tr .id{font-weight:800;letter-spacing:-.03em;font-size:14px}
+.tr .id span{display:block;font-size:11px;color:var(--ink4);font-weight:600;letter-spacing:0}
+.tr .cpu b{font-weight:700}
+.tr .cpu span{display:block;font-size:11.5px;color:var(--ink4)}
+.tr .ip{font-size:12.5px;color:var(--ink3)}
+.tr .ip b{display:block;font-size:12px;color:var(--ink2);font-weight:700}
+.tr .st{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800}
+.tr .st.ok{color:var(--gr)}
+.tr .st.no{color:var(--red)}
+.tr .st .sq{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.tr.off{background:#FCFCFD}
+.tr.off .id,.tr.off .cpu b,.tr.off .pr b{color:var(--ink4)}
+.tr.off:hover{background:#FCFCFD}
+.btn-off{background:var(--line2);color:var(--ink4);cursor:not-allowed}
+.tr .pr{text-align:right}
+.tr .pr s{display:block;font-size:11.5px;color:var(--ink4)}
+.tr .pr b{font-size:16px;font-weight:800;letter-spacing:-.04em}
+.tr .pr span{font-size:11px;color:var(--ink4)}
+.tr .btn{width:100%;height:36px;font-size:13px}
+.pgwrap{margin-top:24px;text-align:center}
+.pager{display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.pager button{min-width:38px;height:38px;padding:0 11px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:var(--ink2);transition:.13s}
+.pager button:hover:not(:disabled):not(.on){border-color:var(--blue);color:var(--blue)}
+.pager button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.pager button:disabled{opacity:.3;cursor:not-allowed}
+.pginfo{margin-top:10px;font-size:13px;color:var(--ink4)}
+.empty{padding:64px 20px;text-align:center;color:var(--ink4)}
+.empty b{display:block;font-size:17px;color:var(--ink2);margin-bottom:6px;font-weight:700}
+
+/* 안내 */
+.info{margin-top:24px;border:1px solid var(--line);border-radius:12px;padding:20px 22px;
+  background:var(--bg2);display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.info b{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:800;margin-bottom:5px}
+.info p{font-size:13px;color:var(--ink3);line-height:1.6}
+
+/* 하단 선택바 */
+.stk{position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(11,14,20,.97);
+  backdrop-filter:blur(12px);color:#fff;transform:translateY(115%);transition:.28s}
+.stk.on{transform:none}
+.stk .shell{display:flex;align-items:center;gap:18px;height:84px}
+.stk .l b{font-size:16.5px;font-weight:800}
+.stk .l span{display:block;font-size:12.5px;color:#A4ACB6}
+.stk .tm{display:flex;gap:5px}
+.stk .tm button{border:1px solid rgba(255,255,255,.22);border-radius:7px;padding:7px 12px;
+  font-size:13px;font-weight:700;color:rgba(255,255,255,.7)}
+.stk .tm button.on{background:#fff;color:var(--ink);border-color:#fff}
+.stk .p{margin-left:auto;text-align:right}
+.stk .p b{font-size:23px;font-weight:800;letter-spacing:-.045em}
+.stk .p span{display:block;font-size:11.5px;color:#A4ACB6}
+.stk .btn{height:52px;padding:0 26px;font-size:15.5px;background:#fff;color:var(--blue)}
+.stk .btn:hover{background:#EEF1FE}
+
+@media(max-width:1180px){
+  .tr{grid-template-columns:1fr 1fr;gap:8px}
+  .tr.h{display:none}
+  .tr .cpu,.tr .btn{grid-column:1/-1}
+  .info{grid-template-columns:1fr 1fr}
+}
+@media(max-width:760px){
+  .gnb{display:none}.fr{grid-template-columns:1fr}
+  .fr>.k{border-right:0;border-bottom:1px solid var(--line2)}
+  .info{grid-template-columns:1fr}
+  .stk .tm{display:none}.stk .shell{height:72px}
+}
+</style>
+</head>
+<body>
+
+<div class="tb">빠른물량 소진중 <b>10대 이상은 별도문의!</b></div>
+
+<header class="hd"><div class="shell">
+  <a class="lg" href="index.html">
+    <img src="img/logo.png" alt="" width="36" height="36"><b>한국 가상컴</b>
+  </a>
+  <nav class="gnb">
+    <a href="index.html#about">회사소개</a>
+    <a href="index.html#price">요금제</a>
+    <a href="#" class="on">실시간 PC</a>
+    <a href="index.html#price">공식스토어</a>
+    <a href="index.html#qa">Q&amp;A안내</a>
+  </nav>
+  <a class="btn btn-o btn-sm" href="#">로그인</a>
+</div></header>
+
+<div class="ph"><div class="shell">
+  <h1>지금 켜져 있는 PC를 직접 고르세요</h1>
+  <p>아래 사양은 각 PC에 설치된 프로그램이 <b>직접 읽어 올린 실제 값</b>입니다. 사람이 입력한 표가 아닙니다.
+     신호가 끊긴 PC는 목록에서 자동으로 빠지므로, 여기 보이는 PC는 전부 지금 바로 임대하실 수 있습니다.</p>
+  <div class="bar">
+    <span class="pill hot"><span class="dot"></span> 지금 <b class="num" id="tot">—</b>대 임대 가능</span>
+    <span class="pill">🖥️ 보유 <b class="num" id="totall">—</b>대 전량 표시</span>
+    <span class="pill">🔄 5초마다 자동 갱신</span>
+    <span class="pill">⚡ 결제 확인 즉시 개통</span>
+    <span class="pill">🌐 전 PC 개별 공인IP</span>
+    <span class="pill">💳 설치비 · 보증금 없음</span>
+  </div>
+</div></div>
+
+<div class="shell">
+  <div class="ft" id="filters"></div>
+
+  <div class="tool">
+    <div class="c">총 <b class="num" id="cnt">—</b>대</div>
+    <div class="s">
+      <button data-s="p" class="on">요금 낮은순</button>
+      <button data-s="h">사양 높은순</button>
+      <button data-s="u">임대 가능 먼저</button>
+    </div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="tbl" id="list"></div>
+  <div class="pgwrap">
+    <div class="pager" id="pager"></div>
+    <div class="pginfo" id="pginfo"></div>
+  </div>
+
+  <div class="info">
+    <div><b>🔄 실시간 반영</b><p>각 PC가 서버로 신호를 계속 보냅니다. 끊기면 즉시 목록에서 빠지므로
+      품절된 PC를 결제하실 일이 없습니다.</p></div>
+    <div><b>⚡ 자동 개통</b><p>고르신 PC가 그대로 배정됩니다. 결제가 확인되면 접속 정보가 화면에
+      바로 표시되고 문자로도 발송됩니다.</p></div>
+    <div><b>🌐 개별 공인IP</b><p>PC마다 IP가 따로 부여됩니다. 여러 대를 쓰셔도 IP가 겹치지 않습니다.</p></div>
+    <div><b>🛟 6년 무중단</b><p>가동 시작 이후 6년 동안 단 한번도 멈춘 적이 없습니다.
+      365일 상주 인력이 관리합니다.</p></div>
+  </div>
+</div>
+
+<div class="stk" id="stk"><div class="shell">
+  <div class="l"><b id="sn">—</b><span id="ss">—</span></div>
+  <div class="tm" id="tm"></div>
+  <div class="p"><b class="num" id="sp">—</b><span>부가세 별도 · 설치비 없음</span></div>
+  <a class="btn" href="product.html" id="sgo">이 PC 바로 임대하기 →</a>
+</div></div>
+
+<script>
+/* ═══ 실제 판매 상품 7종 ═══ */
+const G=[
+ {g:1,n:'인텔I5 4690',cpu:'Intel Core i5-4690',core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
+ {g:2,n:'라이젠 2200',cpu:'AMD Ryzen 3 2200G', core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
+ {g:3,n:'라이젠 3200',cpu:'AMD Ryzen 3 3200G', core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX660 / VEGA 내장',gk:'NVIDIA',list:90000, p:40000},
+ {g:4,n:'라이젠 5600',cpu:'AMD Ryzen 5 5600G', core:'6코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가가능)',gk:'내장',list:120000,p:55000},
+ {g:5,n:'라이젠 1700',cpu:'AMD Ryzen 7 1700',  core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX1050TI / 1060 6GB',gk:'NVIDIA',list:140000,p:60000},
+ {g:6,n:'라이젠 5700',cpu:'AMD Ryzen 7 5700G', core:'8코어',ct:8,ram:32,ssd:240,gpu:'내장그래픽 (추가가능)',gk:'내장',list:140000,p:60000},
+ {g:7,n:'라이젠 3700X',cpu:'AMD Ryzen 7 3700X',core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX1050TI / 1060 6GB',gk:'NVIDIA',list:160000,p:65000},
+];
+const USE=[
+ ['game','고사양게임',[5,6,7]],['mobile','모바일게임 다중구동',[4,5,6,7]],
+ ['work','개인 재택 업무',[1,2,3]],['mkt','각종 마케팅 프로그램',[2,3,4,6]],
+ ['office','가상공유오피스',[1,2,3,4]],['store','N스토어 운영',[2,3,4]],
+ ['webtoon','웹툰 · 콘텐츠',[5,6,7]],['dev','개발 · 연구',[4,5,6,7]],
+];
+const RENT=[['4','4만원대',[40000]],['5','5만원대',[55000]],['6','6만원대',[60000,65000]]];
+const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
+const AL=['한국','경기','서울','인천','파주'];
+
+/* 보유 PC 전량을 등록한다. 임대중인 PC도 목록에 남는다 —
+   관리자 화면과 같은 대장을 보고 있어야 재고·장애가 어긋나지 않는다. */
+let seed=20260811; const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
+const CNT={1:168,2:144,3:196,4:132,5:156,6:118,7:86};   // 합계 1,000대
+const PCS=[]; let sn=1000;
+for(const g of G) for(let i=0;i<CNT[g.g];i++){
+  const r=rnd();
+  const st = r<.70 ? 'busy' : r<.98 ? 'free' : 'fix';   // 임대중 70% · 임대가능 28% · 점검 2%
+  PCS.push({
+    id:`${AL[Math.floor(rnd()*AL.length)]}${++sn}`,
+    g:g.g, st, up: st==='fix'?0:Math.floor(rnd()*1900)+21,
+    ssd: g.g===5 ? (rnd()<.5?240:480) : g.ssd,
+    room: 1+Math.floor(rnd()*3),
+    left: st==='busy' ? 1+Math.floor(rnd()*30) : 0,
+    ip:`${[59,121,175,211,220][Math.floor(rnd()*5)]}.${10+Math.floor(rnd()*80)}.*.**`,
+  });
+}
+const ST={free:['임대 가능','#0FA45E'],busy:['임대중','#9AA2AE'],fix:['점검중','#E2233C']};
+const gOf=x=>G.find(y=>y.g===x.g);
+const w=n=>n.toLocaleString('ko-KR');
+const $=i=>document.getElementById(i);
+
+let F={st:new Set(['free']),g:new Set(),core:new Set(),ram:new Set(),ssd:new Set(),gpu:new Set(),use:new Set(),rent:new Set(),room:new Set()};
+let sort='p',page=1,sel=null,term=30;
+const PER=20;
+
+function pass(x,F2){
+  const f=F2||F, g=gOf(x);
+  if(f.st.size   && !f.st.has(x.st))return false;
+  if(f.g.size    && !f.g.has(String(x.g)))return false;
+  if(f.core.size && !f.core.has(g.core))return false;
+  if(f.ram.size  && !f.ram.has(String(g.ram)))return false;
+  if(f.ssd.size  && !f.ssd.has(String(x.ssd)))return false;
+  if(f.gpu.size  && !f.gpu.has(g.gk))return false;
+  if(f.room.size && !f.room.has(String(x.room)))return false;
+  if(f.rent.size && ![...f.rent].some(k=>RENT.find(r=>r[0]===k)[2].includes(g.p)))return false;
+  if(f.use.size  && ![...f.use].some(k=>USE.find(u=>u[0]===k)[2].includes(x.g)))return false;
+  return true;
+}
+const count=(key,val)=>{
+  const F2={}; for(const k in F) F2[k]=new Set(F[k]);
+  F2[key]=new Set([val]);
+  return PCS.filter(x=>pass(x,F2)).length;
+};
+function row(label,key,items,acc){
+  return `<div class="fr${acc?' acc':''}"><div class="k">${label}</div><div class="v">`+
+    items.map(([v,l])=>{const n=count(key,v);
+      return `<button class="fv ${F[key].has(v)?'on':''} ${n?'':'zero'}" data-k="${key}" data-v="${v}"
+        ${n?'':'disabled'}>${l}<b class="num">${n}</b></button>`}).join('')+`</div></div>`;
+}
+function filters(){
+  $('filters').innerHTML=
+    row('임대 상태','st',[['free','임대 가능'],['busy','임대중'],['fix','점검중']],1)+
+    row('추천 용도','use',USE.map(u=>[u[0],u[1]]))+
+    row('월 렌탈료','rent',RENT.map(r=>[r[0],r[1]]))+
+    row('사양','g',G.map(g=>[String(g.g),g.n]))+
+    row('CPU 코어','core',[...new Set(G.map(g=>g.core))].map(c=>[c,c]))+
+    row('메모리','ram',[['8','8GB'],['32','32GB']])+
+    row('SSD','ssd',[['120','120GB'],['240','240GB'],['480','480GB']])+
+    row('그래픽','gpu',[['NVIDIA','NVIDIA'],['내장','내장그래픽']])+
+    row('서버실','room',[['1','제1서버실'],['2','제2서버실'],['3','제3서버실']]);
+}
+function chips(){
+  const L=[];
+  const lab={st:v=>ST[v][0], use:v=>USE.find(u=>u[0]===v)[1], rent:v=>RENT.find(r=>r[0]===v)[1],
+    g:v=>G.find(g=>String(g.g)===v).n, core:v=>v, ram:v=>v+'GB', ssd:v=>v+'GB',
+    gpu:v=>v, room:v=>'제'+v+'서버실'};
+  for(const k in F) F[k].forEach(v=>L.push([k,v,lab[k](v)]));
+  $('chips').innerHTML=L.map(([k,v,l])=>
+    `<span class="chip">${l}<button data-x="${k}|${v}">×</button></span>`).join('')+
+    (L.length?`<span class="chip" style="background:var(--bg2);color:var(--ink3)"
+      ><button data-x="all|all" style="opacity:1;font-size:12.5px;font-weight:700">전체 해제</button></span>`:'');
+}
+function pager(total){
+  const last=Math.max(1,Math.ceil(total/PER));
+  if(page>last)page=last;
+  const win=5, from=Math.max(1,Math.min(page-2,last-win+1)), to=Math.min(last,from+win-1);
+  let h=`<button data-pg="1" ${page===1?'disabled':''}>«</button>
+         <button data-pg="${page-1}" ${page===1?'disabled':''}>‹</button>`;
+  for(let i=from;i<=to;i++) h+=`<button data-pg="${i}" class="${i===page?'on':''}">${i}</button>`;
+  h+=`<button data-pg="${page+1}" ${page===last?'disabled':''}>›</button>
+      <button data-pg="${last}" ${page===last?'disabled':''}>»</button>`;
+  $('pager').innerHTML=h;
+  $('pginfo').textContent=`${page} / ${last} 페이지`;
+  return last;
+}
+function draw(){
+  let L=PCS.filter(x=>pass(x));
+  L.sort((a,b)=> sort==='p'?gOf(a).p-gOf(b).p : sort==='h'?gOf(b).p-gOf(a).p
+        : (a.st==='free'?0:1)-(b.st==='free'?0:1));
+  $('cnt').textContent=L.length;
+  $('tot').textContent=PCS.filter(x=>x.st==='free').length;
+  $('totall').textContent=PCS.length;
+  pager(L.length);
+  const V=L.slice((page-1)*PER, page*PER);
+  $('list').innerHTML = !V.length
+   ? `<div class="empty"><b>조건에 맞는 PC가 없습니다</b>필터를 조금 풀어 보세요.</div>`
+   : `<div class="tr h"><div>관리번호</div><div>CPU · 사양</div><div>메모리</div><div>저장장치</div>
+      <div>그래픽</div><div>임대 상태</div><div style="text-align:right">30일 요금</div><div></div></div>`
+   + V.map(x=>{const g=gOf(x), ok=x.st==='free';
+     return `<div class="tr ${sel===x.id?'sel':''} ${ok?'':'off'}" data-id="${x.id}" data-ok="${ok?1:0}">
+       <div class="id">${x.id}<span>제${x.room}서버실</span></div>
+       <div class="cpu"><b>${g.cpu}</b><span>${g.core} · Windows 10 Pro · 공인IP ${x.ip}</span></div>
+       <div class="num">${g.ram}GB</div>
+       <div class="num">SSD ${x.ssd}GB</div>
+       <div style="font-size:12.5px;color:var(--ink2)">${g.gpu}</div>
+       <div class="st ${ok?'ok':'no'}">${ok?'<span class="dot"></span>임대 가능'
+          : x.st==='fix' ? '<span class="sq"></span>점검중' : `<span class="sq"></span>임대 불가`}</div>
+       <div class="pr"><s class="num">${w(g.list)}원</s><b class="num">${w(g.p)}원</b><span>/30일</span></div>
+       <div>${ok
+          ? `<button class="btn ${sel===x.id?'btn-b':'btn-o'}">${sel===x.id?'선택됨':'선택'}</button>`
+          : `<button class="btn btn-off" disabled>불가</button>`}</div>
+     </div>`}).join('');
+}
+function stick(){
+  const x=PCS.find(y=>y.id===sel);
+  if(!x){$('stk').classList.remove('on');return}
+  const g=gOf(x),m=TM.find(t=>t.d===term);
+  const base=Math.round(g.p*term/30), tot=base-Math.round(base*m.o/100);
+  $('sn').textContent=`${g.n} ${g.core} · ${x.id}`;
+  $('ss').textContent=`${g.cpu} · 램 ${g.ram}GB · SSD ${x.ssd}GB · ${g.gpu} · 개별 공인IP`;
+  $('tm').innerHTML=TM.map(t=>`<button data-t="${t.d}" class="${term===t.d?'on':''}">${t.n}${t.o?` −${t.o}%`:''}</button>`).join('');
+  $('sp').textContent=w(tot)+'원';
+  $('stk').classList.add('on');
+}
+document.addEventListener('click',e=>{
+  const f=e.target.closest('.fv[data-k]');
+  if(f){const k=f.dataset.k,v=f.dataset.v;
+    F[k].has(v)?F[k].delete(v):F[k].add(v); page=1; filters();chips();draw(); return}
+  const x=e.target.closest('[data-x]');
+  if(x){const[k,v]=x.dataset.x.split('|');
+    if(k==='all') for(const q in F)F[q].clear(); else F[k].delete(v);
+    page=1; filters();chips();draw(); return}
+  const r=e.target.closest('.tr[data-id]');
+  if(r){ if(r.dataset.ok!=='1')return;
+    sel=(sel===r.dataset.id?null:r.dataset.id);draw();stick();return}
+  const s=e.target.closest('.s button');
+  if(s){sort=s.dataset.s;document.querySelectorAll('.s button').forEach(b=>b.classList.remove('on'));
+    s.classList.add('on');page=1;draw();return}
+  const t=e.target.closest('[data-t]'); if(t){term=+t.dataset.t;stick();return}
+  const pg=e.target.closest('[data-pg]');
+  if(pg&&!pg.disabled){page=+pg.dataset.pg;draw();
+    document.querySelector('.tool').scrollIntoView({behavior:'smooth',block:'start'})}
+});
+/* 실시간 반영 — 임대 종료로 풀리거나 새로 임대되는 흐름 */
+setInterval(()=>{
+  for(let n=0;n<3;n++){
+    const x=PCS[Math.floor(Math.random()*PCS.length)];
+    if(x.st==='fix')continue;
+    x.st = Math.random()<.5 ? 'free' : 'busy';
+  }
+  filters();draw();
+},5000);
+filters();chips();draw();
+</script>
+</body>
+</html>

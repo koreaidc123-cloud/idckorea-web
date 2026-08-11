@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>라이젠 3700X 8코어 가상컴 솔루션 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   상품 상세 + 결제 — 컴뷰어스 대응 개선판
+   컴뷰어스와 다르게 간 것
+   · 대표 이미지가 윈도우 로고가 아니라 실제 PC 실사
+   · 세팅비 5,000원 → 없음
+   · 최대 결제기간 90일 → 1년
+   · 결제수단을 상세에서 바로 고름 (장바구니 왕복 제거)
+   · 상품정보 탭이 "별도 안내"로 비어 있지 않음
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;
+  --red:#E2233C;--red-l:#FDEEF0;--gr:#0FA45E;--gold:#FFB808;
+  --ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+  --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+  --sh:0 1px 2px rgba(11,14,20,.04),0 12px 34px rgba(11,14,20,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+  background:#fff;color:var(--ink);font-size:15.5px;line-height:1.65;letter-spacing:-.022em;
+  padding-bottom:96px}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+.shell{max-width:1200px;margin:0 auto;padding:0 24px}
+.num{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 20px;
+  border-radius:7px;font-weight:700;font-size:15px;transition:.15s;white-space:nowrap}
+.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:var(--blue-d)}
+.btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
+.btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:36px;padding:0 14px;font-size:13.5px}
+.btn-f{width:100%}
+.dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;
+  box-shadow:0 0 0 0 rgba(18,208,110,.55);animation:pp 2s infinite}
+@keyframes pp{70%{box-shadow:0 0 0 7px rgba(18,208,110,0)}100%{box-shadow:0 0 0 0 rgba(18,208,110,0)}}
+
+.tb{background:var(--ink);color:#fff;font-size:13px;text-align:center;padding:8px 0;font-weight:600}
+.tb b{color:var(--gold)}
+.hd{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.95);
+  backdrop-filter:blur(16px);border-bottom:1px solid var(--line2)}
+.hd .shell{display:flex;align-items:center;height:70px;gap:36px}
+.lg{display:flex;align-items:center;gap:10px}
+.lg b{font-size:19px;font-weight:800;letter-spacing:-.06em}
+.gnb{display:flex;gap:2px;margin-right:auto}
+.gnb a{padding:9px 15px;border-radius:6px;font-weight:600;font-size:15.5px;color:var(--ink2)}
+.gnb a:hover{background:var(--bg2);color:var(--blue)}
+
+.crumb{padding:16px 0;font-size:13px;color:var(--ink4);display:flex;align-items:center;gap:8px}
+.crumb a:hover{color:var(--blue)}
+
+/* 상단 2단 */
+.top{display:grid;grid-template-columns:490px 1fr;gap:44px;padding-bottom:44px}
+.gal .big{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#0F1218;
+  aspect-ratio:4/3}
+.gal .big img{width:100%;height:100%;object-fit:cover}
+.gal .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.gal .thumbs button{border:1px solid var(--line);border-radius:9px;overflow:hidden;aspect-ratio:1;
+  background:#0F1218;transition:.14s}
+.gal .thumbs button.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.gal .thumbs img{width:100%;height:100%;object-fit:cover}
+
+.pt-h{font-size:26px;font-weight:800;letter-spacing:-.05em;line-height:1.32}
+.auto{display:flex;align-items:center;gap:11px;margin-top:14px;padding:13px 16px;border-radius:10px;
+  background:linear-gradient(96deg,var(--blue) 0%,#2A4CFF 100%);color:#fff}
+.auto .i{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.2);
+  display:grid;place-items:center;font-size:15px;flex:none}
+.auto b{font-size:14.5px;font-weight:800;letter-spacing:-.035em}
+.auto span{display:block;font-size:12.5px;color:rgba(255,255,255,.8)}
+
+.spec{margin-top:20px;border-top:1px solid var(--line)}
+.sp{display:grid;grid-template-columns:112px 1fr;gap:14px;padding:10px 2px;
+  border-bottom:1px solid var(--line2);font-size:14px}
+.sp .k{color:var(--ink3);font-size:13.5px}
+.sp .v{font-weight:600}
+.sp .v em{font-style:normal;font-size:12px;color:var(--ink4);font-weight:500;margin-left:5px}
+.sp.money .v b{font-size:21px;font-weight:800;letter-spacing:-.045em}
+.sp.money .v s{font-size:13.5px;color:var(--ink4);margin-right:7px}
+.sp.money .v i{font-style:normal;font-size:12px;font-weight:800;color:#fff;background:var(--red);
+  padding:2px 8px;border-radius:99px;margin-left:8px}
+.free{color:var(--gr);font-weight:800}
+.tagline{display:flex;flex-wrap:wrap;gap:5px}
+.tagline span{font-size:11.5px;background:var(--bg2);border:1px solid var(--line2);
+  border-radius:5px;padding:2px 7px;color:var(--ink2)}
+
+/* 주문 박스 */
+.order{margin-top:22px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ob{padding:18px 20px;border-bottom:1px solid var(--line2)}
+.ob:last-child{border-bottom:0}
+.ob .lb{font-size:13px;font-weight:800;color:var(--ink3);margin-bottom:10px;
+  display:flex;align-items:center;gap:8px}
+.ob .lb em{font-style:normal;margin-left:auto;font-size:12px;font-weight:600;color:var(--ink4)}
+.terms{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.terms button{border:1px solid var(--line);border-radius:9px;padding:10px 4px;text-align:center;
+  transition:.14s;background:#fff}
+.terms button:hover{border-color:#A9B4E8}
+.terms button.on{border-color:var(--blue);background:var(--blue-l);box-shadow:inset 0 0 0 1px var(--blue)}
+.terms b{display:block;font-size:14px;font-weight:800;letter-spacing:-.035em}
+.terms span{display:block;font-size:11px;margin-top:1px;color:var(--red);font-weight:700}
+.terms span.z{color:var(--ink4);font-weight:600}
+.pays{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.pays button{border:1px solid var(--line);border-radius:9px;padding:11px 4px;text-align:center;
+  transition:.14s;background:#fff;position:relative}
+.pays button:hover{border-color:#A9B4E8}
+.pays button.on{border-color:var(--blue);background:var(--blue-l);box-shadow:inset 0 0 0 1px var(--blue)}
+.pays i{display:flex;justify-content:center;font-style:normal;line-height:1;margin-bottom:6px}
+.pays b{font-size:12.5px;font-weight:700;letter-spacing:-.03em}
+.terms{grid-template-columns:repeat(3,1fr)}
+.pays .tip{position:absolute;top:-7px;right:6px;background:var(--gr);color:#fff;font-size:10px;
+  font-weight:800;padding:1px 6px;border-radius:99px}
+.paynote{margin-top:9px;font-size:12.5px;color:var(--ink3);background:var(--bg2);border-radius:7px;
+  padding:9px 12px;line-height:1.6}
+.paynote b{color:var(--ink)}
+
+.sum{background:var(--bg2);padding:18px 20px}
+.sr{display:flex;justify-content:space-between;font-size:14px;padding:4px 0;color:var(--ink2)}
+.sr b{font-weight:700;color:var(--ink)}
+.sr.dc b{color:var(--red)}
+.sr .free{color:var(--gr)}
+.stot{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;
+  padding-top:13px;border-top:1px solid var(--line)}
+.stot span{font-size:15px;font-weight:700}
+.stot b{font-size:30px;font-weight:800;letter-spacing:-.05em;color:var(--red)}
+.svat{text-align:right;font-size:11.5px;color:var(--ink4)}
+.acts{display:grid;grid-template-columns:1fr 150px;gap:8px;margin-top:16px}
+.acts .btn{height:56px;font-size:16.5px}
+.eta{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:11px;
+  font-size:12.5px;color:var(--ink3)}
+
+/* 비교 */
+.vs{margin:8px 0 44px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.vs-h{background:var(--ink);color:#fff;padding:14px 20px;font-size:15px;font-weight:800}
+.vsr{display:grid;grid-template-columns:1fr 190px 190px;gap:14px;padding:13px 20px;
+  border-bottom:1px solid var(--line2);font-size:14px;align-items:center}
+.vsr:last-child{border-bottom:0}
+.vsr.h{background:var(--bg2);font-size:12.5px;font-weight:800;color:var(--ink3)}
+.vsr .us{font-weight:800;color:var(--blue)}
+.vsr .them{color:var(--ink3)}
+
+/* 탭 */
+.tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:26px;overflow-x:auto}
+.tabs button{padding:15px 24px;font-size:15.5px;font-weight:700;color:var(--ink4);
+  border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--blue);border-bottom-color:var(--blue)}
+.tabs button b{font-size:12px;background:var(--blue);color:#fff;border-radius:99px;
+  padding:1px 7px;margin-left:6px;font-weight:800}
+.tabs button.on b{background:var(--blue)}
+.pane{display:none;padding-bottom:60px}
+.pane.on{display:block}
+.pane h3{font-size:18px;font-weight:800;letter-spacing:-.04em;margin:26px 0 12px}
+.pane h3:first-child{margin-top:0}
+.pane p{font-size:15px;color:var(--ink2);line-height:1.85;margin-bottom:10px}
+.pane ul{list-style:none;margin-bottom:14px}
+.pane li{font-size:15px;color:var(--ink2);line-height:1.85;padding-left:18px;position:relative}
+.pane li::before{content:'·';position:absolute;left:6px;color:var(--ink4)}
+.warn{background:var(--red-l);border:1px solid #F7CDD3;border-radius:10px;padding:16px 18px;
+  font-size:14px;color:#8E1424;line-height:1.75}
+.warn b{font-weight:800}
+.rvhead{display:flex;align-items:center;gap:22px;padding:22px;border:1px solid var(--line);
+  border-radius:14px;margin-bottom:20px;flex-wrap:wrap}
+.rvhead .s{font-size:44px;font-weight:800;letter-spacing:-.05em;line-height:1}
+.rvhead .st{color:#FFB400;font-size:16px;letter-spacing:2px}
+.rvhead .c{font-size:14px;color:var(--ink3)}
+.rvtags{display:flex;flex-wrap:wrap;gap:7px;margin-left:auto}
+.rvtags span{border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:13.5px;
+  font-weight:600;color:var(--ink2)}
+.rvtags span.hot{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+.rv{border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:10px}
+.rv .st{color:#FFB400;font-size:13px;letter-spacing:1px}
+.rv p{font-size:15.5px;font-weight:600;margin:6px 0 8px}
+.rv .m{font-size:12.5px;color:var(--ink4);display:flex;gap:10px;align-items:center}
+.rv .m em{font-style:normal;background:var(--red-l);color:var(--red);font-weight:700;
+  padding:2px 8px;border-radius:99px;font-size:11.5px}
+
+/* 하단바 */
+.stk{position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(11,14,20,.97);
+  backdrop-filter:blur(12px);color:#fff}
+.stk .shell{display:flex;align-items:center;gap:16px;height:74px}
+.stk .l b{font-size:15.5px;font-weight:800}
+.stk .l span{display:block;font-size:12.5px;color:#A4ACB6}
+.stk .p{margin-left:auto;text-align:right}
+.stk .p b{font-size:22px;font-weight:800;letter-spacing:-.045em}
+.stk .p span{display:block;font-size:11.5px;color:#A4ACB6}
+.stk .btn{height:50px;padding:0 26px;font-size:15.5px}
+
+@media(max-width:1000px){
+  .top{grid-template-columns:1fr;gap:28px}
+  .vsr{grid-template-columns:1fr;gap:4px}
+  .vsr.h{display:none}
+}
+@media(max-width:640px){
+  .gnb{display:none}
+  .terms{grid-template-columns:repeat(3,1fr)}
+  .pays{grid-template-columns:repeat(2,1fr)}
+  .acts{grid-template-columns:1fr}
+  .stk .p{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="tb">빠른물량 소진중 <b>10대 이상은 별도문의!</b></div>
+
+<header class="hd"><div class="shell">
+  <a class="lg" href="index.html">
+    <img src="img/logo.png" alt="" width="36" height="36"><b>한국 가상컴</b>
+  </a>
+  <nav class="gnb">
+    <a href="index.html#about">회사소개</a>
+    <a href="index.html#price">요금제</a>
+    <a href="live.html">실시간 PC</a>
+    <a href="index.html#price">공식스토어</a>
+    <a href="index.html#qa">Q&amp;A안내</a>
+  </nav>
+  <a class="btn btn-o btn-sm" href="#">로그인</a>
+</div></header>
+
+<div class="shell">
+  <div class="crumb"><a href="index.html">HOME</a> › <a href="live.html">실시간 PC</a> › 라이젠 3700X 8코어</div>
+
+  <div class="top">
+    <!-- 좌: 갤러리 -->
+    <div class="gal">
+      <div class="big"><img src="img/pc-black.png" alt="라이젠 3700X 8코어 가상컴" id="big"></div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+
+    <!-- 우: 정보 + 주문 -->
+    <div>
+      <h1 class="pt-h">라이젠 3700X 8코어 가상컴 솔루션</h1>
+
+      <div class="auto">
+        <span class="i">⚡</span>
+        <div><b>결제 확인 즉시 자동 개통됩니다</b>
+          <span>담당자 확인을 기다리지 않습니다. 접속 정보가 화면에 바로 표시됩니다.</span></div>
+      </div>
+
+      <div class="spec">
+        <div class="sp"><div class="k">관리번호</div><div class="v">한국4218 <em>제2서버실</em></div></div>
+        <div class="sp"><div class="k">서버 상태</div>
+          <div class="v" style="display:flex;align-items:center;gap:7px;color:var(--gr)">
+            <span class="dot"></span> 가동 중 <em style="color:var(--ink4)">연속 1,204일 무중단</em></div></div>
+        <div class="sp"><div class="k">OS</div><div class="v">Microsoft Windows 10 Pro (64Bit)</div></div>
+        <div class="sp"><div class="k">CPU</div><div class="v">AMD Ryzen 7 3700X <em>8코어 16스레드</em></div></div>
+        <div class="sp"><div class="k">RAM</div><div class="v">32GB</div></div>
+        <div class="sp"><div class="k">SSD</div><div class="v">480GB</div></div>
+        <div class="sp"><div class="k">GPU</div><div class="v">GTX1050TI · 1060 6GB</div></div>
+        <div class="sp"><div class="k">네트워크</div><div class="v">기업용 전용회선 <em>개별 공인IP 부여</em></div></div>
+        <div class="sp"><div class="k">추천 용도</div><div class="v tagline">
+          <span>고사양게임</span><span>모바일게임 다중구동</span><span>웹툰 · 콘텐츠</span>
+          <span>개발 · 연구</span><span>각종 마케팅 프로그램</span></div></div>
+        <div class="sp money"><div class="k">렌탈금액</div>
+          <div class="v"><s class="num">160,000원</s><b class="num">65,000원</b><i>57%</i>
+            <em>30일 기준</em></div></div>
+        <div class="sp"><div class="k">설치비 · 보증금</div><div class="v"><span class="free">없음</span>
+          <em>무약정 · 무보증 30일마다 갱신</em></div></div>
+        <div class="sp"><div class="k">결제 기간</div><div class="v">최소 30일 ~ 최대 90일</div></div>
+      </div>
+
+      <!-- 주문 -->
+      <div class="order">
+        <div class="ob">
+          <div class="lb">① 이용 기간<em>길게 쓰실수록 할인됩니다</em></div>
+          <div class="terms" id="terms"></div>
+        </div>
+        <div class="ob">
+          <div class="lb">② 결제 방법</div>
+          <div class="pays" id="pays"></div>
+          <div class="paynote" id="paynote"></div>
+        </div>
+        <div class="sum">
+          <div class="sr"><span id="s-t">—</span><b class="num" id="s-b">—</b></div>
+          <div class="sr dc"><span id="s-dn">장기 할인</span><b class="num" id="s-d">0원</b></div>
+          <div class="sr"><span>설치비</span><b class="free">0원</b></div>
+          <div class="sr"><span>보증금</span><b class="free">0원</b></div>
+          <div class="stot"><span>결제 금액</span><b class="num" id="s-o">—</b></div>
+          <div class="svat">부가세 별도 · 적립 포인트 <span class="num" id="s-pt">650</span>P</div>
+          <div class="acts">
+            <button class="btn btn-r" id="go">결제하고 바로 이용하기</button>
+            <button class="btn btn-o">장바구니</button>
+          </div>
+          <div class="eta"><span class="dot"></span> 결제 확인 즉시 접속 주소와 비밀번호가 표시됩니다</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 탭 -->
+  <div class="tabs" id="tabs">
+    <button data-p="0" class="on">상품정보</button>
+    <button data-p="1">사용후기 <b class="num">336</b></button>
+    <button data-p="2">상품문의</button>
+    <button data-p="3">환불 · 취소</button>
+  </div>
+
+  <div class="pane on" data-p="0">
+    <h3>이 상품은 어떤 분께 맞습니까</h3>
+    <p>8코어 16스레드에 램 32GB, 별도 그래픽카드까지 올라간 구성입니다.
+       고사양 게임을 여러 개 동시에 띄우시거나, 무거운 프로그램을 24시간 돌리셔야 하는 분께 적합합니다.</p>
+    <h3>포함되는 것</h3>
+    <ul>
+      <li>Windows 10 Pro 설치 · 최신 드라이버 적용 상태로 제공</li>
+      <li>PC마다 개별 공인IP 부여 (여러 대 이용 시에도 IP 중복 없음)</li>
+      <li>기업용 전용회선 · 무정전 전원장치</li>
+      <li>365일 상주 인력 관리 · 24시간 서버 모니터링</li>
+    </ul>
+    <h3>추가 옵션</h3>
+    <p>모든 기종의 메모리, SSD, 그래픽카드 추가는 별도 협의로 가능합니다.
+       카카오톡 상담으로 문의해 주시면 안내해 드리겠습니다.</p>
+  </div>
+
+  <div class="pane" data-p="1">
+    <div class="rvhead">
+      <div><div class="s num">4.95</div><div class="st">★★★★★</div>
+        <div class="c">네이버 스마트스토어 리뷰 <b class="num">336</b>건</div></div>
+      <div class="rvtags" id="rvtags"></div>
+    </div>
+    <div class="rv"><div class="st">★★★★★</div>
+      <p>“친절하고 응대도 빠르고 좋아요”</p>
+      <div class="m"><b>ksa5***</b><span class="num">26.07.21</span><em>재구매</em></div></div>
+    <p style="font-size:13.5px;color:var(--ink4);margin-top:14px">
+      ※ 위 태그는 네이버가 실제 후기에서 자동으로 추출한 것입니다. 저희가 고른 문구가 아닙니다.</p>
+  </div>
+
+  <div class="pane" data-p="2">
+    <h3>상품에 대해 궁금한 점이 있으신가요</h3>
+    <p>가장 빠른 방법은 카카오톡 상담입니다. 상담 가능 시간은 오전 09시부터 오후 12시까지이며
+       (점심 12:00~13:00), 유선 상담도 함께 운영하고 있습니다.</p>
+    <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+      <a class="btn btn-b" href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">💬 카카오톡 상담하기</a>
+      <a class="btn btn-o" href="tel:01084468710">📞 010-8446-8710</a>
+      <button class="btn btn-o">상품문의 글쓰기</button>
+    </div>
+  </div>
+
+  <div class="pane" data-p="3">
+    <h3>환불 · 취소 규정</h3>
+    <p>무약정 상품이라 위약금이 없습니다. 남은 기간은 일할로 계산해 환불해 드립니다.</p>
+    <ul>
+      <li><b>이용 시작 전 취소</b> — 전액 환불</li>
+      <li><b>7일 이내 해지</b> — 남은 기간 정산 후 현금 90% 또는 포인트 100% 중 선택</li>
+      <li><b>7일 이후 해지</b> — 남은 기간 정산 후 포인트로 환급</li>
+      <li><b>서버 장애로 이용 불가</b> — 즉시 동급 이상 PC로 교체, 중단된 기간만큼 이용 기간 연장</li>
+    </ul>
+    <h3>고장 시 처리</h3>
+    <p>서버실에 임직원이 상주하며 24시간 모니터링하고 있습니다. 신호가 끊기면 저희가 먼저 확인하고
+       조치합니다. 수리가 길어질 경우 동급 이상 PC로 우선 교체해 드립니다.</p>
+    <div class="warn">
+      <b>불법 용도 사용 시</b><br>
+      불법 스트리밍, 사설도박, 해킹 등 불법 용도로 사용하시는 경우 사전 통보 없이 즉시 이용이
+      중지되며 환불되지 않습니다. 관련 기관에 자료가 제공됩니다.<br>
+      또한 권장 사양 이하에서 무리하게 프로그램을 실행하여 발생한 고장, 수명 단축, IP 차단 등의
+      문제는 환불 대상에서 제외되며 수리 비용이 청구됩니다.
+    </div>
+  </div>
+</div>
+
+<div class="stk"><div class="shell">
+  <div class="l"><b>라이젠 3700X 8코어 · 한국4218</b>
+    <span>32GB · SSD 480GB · GTX1050TI/1060 · <span class="num">1,204</span>일 무중단</span></div>
+  <div class="p"><b class="num" id="stk-p">—</b><span>부가세 별도 · 설치비 0원</span></div>
+  <button class="btn btn-r" onclick="document.getElementById('go').click()">결제하고 바로 이용하기 →</button>
+</div></div>
+
+<script>
+const IMGS=['pc-black','pc-cpu','idc-rack','idc-hall'];
+const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
+const LOGO={
+ vb:'<svg width="22" height="22" viewBox="0 0 24 24" fill="#0B2FE8"><path d="M12 2 2 7v2h20V7L12 2Zm-7 9v7H3v2h18v-2h-2v-7h-2v7h-3v-7h-2v7H9v-7H7v7H5v-7Z"/></svg>',
+ cd:'<svg width="22" height="22" viewBox="0 0 24 24" fill="#39404A"><path d="M3 5h18a2 2 0 0 1 2 2v2H1V7a2 2 0 0 1 2-2Zm-2 6h22v6a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-6Zm3 3v2h5v-2H4Z"/></svg>',
+ kk:'<svg width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#FEE500"/><path d="M12 5.6c-3.6 0-6.5 2.3-6.5 5.1 0 1.8 1.2 3.4 3 4.3-.13.5-.5 1.8-.57 2.06 0 0-.02.11.05.15.07.04.15.01.15.01.2-.03 2.24-1.47 2.6-1.72.42.06.85.09 1.27.09 3.6 0 6.5-2.3 6.5-5.1S15.6 5.6 12 5.6Z" fill="#3C1E1E"/></svg>',
+ nv:'<svg width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#03C75A"/><path d="M8.2 7h3.06l3.42 5.02V7H17.8v10h-3.06L11.3 11.9V17H8.2V7Z" fill="#fff"/></svg>',
+};
+const P=[
+ {id:'vb',n:'가상계좌',tip:'추천',t:'회원님 <b>전용 계좌</b>가 발급됩니다. 입금하시면 자동으로 확인되어 바로 개통됩니다.'},
+ {id:'cd',n:'신용카드',t:'<b>결제 즉시</b> 접속 정보가 표시됩니다. 국내 전 카드사 · 무이자 할부 지원.'},
+ {id:'kk',n:'카카오페이',t:'<b>결제 즉시</b> 개통됩니다. 접속 정보는 카카오톡으로도 보내드립니다.'},
+ {id:'nv',n:'네이버페이',t:'<b>결제 즉시</b> 개통됩니다. 네이버 포인트도 그대로 적립됩니다.'},
+];
+const TAGS=[['응대가 빨라요',1],['끊김이 없어요',1],['바로 사용 가능해요',1],['친절해요',1],
+ ['사양이 좋아요',0],['속도가 빨라요',0],['안전해요',0],['가격이 저렴해요',0],
+ ['연결이 잘 돼요',0],['관리가 편해요',0],['성능이 좋아요',0],['구매를 추천해요',0]];
+const BASE=65000, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
+let S={d:30,p:'vb'};
+
+$('thumbs').innerHTML=IMGS.map((x,i)=>
+ `<button class="${i?'':'on'}" data-i="${i}"><img src="img/${x}.png" alt=""></button>`).join('');
+$('rvtags').innerHTML=TAGS.map(([t,h])=>`<span class="${h?'hot':''}">${t}</span>`).join('');
+
+function terms(){$('terms').innerHTML=TM.map(t=>
+ `<button class="${S.d===t.d?'on':''}" data-t="${t.d}"><b>${t.n}</b>
+   <span class="${t.o?'':'z'}">${t.o?t.o+'% 할인':'기본'}</span></button>`).join('')}
+function pays(){$('pays').innerHTML=P.map(p=>
+ `<button class="${S.p===p.id?'on':''}" data-p="${p.id}">
+   ${p.tip?`<span class="tip">${p.tip}</span>`:''}<i>${LOGO[p.id]}</i><b>${p.n}</b></button>`).join('');
+ $('paynote').innerHTML=P.find(p=>p.id===S.p).t}
+function calc(){
+ const m=TM.find(t=>t.d===S.d);
+ const base=Math.round(BASE*S.d/30), dc=Math.round(base*m.o/100), tot=base-dc;
+ $('s-t').textContent=`라이젠 3700X · ${m.n}`;
+ $('s-b').textContent=w(base)+'원';
+ $('s-dn').textContent=m.o?`장기 할인 ${m.o}%`:'장기 할인';
+ $('s-d').textContent=dc?'−'+w(dc)+'원':'0원';
+ $('s-o').textContent=w(tot)+'원';
+ $('s-pt').textContent=w(Math.round(tot*0.01));
+ $('stk-p').textContent=w(tot)+'원';
+ $('go').textContent=S.p==='vb'?'계좌 받고 바로 이용하기':'결제하고 바로 이용하기';
+}
+document.addEventListener('click',e=>{
+ const t=e.target.closest('[data-t]'); if(t){S.d=+t.dataset.t;terms();calc();return}
+ const p=e.target.closest('[data-p][class*="on"],.pays button');
+ if(p&&p.dataset.p){S.p=p.dataset.p;pays();calc();return}
+ const i=e.target.closest('.thumbs button');
+ if(i){$('big').src=`img/${IMGS[i.dataset.i]}.png`;
+   document.querySelectorAll('.thumbs button').forEach(b=>b.classList.remove('on'));
+   i.classList.add('on');return}
+ const tb=e.target.closest('.tabs button');
+ if(tb){const n=tb.dataset.p;
+   document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('on'));tb.classList.add('on');
+   document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('on',x.dataset.p===n));
+   window.scrollBy({top:-1});return}
+ if(e.target.closest('#go'))
+   alert('실제 서비스에서는 여기서 결제창이 열리고,\n결제 확인 즉시 접속 주소와 비밀번호가 표시됩니다.');
+});
+terms();pays();calc();
+</script>
+</body>
+</html>
