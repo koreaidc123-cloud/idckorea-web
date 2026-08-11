@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>로그인 · 회원가입 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   로그인 · 회원가입
+   · 카카오 우선 — 카카오 회원번호가 카톡 문의자와 이어져 고객 식별이 됨
+   · 구글은 전화번호를 안 주므로 가입 시 번호 입력 + 문자 인증 1회
+   · 비밀번호를 따로 만들지 않는다 (소셜만)
+   ═══════════════════════════════════════════════════════════════ */
+:root{--blue:#0B2FE8;--blue-d:#0722B4;--blue-l:#EEF1FE;--red:#E2233C;--red-l:#FDEEF0;
+ --gold:#FFB808;--gr:#0FA45E;--ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+ --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+ --sh:0 1px 2px rgba(11,14,20,.04),0 12px 34px rgba(11,14,20,.08);
+ --sh-l:0 2px 8px rgba(11,14,20,.06),0 30px 68px rgba(11,14,20,.14)}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+ background:#fff;color:var(--ink);font-size:16px;line-height:1.65;letter-spacing:-.022em}
+img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+input{font:inherit;color:inherit;letter-spacing:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+.wrap{min-height:100vh;display:grid;grid-template-columns:1.05fr 520px}
+/* 좌: 브랜드 */
+.side{position:relative;overflow:hidden;background:#050912;color:#fff;display:flex;
+ align-items:center;padding:64px}
+.side-bg{position:absolute;inset:0}
+.side-bg img{width:100%;height:100%;object-fit:cover}
+.side-bg::after{content:'';position:absolute;inset:0;background:
+ linear-gradient(100deg,rgba(3,5,12,.94) 0%,rgba(3,5,12,.82) 46%,rgba(3,5,12,.5) 100%)}
+.side-in{position:relative;z-index:2;max-width:460px}
+.side .lg{display:flex;align-items:center;gap:11px;margin-bottom:44px}
+.side .lg b{font-size:21px;font-weight:800;letter-spacing:-.06em}
+.side h1{font-size:38px;line-height:1.28;letter-spacing:-.055em;font-weight:800}
+.side h1 em{font-style:normal;color:var(--gold)}
+.side p{margin-top:20px;font-size:16.5px;line-height:1.8;color:rgba(255,255,255,.72)}
+.side ul{list-style:none;margin-top:36px;padding-top:30px;
+ border-top:1px solid rgba(255,255,255,.16);display:flex;flex-direction:column;gap:14px}
+.side li{display:flex;align-items:flex-start;gap:11px;font-size:15px;color:rgba(255,255,255,.8)}
+.side li i{font-style:normal;flex:none;width:22px;height:22px;border-radius:50%;
+ background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:11px;margin-top:2px}
+
+/* 우: 폼 */
+.panel{display:flex;align-items:center;justify-content:center;padding:48px 44px;
+ background:#fff;border-left:1px solid var(--line2)}
+.box{width:100%;max-width:400px}
+.tabs{display:flex;gap:4px;background:var(--bg2);border-radius:11px;padding:4px;margin-bottom:32px}
+.tabs button{flex:1;height:44px;border-radius:8px;font-size:15px;font-weight:700;color:var(--ink3);
+ transition:.14s}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:var(--sh)}
+.box h2{font-size:25px;font-weight:800;letter-spacing:-.05em;line-height:1.35}
+.box .sub{margin-top:9px;font-size:14.5px;color:var(--ink3);line-height:1.7}
+
+.socials{margin-top:28px;display:flex;flex-direction:column;gap:9px}
+.so{display:flex;align-items:center;justify-content:center;gap:10px;height:54px;border-radius:10px;
+ font-size:15.5px;font-weight:700;transition:.15s;position:relative}
+.so:hover{transform:translateY(-1px);box-shadow:var(--sh)}
+.so svg{flex:none}
+.so-kk{background:#FEE500;color:#191600}
+.so-kk:hover{background:#F5DC00}
+.so-gg{background:#fff;border:1px solid var(--line);color:#2C2C2C}
+.so-gg:hover{border-color:#C7CDD6}
+.so .rec{position:absolute;top:-9px;right:14px;background:var(--red);color:#fff;font-size:11px;
+ font-weight:800;padding:3px 9px;border-radius:99px;letter-spacing:-.03em}
+.hint{margin-top:14px;font-size:13px;color:var(--ink4);line-height:1.7;text-align:center}
+.hint b{color:var(--ink2)}
+
+/* 가입 추가 단계 */
+.step{margin-top:26px;display:none}
+.step.on{display:block}
+.fl{margin-bottom:16px}
+.fl label{display:block;font-size:13.5px;font-weight:700;color:var(--ink2);margin-bottom:7px}
+.fl label em{font-style:normal;color:var(--red);margin-left:3px}
+.fl .row{display:flex;gap:7px}
+.fl input{width:100%;height:50px;border:1px solid var(--line);border-radius:9px;padding:0 14px;
+ font-size:15px;transition:.14s;background:#fff}
+.fl input:focus{outline:0;border-color:var(--blue);box-shadow:0 0 0 3px rgba(11,47,232,.1)}
+.fl input::placeholder{color:var(--ink4)}
+.fl .row .btn-v{flex:none;width:110px;height:50px;border-radius:9px;background:var(--ink);color:#fff;
+ font-size:14px;font-weight:700;transition:.14s}
+.fl .row .btn-v:hover{background:#000}
+.fl .msg{margin-top:6px;font-size:12.5px;color:var(--ink4)}
+.fl .msg.ok{color:var(--gr);font-weight:700}
+
+.agree{margin-top:22px;border:1px solid var(--line);border-radius:11px;padding:16px 18px}
+.ag{display:flex;align-items:flex-start;gap:10px;padding:7px 0;cursor:pointer;font-size:14px}
+.ag input{appearance:none;width:19px;height:19px;border:1.5px solid #C7CDD6;border-radius:5px;
+ flex:none;position:relative;transition:.12s;margin-top:1px;cursor:pointer}
+.ag input:checked{background:var(--blue);border-color:var(--blue)}
+.ag input:checked::after{content:'';position:absolute;left:6px;top:2px;width:4px;height:10px;
+ border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
+.ag span{flex:1;color:var(--ink2);line-height:1.6}
+.ag span a{color:var(--ink3);text-decoration:underline}
+.ag.all{border-bottom:1px solid var(--line2);padding-bottom:13px;margin-bottom:6px;font-weight:800}
+.ag em{font-style:normal;color:var(--ink4);font-size:12.5px;margin-left:4px}
+
+.go{width:100%;height:56px;border-radius:10px;background:var(--red);color:#fff;font-size:16.5px;
+ font-weight:800;margin-top:20px;transition:.15s}
+.go:hover{background:#C41B32}
+.go:disabled{background:var(--line);color:var(--ink4);cursor:not-allowed}
+
+.note{margin-top:24px;background:var(--bg2);border-radius:11px;padding:16px 18px;font-size:13px;
+ color:var(--ink3);line-height:1.75}
+.note b{color:var(--ink)}
+.back{display:block;text-align:center;margin-top:26px;font-size:14px;color:var(--ink4)}
+.back:hover{color:var(--blue)}
+
+@media(max-width:980px){
+ .wrap{grid-template-columns:1fr}
+ .side{display:none}
+ .panel{border-left:0;padding:36px 22px;min-height:100vh}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <!-- 좌: 브랜드 -->
+  <div class="side">
+    <div class="side-bg"><img src="img/hero3.png" alt=""></div>
+    <div class="side-in">
+      <a class="lg" href="index.html">
+        <img src="img/logo.png" alt="" width="38" height="38"><b>한국 가상컴</b></a>
+      <h1>결제하는 순간<br><em>내 컴퓨터가 바로 켜집니다</em></h1>
+      <p>회원가입은 30초면 끝납니다.<br>비밀번호를 따로 만드실 필요가 없습니다.</p>
+      <ul>
+        <li><i>1</i><span>카카오 또는 구글로 3초 만에 가입</span></li>
+        <li><i>2</i><span>원하시는 PC를 고르고 결제</span></li>
+        <li><i>3</i><span>접속 정보가 화면에 바로 표시</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 우: 폼 -->
+  <div class="panel"><div class="box">
+    <div class="tabs">
+      <button data-t="in" class="on">로그인</button>
+      <button data-t="up">회원가입</button>
+    </div>
+
+    <!-- 로그인 -->
+    <div class="pane" data-p="in">
+      <h2>다시 오셨네요</h2>
+      <p class="sub">가입하실 때 쓰신 방법으로 눌러 주세요.</p>
+      <div class="socials">
+        <button class="so so-kk" data-go="kakao">
+          <span class="rec">가장 빠름</span>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5C6.9 3.5 2.8 6.7 2.8 10.7c0 2.6 1.7 4.8 4.3 6.1-.2.7-.7 2.5-.8 2.9 0 0-.02.14.07.2.09.05.2.02.2.02.27-.04 3.1-2.04 3.6-2.38.6.08 1.2.12 1.8.12 5.1 0 9.2-3.2 9.2-7.2S17.1 3.5 12 3.5Z"/></svg>
+          카카오로 로그인</button>
+        <button class="so so-gg" data-go="google">
+          <svg width="19" height="19" viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6Z"/><path fill="#34A853" d="M12 23.5c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21 7.6 23.5 12 23.5Z"/><path fill="#FBBC05" d="M5.6 14.2a6.9 6.9 0 0 1 0-4.4v-3H1.8a11.5 11.5 0 0 0 0 10.4l3.8-3Z"/><path fill="#EA4335" d="M12 5.1c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.6 15.1.5 12 .5 7.6.5 3.7 3 1.8 6.8l3.8 3c.9-2.7 3.4-4.7 6.4-4.7Z"/></svg>
+          구글로 로그인</button>
+      </div>
+      <div class="note">
+        <b>비밀번호가 따로 없습니다.</b> 카카오·구글 계정으로만 로그인하므로
+        비밀번호를 잊어버리실 일이 없습니다.
+      </div>
+    </div>
+
+    <!-- 회원가입 -->
+    <div class="pane" data-p="up" hidden>
+      <h2>30초면 끝납니다</h2>
+      <p class="sub">비밀번호를 만들지 않으셔도 됩니다.<br>아래 버튼 하나로 시작하세요.</p>
+
+      <div class="socials">
+        <button class="so so-kk" data-up="kakao">
+          <span class="rec">문자 인증 없음</span>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.5C6.9 3.5 2.8 6.7 2.8 10.7c0 2.6 1.7 4.8 4.3 6.1-.2.7-.7 2.5-.8 2.9 0 0-.02.14.07.2.09.05.2.02.2.02.27-.04 3.1-2.04 3.6-2.38.6.08 1.2.12 1.8.12 5.1 0 9.2-3.2 9.2-7.2S17.1 3.5 12 3.5Z"/></svg>
+          카카오로 시작하기</button>
+        <button class="so so-gg" data-up="google">
+          <svg width="19" height="19" viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6Z"/><path fill="#34A853" d="M12 23.5c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21 7.6 23.5 12 23.5Z"/><path fill="#FBBC05" d="M5.6 14.2a6.9 6.9 0 0 1 0-4.4v-3H1.8a11.5 11.5 0 0 0 0 10.4l3.8-3Z"/><path fill="#EA4335" d="M12 5.1c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.6 15.1.5 12 .5 7.6.5 3.7 3 1.8 6.8l3.8 3c.9-2.7 3.4-4.7 6.4-4.7Z"/></svg>
+          구글로 시작하기</button>
+      </div>
+
+      <!-- 카카오: 번호를 카카오가 주므로 인증 없음 -->
+      <div class="step" id="s-kakao">
+        <div class="fl">
+          <label>연락처 <em>*</em></label>
+          <input type="tel" value="010-8446-8710" readonly
+                 style="background:var(--bg2);color:var(--ink3)">
+          <div class="msg ok">✓ 카카오에서 확인된 번호입니다. 따로 인증하지 않으셔도 됩니다.</div>
+        </div>
+      </div>
+
+      <!-- 구글: 번호를 안 주므로 문자 인증 1회 -->
+      <div class="step" id="s-google">
+        <div class="fl">
+          <label>연락처 <em>*</em></label>
+          <div class="row">
+            <input type="tel" placeholder="010-0000-0000" id="ph">
+            <button class="btn-v" id="send">인증번호 받기</button>
+          </div>
+          <div class="msg">접속 정보를 문자로 보내드리기 위해 한 번만 확인합니다.</div>
+        </div>
+        <div class="fl" id="codewrap" hidden>
+          <label>인증번호 <em>*</em></label>
+          <div class="row">
+            <input type="tel" placeholder="6자리" maxlength="6" id="code">
+            <button class="btn-v" id="ok">확인</button>
+          </div>
+          <div class="msg" id="cmsg">문자로 받으신 6자리를 입력해 주세요.</div>
+        </div>
+      </div>
+
+      <div class="agree" id="agree" hidden>
+        <label class="ag all"><input type="checkbox" id="all"><span>전체 동의</span></label>
+        <label class="ag"><input type="checkbox" class="need"><span>[필수] 이용약관 <a href="#">보기</a></span></label>
+        <label class="ag"><input type="checkbox" class="need"><span>[필수] 개인정보 수집·이용 동의 <a href="#">보기</a></span></label>
+        <label class="ag"><input type="checkbox" class="need"><span>[필수] 만 14세 이상입니다</span></label>
+        <label class="ag"><input type="checkbox"><span>[선택] 이벤트·할인 정보 수신<em>카카오톡 · 문자</em></span></label>
+      </div>
+
+      <button class="go" id="join" hidden disabled>가입하고 시작하기</button>
+
+      <div class="note" style="margin-top:20px">
+        <b>카카오로 가입하시면</b> 카카오톡 상담 시 회원님을 바로 찾아드릴 수 있어
+        문의가 훨씬 빠르게 처리됩니다.
+      </div>
+    </div>
+
+    <a class="back" href="index.html">← 홈으로 돌아가기</a>
+  </div></div>
+</div>
+
+<script>
+const $=i=>document.getElementById(i);
+/* 탭 */
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.querySelectorAll('.pane').forEach(p=>p.hidden = p.dataset.p!==b.dataset.t);
+}));
+/* 로그인 (실서비스에서는 각 소셜 인증으로 연결) */
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{
+  alert(`실제 서비스에서는 여기서 ${b.dataset.go==='kakao'?'카카오':'구글'} 로그인 창이 열립니다.`);
+}));
+/* 가입 — 소셜 선택에 따라 다음 단계가 달라진다 */
+document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{
+  const k=b.dataset.up;
+  $('s-kakao').classList.toggle('on', k==='kakao');
+  $('s-google').classList.toggle('on', k==='google');
+  $('agree').hidden=false; $('join').hidden=false;
+  document.querySelectorAll('[data-up]').forEach(x=>x.style.opacity=x===b?'1':'.45');
+  check();
+}));
+/* 문자 인증 */
+$('send').addEventListener('click',()=>{
+  if(!$('ph').value.trim()){alert('연락처를 입력해 주세요.');return}
+  $('codewrap').hidden=false; $('send').textContent='다시 받기';
+  alert('실제 서비스에서는 여기서 인증번호 문자가 발송됩니다.');
+});
+$('ok').addEventListener('click',()=>{
+  $('cmsg').textContent='✓ 확인되었습니다.'; $('cmsg').classList.add('ok'); check();
+});
+/* 동의 */
+$('all').addEventListener('change',e=>{
+  document.querySelectorAll('.agree input').forEach(x=>x.checked=e.target.checked); check();
+});
+document.querySelectorAll('.agree input:not(#all)').forEach(x=>x.addEventListener('change',check));
+function check(){
+  const need=[...document.querySelectorAll('.need')];
+  $('join').disabled = !(need.length && need.every(x=>x.checked));
+}
+$('join').addEventListener('click',()=>{
+  alert('가입이 완료되면 바로 실시간 PC 목록으로 이동합니다.');
+  location.href='live.html';
+});
+</script>
+</body>
+</html>
