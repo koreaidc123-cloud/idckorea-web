@@ -439,9 +439,9 @@ const floorMaxSlot=(room,rack,fl)=>rackOcc(room,rack).filter(p=>p.fl===fl).reduc
 /* 열람 기록 */
 let VLOG=[];
 try{ VLOG=JSON.parse(localStorage.getItem('kvc-vlog')||'[]') }catch(e){}
-function logView(pn){
-  VLOG.unshift({pn, t:new Date().toLocaleString('ko-KR')});
-  VLOG=VLOG.slice(0,60);
+function logView(pn,act){
+  VLOG.unshift({pn, t:new Date().toLocaleString('ko-KR'), act:act||'열람'});
+  VLOG=VLOG.slice(0,80);
   localStorage.setItem('kvc-vlog',JSON.stringify(VLOG));
 }
 
@@ -810,10 +810,39 @@ function vSet(){
   </div>`;
 }
 
-/* ═══════════════ 드로어: PC 상세 ═══════════════ */
-function openPc(key){
+/* ═══════════════ 드로어: PC 상세 (보기 + 수정) ═══════════════ */
+function openPc(key,edit){
   const p=PCS.find(x=>x.pn===key||x.ad===key); if(!p)return;
   const o=p.order;
+  const editForm=!edit?'':`
+    <div class="blockttl">✏️ 정보 수정</div>
+    <div class="kv">
+      <span class="k">품번</span><span class="v">
+        <input id="e-pn" value="${p.pn||''}" placeholder="Y-042"
+          style="width:110px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-weight:800"></span>
+      <span class="k">애니 번호</span><span class="v">
+        <input id="e-ad" value="${p.ad}" placeholder="숫자만"
+          style="width:150px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px" class="num"></span>
+      <span class="k">애니 비번</span><span class="v">
+        <input id="e-pw" value="" placeholder="변경할 때만 입력"
+          style="width:150px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px">
+        <span class="dim" style="font-size:11.5px">비우면 기존 유지 · 변경은 기록됩니다</span></span>
+      <span class="k">위치 이동</span><span class="v" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        <select id="e-room" style="height:34px;border:1px solid var(--line);border-radius:8px">
+          ${ROOMS.map(r=>`<option value="${r.k}" ${p.room===r.k?'selected':''}>${r.name}</option>`).join('')}</select>
+        <input id="e-rack" type="number" min="1" value="${p.rack}" style="width:52px;height:34px;border:1px solid var(--line);border-radius:8px;text-align:center">-
+        <input id="e-fl" type="number" min="1" value="${p.fl}" style="width:46px;height:34px;border:1px solid var(--line);border-radius:8px;text-align:center">-
+        <input id="e-slot" type="number" min="1" value="${p.slot}" style="width:52px;height:34px;border:1px solid var(--line);border-radius:8px;text-align:center">
+        <span class="dim" style="font-size:11.5px">랙-층-자리</span></span>
+      <span class="k">메모</span><span class="v">
+        <input id="e-memo" value="${p.memo||''}" placeholder="관리용 메모 (고객에게 안 보임)"
+          style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px"></span>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <button class="btn btn-b btn-sm" data-savepc="${key}">저장</button>
+      <button class="btn btn-o btn-sm" data-editpc="${key}" data-off="1">취소</button>
+      <span id="e-msg" style="align-self:center;font-size:12.5px;color:var(--red);font-weight:700"></span>
+    </div>`;
   $('drawer').innerHTML=`
   <div class="hd"><b>${p.pn||'미등록 PC'}</b>${stTag(p)}<button class="x" data-close>✕</button></div>
   <div class="bd">
@@ -827,7 +856,9 @@ function openPc(key){
       <span class="k">애니 비번</span><span class="v pwrow">
         <span class="mask" id="dr-pw">••••••</span>
         <button class="btn btn-o btn-sm" id="dr-pwbtn" data-pn="${p.pn||p.ad}">보기</button></span>
+      ${p.memo?`<span class="k">메모</span><span class="v">${p.memo}</span>`:''}
     </div>
+    ${editForm}
     ${o? `<div class="blockttl">이 PC를 쓰는 사람</div>
     <div class="kv">
       <span class="k">회원</span><span class="v">${o.nm} <span class="dim">${o.via==='kakao'?'카카오':'구글'} 가입</span></span>
@@ -839,10 +870,11 @@ function openPc(key){
     ${o.mis? `<div class="mismatch"><b>⚠ 결제자와 이용자가 다릅니다.</b><br>
       문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다.</div>`:''}`
     : `<div class="blockttl">임대 정보</div><div class="kv"><span class="k">고객</span><span class="v dim">현재 임대중이 아닙니다</span></div>`}
-    <div class="blockttl">비밀번호 열람 기록 (최근 5건)</div>
-    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,5).map(v=>v.t+' 열람').join('<br>')||'열람 기록 없음'}</div>
+    <div class="blockttl">변경 · 열람 기록 (최근 6건)</div>
+    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>v.t+' — '+(v.act||'열람')).join('<br>')||'기록 없음'}</div>
   </div>
   <div class="dracts">
+    ${edit?'':`<button class="btn btn-o" data-editpc="${key}">✏️ 정보 수정</button>`}
     ${p.st==='unv'? `<button class="btn btn-g" data-verok="${p.pn}">접속 확인 완료 → 판매</button>`:''}
     ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
     ${p.st==='fix'? `<button class="btn btn-g" data-took="${p.pn}">점검 완료 → 판매</button>`:''}
@@ -983,6 +1015,49 @@ document.addEventListener('click',e=>{
   if(tf){const p=PCS.find(x=>x.pn===tf.dataset.tofix);if(p){p.st='fix';closeDrawer();route()}return}
   const tk=t.closest('[data-took]');
   if(tk){const p=PCS.find(x=>x.pn===tk.dataset.took);if(p){p.st='ok';closeDrawer();route()}return}
+
+  /* PC 정보 수정 (품번 · 애니번호 · 비번 · 위치 · 메모) */
+  const ep=t.closest('[data-editpc]');
+  if(ep){openPc(ep.dataset.editpc, !ep.dataset.off);return}
+  const sv=t.closest('[data-savepc]');
+  if(sv){
+    const p=PCS.find(x=>x.pn===sv.dataset.savepc||x.ad===sv.dataset.savepc); if(!p)return;
+    const msg=s=>{const m=$('e-msg');if(m)m.textContent=s};
+    const pn=$('e-pn').value.trim().toUpperCase();
+    const ad=$('e-ad').value.trim();
+    const pw=$('e-pw').value.trim();
+    const room=$('e-room').value, rack=+$('e-rack').value, fl=+$('e-fl').value, slot=+$('e-slot').value;
+    const memo=$('e-memo').value.trim();
+    if(pn && !/^[KYD]-\d{3}$/.test(pn)){msg('품번 형식은 K-001 · Y-042 · D-113 입니다');return}
+    if(pn && pn.charAt(0)!==room){msg('품번 앞글자('+pn.charAt(0)+')와 서버실('+room+')이 다릅니다');return}
+    if(pn && PCS.some(x=>x!==p&&x.pn===pn)){msg(pn+' 은 이미 사용 중인 품번입니다');return}
+    if(!/^\d{6,12}$/.test(ad)){msg('애니데스크 번호는 숫자 6~12자리입니다');return}
+    if(PCS.some(x=>x!==p&&x.ad===ad)){msg('이미 다른 PC에 등록된 애니데스크 번호입니다');return}
+    if(pw && pw.length<4){msg('비밀번호는 4자 이상이어야 합니다');return}
+    const cfgL=RACKS[room];
+    if(rack<1||rack>cfgL.length){msg(room+' 서버실에는 '+cfgL.length+'번 랙까지 있습니다');return}
+    const cfg=cfgL[rack-1];
+    if(fl<1||fl>cfg.length){msg(rack+'번 랙은 '+cfg.length+'층까지입니다');return}
+    if(slot<1||slot>cfg[fl-1]){msg(fl+'층은 '+cfg[fl-1]+'자리까지입니다');return}
+    const taken=PCS.find(x=>x!==p&&x.room===room&&x.rack===rack&&x.fl===fl&&x.slot===slot);
+    if(taken){msg('그 자리에는 이미 '+(taken.pn||'미등록 PC')+' 가 있습니다');return}
+    /* 검증 통과 — 적용 + 기록 */
+    const before=locStr(p);
+    if(pn && pn!==p.pn){
+      logView(pn,'품번 변경 '+(p.pn||'미등록')+' → '+pn);
+      p.pn=pn; if(p.st==='new')p.st='unv';
+      seq[room]=Math.max(seq[room],parseInt(pn.slice(2),10));
+    }
+    if(ad!==p.ad){logView(p.pn||ad,'애니데스크 번호 변경');p.ad=ad}
+    if(pw){p.pw=pw;logView(p.pn||p.ad,'애니데스크 비밀번호 변경')}
+    if(room!==p.room||rack!==p.rack||fl!==p.fl||slot!==p.slot){
+      p.room=room; p.roomName=ROOMS.find(r=>r.k===room).name;
+      p.rack=rack; p.fl=fl; p.slot=slot;
+      logView(p.pn||p.ad,'위치 이동 '+before+' → '+locStr(p));
+    }
+    p.memo=memo;
+    route(); openPc(p.pn||p.ad); return;
+  }
 
   /* 비번 열람 — 기록 남김 */
   const ps=t.closest('[data-pwshow]');
