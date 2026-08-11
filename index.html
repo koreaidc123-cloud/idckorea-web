@@ -425,21 +425,20 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 }
 /* ══ 스크롤 등장 · 숫자 카운트업 ══
    기본은 항상 보이게 두고 JS 가 살아 있을 때만 감춘다 (전 페이지 안 보이는 사고 방지) */
-.js .rv{opacity:0;transform:translateY(22px);
-  transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
-.js .rv.in{opacity:1;transform:none}
+.js .rv{opacity:0;transition:opacity .65s cubic-bezier(.2,.7,.3,1)}
+.js .rv.in{opacity:1}
 .js .rv-d1{transition-delay:.08s}.js .rv-d2{transition-delay:.16s}
 .js .rv-d3{transition-delay:.24s}.js .rv-d4{transition-delay:.32s}
-@media(prefers-reduced-motion:reduce){.js .rv{opacity:1;transform:none;transition:none}}
-.pc,.u,.q,.g{will-change:transform}
+@media(prefers-reduced-motion:reduce){.js .rv,.js .pt div{opacity:1;transition:none}}
+
 .pc .pc-img img{transition:transform .6s cubic-bezier(.2,.7,.3,1)}
 .pc:hover .pc-img img{transform:scale(1.08)}
 .pc-b .btn{transition:.18s}
 .pc:hover .pc-b .btn{box-shadow:0 10px 24px rgba(226,35,60,.3)}
 .cnt.pop{animation:cntPop .5s cubic-bezier(.2,.9,.3,1)}
 @keyframes cntPop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
-.js .pt div{opacity:0;transform:translateY(12px);transition:.5s cubic-bezier(.2,.7,.3,1)}
-.js .pt.in div{opacity:1;transform:none}
+.js .pt div{opacity:0;transition:opacity .5s cubic-bezier(.2,.7,.3,1)}
+.js .pt.in div{opacity:1}
 </style>
 </head>
 <body>

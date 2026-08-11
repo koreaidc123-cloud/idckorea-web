@@ -320,8 +320,7 @@ function filters(){
     row('CPU 코어','core',[...new Set(G.map(g=>g.core))].map(c=>[c,c]))+
     row('메모리','ram',[['8','8GB'],['32','32GB']])+
     row('SSD','ssd',[['120','120GB'],['240','240GB'],['480','480GB']])+
-    row('그래픽','gpu',[['NVIDIA','NVIDIA'],['내장','내장그래픽']])+
-    ;
+    row('그래픽','gpu',[['NVIDIA','NVIDIA'],['내장','내장그래픽']]);
 }
 function chips(){
   const L=[];
