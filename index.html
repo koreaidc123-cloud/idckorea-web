@@ -177,6 +177,12 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .pc-badge{position:absolute;right:12px;top:12px;background:var(--gold);color:#231B00;
   font-size:11px;font-weight:800;padding:5px 11px;border-radius:99px;letter-spacing:-.03em;
   box-shadow:0 6px 16px rgba(0,0,0,.3)}
+/* CPU 제조사 배지 — 라이젠은 검정+주황, 인텔은 인텔 블루 */
+.pb{position:absolute;right:12px;bottom:12px;padding:5px 11px;border-radius:6px;
+  font-size:11.5px;line-height:1;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.pb-ryzen{background:#111;color:#F0700A;font-weight:900;letter-spacing:.06em}
+.pb-intel{background:#0068B5;color:#fff;font-weight:400;font-size:14px;letter-spacing:-.07em;
+  padding:4px 12px 5px}
 .pc-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:9px;flex:1}
 .pc-b .pu{align-self:flex-start;font-size:11.5px;font-weight:800;padding:3px 10px;
   border-radius:99px;letter-spacing:-.03em}
@@ -560,13 +566,13 @@ const USECAT={
  game: {t:'고사양 게임', c:'#E2233C',bg:'#FDEEF0'},
 };
 const P=[
- {n:'인텔I5 4690',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'GTX 650~760TI',        list:90000, p:40000,k:47,all:168,img:'pc-cpu',  u:'basic',d:'문서·웹서핑·가벼운 업무'},
- {n:'라이젠 2200G~2400G',c:'4코어',ram:8, ssd:'SSD 120GB',gpu:'VEGA 내장그래픽',   list:90000, p:40000,k:40,all:144,img:'pc-white',u:'basic',d:'가성비 입문용'},
- {n:'라이젠 3200G',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'VEGA 내장그래픽',      list:90000, p:40000,k:55,all:196,img:'pc-white',u:'basic',d:'가장 많이 찾는 기본형',tag:'재구매 1위'},
- {n:'라이젠 5600G',c:'6코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:120000,p:55000,k:37,all:132,img:'pc-duo',  u:'multi',d:'창 여러 개 동시 작업'},
- {n:'라이젠 5700G',c:'8코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:140000,p:60000,k:33,all:118,img:'pc-duo',  u:'multi',d:'모바일게임 다중 구동'},
- {n:'라이젠 1700', c:'8코어',ram:32,ssd:'SSD 240~480GB',gpu:'GTX 1050TI · 1060 6GB',list:140000,p:60000,k:44,all:156,img:'pc-black',u:'game', d:'고사양 게임 · 무거운 작업'},
- {n:'라이젠 3700X',c:'8코어',ram:32,ssd:'SSD 480GB',    gpu:'GTX 1050TI · 1060 6GB',list:160000,p:65000,k:24,all:86, img:'pc-black',u:'game', d:'가장 높은 사양',tag:'최고 사양'},
+ {n:'인텔I5 4690',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'GTX 650~760TI',        list:90000, p:40000,k:47,all:168,img:'p1-i5',   br:'intel',u:'basic',d:'문서·웹서핑·가벼운 업무',tag:'재구매 베스트셀러'},
+ {n:'라이젠 2200G~2400G',c:'4코어',ram:8, ssd:'SSD 120GB',gpu:'VEGA 내장그래픽',   list:90000, p:40000,k:40,all:144,img:'p2-2200',br:'ryzen',u:'basic',d:'가성비 입문용',tag:'재구매 베스트셀러'},
+ {n:'라이젠 3200G',c:'4코어',ram:8, ssd:'SSD 120GB',    gpu:'VEGA 내장그래픽',      list:90000, p:40000,k:55,all:196,img:'p3-3200',br:'ryzen',u:'basic',d:'가장 많이 찾는 기본형',tag:'재구매 베스트셀러'},
+ {n:'라이젠 5600G',c:'6코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:120000,p:55000,k:37,all:132,img:'p4-5600', br:'ryzen',u:'multi',d:'창 여러 개 동시 작업'},
+ {n:'라이젠 5700G',c:'8코어',ram:32,ssd:'SSD 240GB',    gpu:'내장그래픽 (추가 가능)',list:140000,p:60000,k:33,all:118,img:'p6-5700', br:'ryzen',u:'multi',d:'모바일게임 다중 구동'},
+ {n:'라이젠 1700', c:'8코어',ram:32,ssd:'SSD 240~480GB',gpu:'GTX 1050TI · 1060 6GB',list:140000,p:60000,k:44,all:156,img:'p5-1700', br:'ryzen',u:'game', d:'고사양 게임 · 무거운 작업'},
+ {n:'라이젠 3700X',c:'8코어',ram:32,ssd:'SSD 480GB',    gpu:'GTX 1050TI · 1060 6GB',list:160000,p:65000,k:24,all:86, img:'p7-3700x',br:'ryzen',u:'game', d:'가장 높은 사양',tag:'최고 인기사양'},
 ];
 /* 슬라이드 카피 — 세 장 모두 같은 뼈대(한 줄 라벨 / 두 줄 제목 / 두 줄 설명 / 버튼 둘) */
 const SLIDES=[
@@ -614,14 +620,14 @@ function prods(){
           <div class="cc">${x.c} · 램 ${x.ram}GB</div>
           <ul><li>${x.ssd}</li><li>${x.gpu}</li></ul>
         </div>
+        <span class="pb pb-${x.br}">${x.br==='intel'?'intel':'RYZEN'}</span>
         ${x.tag?`<div class="pc-badge">${x.tag}</div>`:''}
       </div>
       <div class="pc-b">
         <span class="pu" style="color:${u.c};background:${u.bg}">${u.t}</span>
         <div class="pn">${x.d}</div>
         <div class="pp"><b class="num">${w(x.p)}원</b><s class="num">${w(x.list)}원</s><em>${off}%</em></div>
-        <div class="pk ${few?'few':''}">${few?'':'<span class="dot"></span>'}${x.k>0?`${x.k}대 임대 가능`:'전량 임대중'}<i>/ 보유 ${x.all}대</i></div>
-        <a class="btn ${few?'btn-r':'btn-b'}" href="live.html">바로 임대하기</a>
+        <a class="btn btn-b" href="live.html">바로 임대하기</a>
       </div>
     </div>`}).join('')
    +`<a class="pc pc-ask" href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">
