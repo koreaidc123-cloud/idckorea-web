@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>관리자 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   한국 가상컴 관리자 (시안 · 목업 데이터)
+   확정 설계 반영:
+   · 식별 3층 — 위치(영태리 5-4-1) / 품번(Y-042) / 애니데스크 번호·비번
+   · 자리 번호는 오른쪽 끝이 1번, 1층이 화면 맨 아래
+   · 미등록 → 품번 부여 → 미검증 → 접속 확인 → 판매 가능
+   · 애니 비번은 기본 마스킹, 열람 시 기록
+   · 임대중 다운 = 최우선 경고 (깜빡임은 이 경우에만)
+   · 설정값(셋팅비·판정시간·할인율)은 하드코딩 금지 → 설정 화면
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --blue:#0B2FE8;--blue-l:#EEF1FE;--red:#E2233C;--red-l:#FDEEF0;
+  --gr:#0FA45E;--gr-l:#E9FBF1;--org:#E08B00;--org-l:#FFF6E5;
+  --vio:#7A2BE0;--vio-l:#F3EBFE;--gold:#FFB808;
+  --ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+  --line:#E3E6EC;--line2:#F0F2F5;--bg:#F6F8FB;
+  --side:#0B0E14;--sh:0 1px 2px rgba(11,14,20,.05),0 10px 30px rgba(11,14,20,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
+  background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.6;letter-spacing:-.02em}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+input,select{font:inherit;letter-spacing:inherit}
+.num{font-variant-numeric:tabular-nums}
+a{color:inherit;text-decoration:none}
+
+/* ── 로그인 게이트 ── */
+.gate{position:fixed;inset:0;z-index:300;background:#0B0E14;display:grid;place-items:center;color:#fff}
+.gate.off{display:none}
+.gate-box{width:min(360px,92vw);text-align:center}
+.gate-box .lg{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:26px;
+  font-size:20px;font-weight:800;letter-spacing:-.06em}
+.gate-box p{font-size:13.5px;color:#8A94A6;margin-bottom:18px}
+.gate-box input{width:100%;height:54px;border-radius:10px;border:1px solid #2A3140;background:#141926;
+  color:#fff;text-align:center;font-size:22px;letter-spacing:.4em;font-weight:800}
+.gate-box input:focus{outline:0;border-color:var(--blue)}
+.gate-box button{width:100%;height:50px;border-radius:10px;background:var(--red);color:#fff;
+  font-weight:800;font-size:15px;margin-top:12px}
+.gate-box .err{color:#FF8A96;font-size:13px;margin-top:10px;min-height:20px}
+
+/* ── 레이아웃 ── */
+.side{position:fixed;left:0;top:0;bottom:0;width:224px;background:var(--side);color:#fff;
+  display:flex;flex-direction:column;z-index:50}
+.side .lg{display:flex;align-items:center;gap:9px;padding:20px 18px 16px;font-size:16.5px;
+  font-weight:800;letter-spacing:-.05em;border-bottom:1px solid rgba(255,255,255,.08)}
+.side .lg span{font-size:10px;color:#6B7381;font-weight:700;background:rgba(255,255,255,.08);
+  padding:2px 7px;border-radius:99px;margin-left:auto}
+.nav{flex:1;padding:12px 10px;overflow-y:auto}
+.nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
+  font-size:14px;font-weight:600;color:#9AA2AE;margin-bottom:2px;transition:.13s}
+.nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav a.on{background:var(--red);color:#fff;font-weight:700}
+.nav a i{font-style:normal;width:20px;text-align:center;flex:none}
+.nav a .bd{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:99px;
+  background:rgba(255,255,255,.14);font-size:11px;font-weight:800;display:grid;place-items:center}
+.nav a .bd.hot{background:var(--red)}
+.nav a.on .bd.hot{background:rgba(255,255,255,.25)}
+.nav .sep{margin:12px 12px 8px;font-size:10.5px;font-weight:800;color:#4A5260;letter-spacing:.06em}
+.side .ft{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;color:#6B7381}
+.side .ft b{color:#9AA2AE}
+
+.main{margin-left:224px;padding:22px 26px 60px;min-height:100vh}
+.top{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.top h1{font-size:21px;font-weight:800;letter-spacing:-.045em}
+.top .live{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink3);
+  background:#fff;border:1px solid var(--line);border-radius:99px;padding:6px 13px}
+.top .live .dt{width:7px;height:7px;border-radius:50%;background:var(--gr)}
+.top .sp{margin-left:auto;display:flex;gap:8px}
+
+/* ── 공통 부품 ── */
+.card{background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:var(--sh)}
+.grid{display:grid;gap:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;
+  padding:0 15px;border-radius:8px;font-weight:700;font-size:13.5px;transition:.13s;white-space:nowrap}
+.btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
+.btn-b{background:var(--blue);color:#fff}.btn-b:hover{background:#0722B4}
+.btn-g{background:var(--gr);color:#fff}.btn-g:hover{background:#0B7E48}
+.btn-o{border:1px solid var(--line);background:#fff;color:var(--ink2)}
+.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:30px;padding:0 10px;font-size:12.5px;border-radius:7px}
+.tag{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:99px;
+  font-size:11.5px;font-weight:800;letter-spacing:-.02em}
+.tag i{font-style:normal;width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-rent{background:var(--blue-l);color:var(--blue)}
+.t-ok{background:var(--gr-l);color:var(--gr)}
+.t-fix{background:var(--org-l);color:var(--org)}
+.t-new{background:var(--vio-l);color:var(--vio)}
+.t-down{background:var(--red-l);color:var(--red)}
+.t-down i{animation:bl 1s infinite}
+@keyframes bl{50%{opacity:.2}}
+.t-unv{background:#EDEFF3;color:var(--ink3)}
+.warnbadge{display:inline-flex;align-items:center;gap:5px;background:var(--red-l);color:var(--red);
+  font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:99px}
+
+/* 표 */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{background:var(--bg);text-align:left;padding:9px 12px;font-size:12px;font-weight:800;
+  color:var(--ink3);border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr{cursor:pointer;transition:.1s}
+.tbl tbody tr:hover{background:#FAFBFE}
+.tbl .pn{font-weight:800;letter-spacing:-.02em}
+.tbl .dim{color:var(--ink4);font-size:12.5px}
+.mask{font-family:inherit;letter-spacing:.14em;color:var(--ink4)}
+.pager2{display:flex;gap:4px;justify-content:center;padding:14px}
+.pager2 button{min-width:32px;height:32px;border:1px solid var(--line);border-radius:7px;
+  background:#fff;font-size:13px;font-weight:700;color:var(--ink2)}
+.pager2 button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.pager2 button:disabled{opacity:.35}
+
+/* KPI */
+.kpis{grid-template-columns:repeat(6,1fr)}
+.kpi{padding:16px 18px}
+.kpi .l{font-size:12px;font-weight:700;color:var(--ink3)}
+.kpi b{display:block;font-size:26px;font-weight:800;letter-spacing:-.05em;margin-top:3px}
+.kpi.crit{border-color:#F7CDD3;background:#FFF8F9}
+.kpi.crit b{color:var(--red)}
+.kpi .sub{font-size:11.5px;color:var(--ink4);margin-top:2px}
+
+/* 섹션 헤더 */
+.sec-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line2)}
+.sec-h h3{font-size:15px;font-weight:800;letter-spacing:-.035em}
+.sec-h .cnt{font-size:12px;font-weight:800;color:var(--ink3);background:var(--bg);
+  padding:2px 9px;border-radius:99px}
+.sec-h .r{margin-left:auto;display:flex;gap:7px;align-items:center}
+.sec-b{padding:0}
+.sec-b.pad{padding:16px 18px}
+
+/* 필터 바 */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line2);
+  align-items:center}
+.fbar select,.fbar input{height:36px;border:1px solid var(--line);border-radius:8px;padding:0 11px;
+  font-size:13.5px;background:#fff}
+.fbar input:focus,.fbar select:focus{outline:0;border-color:var(--blue)}
+.fbar .grow{flex:1;min-width:160px}
+
+/* 랙맵 */
+.rooms3{grid-template-columns:repeat(3,1fr)}
+.roomcard{padding:16px 18px;cursor:pointer;transition:.14s;border:1px solid var(--line)}
+.roomcard:hover{border-color:var(--blue)}
+.roomcard.on{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+.roomcard b{font-size:16px;font-weight:800}
+.roomcard .sub{font-size:12px;color:var(--ink4)}
+.roomcard .bar{display:flex;height:8px;border-radius:99px;overflow:hidden;margin-top:10px;background:var(--line2)}
+.roomcard .bar i{display:block;height:100%}
+.rackrow{display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line2)}
+.rackbtn{border:1px solid var(--line);border-radius:9px;padding:8px 13px;font-size:13px;
+  font-weight:800;background:#fff;transition:.12s;position:relative}
+.rackbtn:hover{border-color:var(--blue);color:var(--blue)}
+.rackbtn.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.rackbtn .d{position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;
+  background:var(--red);animation:bl 1s infinite}
+.rackmap{padding:20px 18px}
+.floor{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.floor .fl{width:36px;font-size:12px;font-weight:800;color:var(--ink3);text-align:right;flex:none}
+.slots{display:flex;gap:5px;flex:1}
+.slot{flex:1;aspect-ratio:1;max-width:44px;border-radius:7px;display:grid;place-items:center;
+  font-size:10px;font-weight:800;cursor:pointer;transition:.1s;border:1px solid transparent;
+  color:rgba(255,255,255,.85)}
+.slot:hover{transform:scale(1.12);z-index:2}
+.s-rent{background:#3B62E8}
+.s-ok{background:#12B76A}
+.s-fix{background:#E08B00}
+.s-new{background:#8A4DE8}
+.s-unv{background:#8A94A6}
+.s-down{background:var(--red);animation:bl 1s infinite}
+.s-empty{background:#fff;border-color:var(--line);color:var(--ink4);cursor:default}
+.s-empty:hover{transform:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line2);
+  font-size:12px;color:var(--ink3)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{font-style:normal;width:11px;height:11px;border-radius:4px;display:inline-block}
+.dirnote{font-size:11.5px;color:var(--ink4);padding:0 18px 12px;text-align:right}
+
+/* 드로어 */
+.drawer{position:fixed;top:0;right:-460px;bottom:0;width:440px;background:#fff;z-index:120;
+  box-shadow:-16px 0 50px rgba(11,14,20,.18);transition:right .25s ease;display:flex;flex-direction:column}
+.drawer.on{right:0}
+.drawer .hd{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer .hd b{font-size:17px;font-weight:800}
+.drawer .hd .x{margin-left:auto;width:32px;height:32px;border-radius:8px;font-size:16px;color:var(--ink3)}
+.drawer .hd .x:hover{background:var(--bg)}
+.drawer .bd{flex:1;overflow-y:auto;padding:18px 20px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:8px 12px;font-size:13.5px;margin-bottom:16px}
+.kv .k{color:var(--ink3);font-size:12.5px;padding-top:2px}
+.kv .v{font-weight:600}
+.kv .v.big{font-size:16px;font-weight:800}
+.pwrow{display:flex;align-items:center;gap:8px}
+.pwrow .btn-sm{flex:none}
+.blockttl{font-size:12px;font-weight:800;color:var(--ink3);margin:18px 0 8px;
+  padding-top:14px;border-top:1px solid var(--line2)}
+.viewlog{font-size:12px;color:var(--ink4);line-height:1.7}
+.dracts{display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
+.overlay{position:fixed;inset:0;background:rgba(11,14,20,.35);z-index:110;opacity:0;
+  pointer-events:none;transition:.2s}
+.overlay.on{opacity:1;pointer-events:auto}
+
+/* 주문 상세 접속정보 미리보기 */
+.credbox{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-top:8px}
+.credbox .ch{background:var(--ink);color:#fff;padding:10px 14px;font-size:12.5px;font-weight:800}
+.credbox .cb{padding:12px 14px;display:grid;gap:7px;font-size:13.5px}
+.credbox .cr{display:flex;justify-content:space-between;align-items:center}
+.credbox .cr span{color:var(--ink3);font-size:12.5px}
+.credbox .cr b{font-weight:700;letter-spacing:.02em}
+.mismatch{background:var(--red-l);border:1px solid #F7CDD3;border-radius:10px;padding:11px 14px;
+  font-size:13px;color:#8E1424;line-height:1.6;margin-top:8px}
+.mismatch b{font-weight:800}
+
+/* 알림 */
+.noti-st{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;
+  padding:3px 9px;border-radius:99px}
+.n-ok{background:var(--gr-l);color:var(--gr)}
+.n-sms{background:var(--org-l);color:var(--org)}
+.n-wait{background:#EDEFF3;color:var(--ink3)}
+
+/* 설정 */
+.setrow{display:grid;grid-template-columns:1fr 180px;gap:12px;align-items:center;
+  padding:13px 18px;border-bottom:1px solid var(--line2)}
+.setrow:last-child{border-bottom:0}
+.setrow .sl b{display:block;font-size:14px;font-weight:700}
+.setrow .sl span{font-size:12.5px;color:var(--ink4)}
+.setrow input{height:38px;border:1px solid var(--line);border-radius:8px;padding:0 12px;
+  text-align:right;font-weight:700}
+.setrow input:focus{outline:0;border-color:var(--blue)}
+
+/* 검색 */
+.bigsearch{display:flex;gap:8px;margin-bottom:16px}
+.bigsearch input{flex:1;height:50px;border:1px solid var(--line);border-radius:11px;padding:0 18px;
+  font-size:15.5px;background:#fff}
+.bigsearch input:focus{outline:0;border-color:var(--blue);box-shadow:0 0 0 3px rgba(11,47,232,.1)}
+.hitgrp{margin-bottom:14px}
+.hitgrp .gt{font-size:12px;font-weight:800;color:var(--ink3);margin-bottom:7px}
+.hit{display:flex;align-items:center;gap:12px;padding:11px 15px;background:#fff;
+  border:1px solid var(--line);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:.12s}
+.hit:hover{border-color:var(--blue)}
+.hit b{font-weight:800}
+.hit .dim{color:var(--ink4);font-size:12.5px}
+.hit .tag{margin-left:auto}
+
+.empty2{padding:44px;text-align:center;color:var(--ink4);font-size:13.5px}
+.empty2 b{display:block;font-size:15px;color:var(--ink2);margin-bottom:4px}
+
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.rooms3{grid-template-columns:1fr}}
+@media(max-width:820px){
+  .side{width:64px}
+  .side .lg{justify-content:center;padding:16px 8px}.side .lg b,.side .lg span{display:none}
+  .nav a span,.nav a .bd,.nav .sep,.side .ft{display:none}
+  .nav a{justify-content:center}
+  .main{margin-left:64px;padding:16px 14px 50px}
+  .drawer{width:100vw;right:-100vw}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ 게이트 ═══ -->
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <div class="lg">
+      <svg width="34" height="34" viewBox="0 0 100 100"><g transform="rotate(-28 50 50)">
+        <path d="M50 4a46 46 0 0 0 0 92 23 23 0 0 1 0-46 23 23 0 0 0 0-46Z" fill="#E8412E"/>
+        <path d="M50 4a46 46 0 0 1 0 92 23 23 0 0 0 0-46 23 23 0 0 1 0-46Z" fill="#1B4FD8"/>
+      </g></svg>
+      한국 가상컴 관리자
+    </div>
+    <p>관리자 코드를 입력해 주세요</p>
+    <input type="password" id="gate-pw" maxlength="8" autocomplete="off">
+    <button id="gate-go">들어가기</button>
+    <div class="err" id="gate-err"></div>
+  </div>
+</div>
+
+<!-- ═══ 사이드바 ═══ -->
+<aside class="side">
+  <div class="lg">
+    <svg width="26" height="26" viewBox="0 0 100 100"><g transform="rotate(-28 50 50)">
+      <path d="M50 4a46 46 0 0 0 0 92 23 23 0 0 1 0-46 23 23 0 0 0 0-46Z" fill="#E8412E"/>
+      <path d="M50 4a46 46 0 0 1 0 92 23 23 0 0 0 0-46 23 23 0 0 1 0-46Z" fill="#1B4FD8"/>
+    </g></svg>
+    <b>한국 가상컴</b><span>ADMIN</span>
+  </div>
+  <nav class="nav" id="nav">
+    <a href="#dash" data-v="dash"><i>📊</i><span>대시보드</span><em class="bd hot" id="bd-warn" hidden></em></a>
+    <div class="sep">PC 등록</div>
+    <a href="#newpc" data-v="newpc"><i>📦</i><span>미등록 PC</span><em class="bd" id="bd-new"></em></a>
+    <a href="#verify" data-v="verify"><i>🔍</i><span>검증 대기</span><em class="bd" id="bd-unv"></em></a>
+    <div class="sep">운영</div>
+    <a href="#rack" data-v="rack"><i>🗄️</i><span>랙맵</span></a>
+    <a href="#pcs" data-v="pcs"><i>🖥️</i><span>PC 관리</span></a>
+    <a href="#orders" data-v="orders"><i>🧾</i><span>주문 · 고객</span></a>
+    <a href="#noti" data-v="noti"><i>🔔</i><span>알림 발송</span><em class="bd" id="bd-noti"></em></a>
+    <div class="sep">도구</div>
+    <a href="#find" data-v="find"><i>🔎</i><span>통합검색</span></a>
+    <a href="#set" data-v="set"><i>⚙️</i><span>설정</span></a>
+  </nav>
+  <div class="ft">시안 · 목업 데이터<br><b>실서비스 연동 전</b></div>
+</aside>
+
+<main class="main" id="main"></main>
+
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer"></div>
+
+<script>
+/* ═══════════════ 목업 데이터 (시드 고정) ═══════════════ */
+let seed=20260811;
+const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
+const pad=(n,w)=>String(n).padStart(w||3,'0');
+const w=n=>n.toLocaleString('ko-KR');
+const $=id=>document.getElementById(id);
+
+const ROOMS=[
+ {k:'K',name:'금촌', racks:7},
+ {k:'Y',name:'영태리',racks:9},
+ {k:'D',name:'등원리',racks:6},
+];
+const FLOORS=4, SLOTS=14;   // 자리 1번 = 오른쪽 끝, 1층 = 화면 맨 아래
+const SPECS=[
+ {id:1,n:'인텔I5 4690',      core:'4코어', ram:8, ssd:120,gpu:'GTX 750~750TI',        p:40000},
+ {id:2,n:'라이젠 2200G~2400G',core:'4코어', ram:8, ssd:120,gpu:'VEGA 내장그래픽',      p:40000},
+ {id:3,n:'라이젠 5600G~5700G',core:'6~8코어',ram:32,ssd:240,gpu:'내장 (추가 가능)',    p:55000},
+ {id:4,n:'라이젠 1700',       core:'8코어', ram:32,ssd:480,gpu:'GTX 1050TI 4G~1060',  p:60000},
+ {id:5,n:'라이젠 3700X',      core:'8코어', ram:32,ssd:480,gpu:'GTX 1050TI 4G~1060',  p:65000},
+];
+const ST={rent:'임대중',ok:'임대 가능',fix:'점검중',new:'미등록',unv:'미검증',down:'다운'};
+const STC={rent:'t-rent',ok:'t-ok',fix:'t-fix',new:'t-new',unv:'t-unv',down:'t-down'};
+
+/* PC 생성 — 방·랙·층·자리 물리 좌표 기준 */
+const PCS=[]; const seq={K:0,Y:0,D:0};
+for(const r of ROOMS){
+  for(let rack=1;rack<=r.racks;rack++){
+    for(let fl=1;fl<=FLOORS;fl++){
+      for(let slot=1;slot<=SLOTS;slot++){
+        if(rnd()<.08) continue;                       // 빈 자리
+        const sp=SPECS[Math.floor(rnd()*rnd()*SPECS.length)];
+        const st=rnd()<.70?'rent':'ok';
+        PCS.push({
+          room:r.k, roomName:r.name, rack, fl, slot,
+          pn:r.k+'-'+pad(++seq[r.k]),
+          spec:sp, st,
+          ad:String(100000000+Math.floor(rnd()*899999999)),
+          pw:'한국'+(1000+Math.floor(rnd()*9000)),
+          ip:[59,121,175,211,220][Math.floor(rnd()*5)]+'.'+(10+Math.floor(rnd()*80))+'.*.**',
+          beat: Math.floor(rnd()*9)+1,                // n초 전 신호
+        });
+      }
+    }
+  }
+}
+/* 상태 후처리 — 재현 가능한 위치에서 뽑는다 */
+function pick(st,n,to,unsetPn){
+  let c=0;
+  for(let i=0;i<PCS.length&&c<n;i+=7){
+    const x=PCS[(i*13+c*31)%PCS.length];
+    if(x.st===st && !x.touched){ x.st=to; x.touched=1; if(unsetPn){x.pnOld=x.pn;x.pn=null;} c++; }
+  }
+}
+pick('ok',22,'fix');
+pick('ok',7,'unv');
+pick('ok',5,'new',true);
+pick('rent',3,'down');           // ★ 임대중 다운 = 최우선 경고
+pick('ok',4,'down');
+
+/* 고객·주문 생성 — 임대중 PC 에 배정 */
+const SUR='김이박최정강조윤장임한오서신권황안송전홍'.split('');
+const GN=['민준','서연','도윤','지우','예준','하은','시우','수아','주원','지호','준서','다은','건우','채원','현우','유진','우진','서현','민재','가은'];
+const name=()=>SUR[Math.floor(rnd()*SUR.length)]+GN[Math.floor(rnd()*GN.length)];
+const phone=()=>'010-'+(1000+Math.floor(rnd()*9000))+'-'+(1000+Math.floor(rnd()*9000));
+const PMS=['가상계좌','신용카드','카카오페이','네이버페이'];
+const CARDS=['신한','국민','현대','삼성','롯데','우리'];
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+const fmtD=d=>{const x=new Date(d);return (x.getMonth()+1)+'/'+x.getDate()};
+const ORDERS=[];
+let ono=2600;
+for(const pc of PCS){
+  if(pc.st!=='rent'&&pc.st!=='down')continue;
+  if(pc.st==='rent'&&rnd()<.55)continue;              // 전부 다 만들면 무거우니 일부만
+  const days=[30,30,30,60,90][Math.floor(rnd()*5)];
+  const left=1+Math.floor(rnd()*days);
+  const start=new Date(TODAY); start.setDate(start.getDate()-(days-left));
+  const end=new Date(start); end.setDate(end.getDate()+days);
+  const via=rnd()<.72?'kakao':'google';
+  const nm=name();
+  const mis=rnd()<.15;
+  const pm=PMS[Math.floor(rnd()*PMS.length)];
+  const off=days===60?3:days===90?5:0;
+  const amt=Math.round(pc.spec.p*days/30*(100-off)/100);
+  ORDERS.push({
+    no:'2608-'+(ono++), pc, nm, ph:phone(), via,
+    payer: mis&&rnd()<.5? name():nm,
+    userNm: mis? name():nm, userPh: mis? phone():null, mis,
+    pm, card: pm==='신용카드'? CARDS[Math.floor(rnd()*CARDS.length)]+' '+(1000+Math.floor(rnd()*9000)):null,
+    depositor: pm==='가상계좌'? (mis&&rnd()<.5?name():nm):null,
+    days, amt, start, end, left,
+  });
+  pc.order=ORDERS[ORDERS.length-1];
+}
+ORDERS.sort((a,b)=>a.left-b.left);
+
+/* 설정 — 하드코딩 금지, 관리자에서 수정 (localStorage) */
+const DEFSET={setup:5000, downSec:60, notiDay:5, off60:3, off90:5};
+let SET=Object.assign({},DEFSET);
+try{ SET=Object.assign({},DEFSET,JSON.parse(localStorage.getItem('kvc-set')||'{}')) }catch(e){}
+
+/* 열람 기록 */
+let VLOG=[];
+try{ VLOG=JSON.parse(localStorage.getItem('kvc-vlog')||'[]') }catch(e){}
+function logView(pn){
+  VLOG.unshift({pn, t:new Date().toLocaleString('ko-KR')});
+  VLOG=VLOG.slice(0,60);
+  localStorage.setItem('kvc-vlog',JSON.stringify(VLOG));
+}
+
+/* ═══════════════ 공통 렌더 ═══════════════ */
+const cnt=st=>PCS.filter(p=>p.st===st).length;
+const stTag=p=>'<span class="tag '+STC[p.st]+'"><i></i>'+ST[p.st]+'</span>';
+const locStr=p=>p.roomName+' '+p.rack+'-'+p.fl+'-'+p.slot;
+function badges(){
+  const dn=cnt('down');
+  $('bd-new').textContent=cnt('new');
+  $('bd-unv').textContent=cnt('unv');
+  $('bd-noti').textContent=ORDERS.filter(o=>o.left<=SET.notiDay).length;
+  if(dn>0){$('bd-warn').hidden=false;$('bd-warn').textContent=dn}else{$('bd-warn').hidden=true}
+}
+
+/* ═══════════════ 화면: 대시보드 ═══════════════ */
+function vDash(){
+  const rentDown=PCS.filter(p=>p.st==='down'&&p.order);
+  const idleDown=PCS.filter(p=>p.st==='down'&&!p.order);
+  const exp=ORDERS.filter(o=>o.left<=SET.notiDay);
+  const monthAmt=ORDERS.reduce((s,o)=>s+o.amt,0);
+  return `
+  <div class="top"><h1>대시보드</h1>
+    <span class="live"><span class="dt"></span>하트비트 수신 중 · <b class="num" id="tick">방금</b></span>
+    <div class="sp"><a class="btn btn-o btn-sm" href="index.html" target="_blank">고객 사이트 열기 ↗</a></div>
+  </div>
+  <div class="grid kpis" style="margin-bottom:14px">
+    <div class="card kpi"><span class="l">전체 보유</span><b class="num">${w(PCS.length)}대</b>
+      <span class="sub">K ${seq.K} · Y ${seq.Y} · D ${seq.D}</span></div>
+    <div class="card kpi"><span class="l">임대중</span><b class="num">${w(cnt('rent'))}대</b>
+      <span class="sub">가동률 ${Math.round(cnt('rent')/PCS.length*100)}%</span></div>
+    <div class="card kpi"><span class="l">임대 가능</span><b class="num" style="color:var(--gr)">${w(cnt('ok'))}대</b>
+      <span class="sub">홈페이지 노출 중</span></div>
+    <div class="card kpi ${cnt('down')?'crit':''}"><span class="l">다운</span><b class="num">${cnt('down')}대</b>
+      <span class="sub">임대중 ${rentDown.length} · 재고 ${idleDown.length}</span></div>
+    <div class="card kpi"><span class="l">미등록 / 미검증</span><b class="num">${cnt('new')} / ${cnt('unv')}</b>
+      <span class="sub">등록 절차 대기</span></div>
+    <div class="card kpi"><span class="l">이용중 주문액</span><b class="num">${w(Math.round(monthAmt/10000))}만원</b>
+      <span class="sub">주문 ${ORDERS.length}건</span></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.2fr 1fr">
+    <div class="card">
+      <div class="sec-h"><h3>🚨 임대중 PC 다운 — 최우선</h3><span class="cnt">${rentDown.length}</span></div>
+      <div class="sec-b">${rentDown.length? `<table class="tbl"><tbody>`+rentDown.map(p=>`
+        <tr data-pc="${p.pn}"><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
+        <td>${p.order.nm} <span class="dim">${p.order.ph}</span></td>
+        <td>${stTag(p)}</td></tr>`).join('')+`</tbody></table>`
+        : `<div class="empty2"><b>다운된 임대중 PC가 없습니다</b>모든 고객 PC가 정상 신호를 보내고 있습니다.</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec-h"><h3>⏳ 만료 임박 (D-${SET.notiDay} 이내)</h3><span class="cnt">${exp.length}</span>
+        <div class="r"><a class="btn btn-o btn-sm" href="#noti">알림 발송 →</a></div></div>
+      <div class="sec-b"><table class="tbl"><tbody>${exp.slice(0,8).map(o=>`
+        <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        <td class="dim">${fmtD(o.end)} 만료</td>
+        <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b></td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="sec-h"><h3>🧾 최근 주문</h3><div class="r"><a class="btn btn-o btn-sm" href="#orders">전체 보기 →</a></div></div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>주문번호</th><th>품번</th><th>사양</th><th>회원</th><th>결제</th><th>기간</th><th>금액</th><th></th></tr></thead>
+      <tbody>${ORDERS.slice().sort(()=>0).slice(0,7).map(o=>`
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${o.pc.pn}</td>
+      <td>${o.pc.spec.n}</td><td>${o.nm}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
+      <td class="dim">${o.pm}</td><td class="dim num">${o.days}일</td>
+      <td class="num"><b>${w(o.amt)}원</b></td>
+      <td class="dim">D-${o.left}</td></tr>`).join('')}</tbody></table></div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: 미등록 PC ═══════════════ */
+function vNew(){
+  const list=PCS.filter(p=>p.st==='new');
+  return `
+  <div class="top"><h1>미등록 PC</h1>
+    <span class="live">세팅 프로그램에서 올라온 PC · 품번을 부여하면 <b>미검증</b> 단계로 넘어갑니다</span></div>
+  <div class="card">
+    <div class="sec-h"><h3>등록 대기</h3><span class="cnt">${list.length}</span></div>
+    <div class="sec-b">${list.length? `<table class="tbl">
+      <thead><tr><th>세팅자 입력 위치</th><th>애니데스크 번호</th><th>자동 수집 사양</th><th>비번 입력</th><th>품번 부여</th><th></th></tr></thead>
+      <tbody>${list.map(p=>{
+        const next=p.room+'-'+pad(seq[p.room]+1);
+        return `<tr><td class="pn">${locStr(p)}</td>
+        <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+        <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+        <td><span class="tag t-ok"><i></i>입력됨 · 2회 확인</span></td>
+        <td><input value="${next}" data-pnin="${p.ad}" style="width:90px;height:32px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-weight:800"></td>
+        <td><button class="btn btn-b btn-sm" data-assign="${p.ad}">품번 부여</button></td></tr>`}).join('')}
+      </tbody></table>`
+      : `<div class="empty2"><b>대기 중인 PC가 없습니다</b>세팅 프로그램으로 등록하면 여기 표시됩니다.</div>`}
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="sec-b pad" style="font-size:13px;color:var(--ink3);line-height:1.8">
+    <b style="color:var(--ink)">현장 세팅 순서</b> — ① 포맷 · 애니데스크 설치 · 번호와 비밀번호 설정(기존과 동일)
+    ② 세팅 프로그램 실행 → 위치(서버실·랙-층-자리)와 비밀번호 입력 ③ 여기서 품번 부여
+    ④ 다른 PC에서 접속 테스트 후 <b style="color:var(--ink)">검증 대기</b> 화면에서 확인 → 판매 재고 전환
+  </div></div>`;
+}
+
+/* ═══════════════ 화면: 검증 대기 ═══════════════ */
+function vVerify(){
+  const list=PCS.filter(p=>p.st==='unv');
+  return `
+  <div class="top"><h1>검증 대기</h1>
+    <span class="live">담당자가 실제 접속을 확인해야 판매 재고로 올라갑니다 · 확인 전에는 고객에게 보이지 않습니다</span></div>
+  <div class="card">
+    <div class="sec-h"><h3>접속 확인 대기</h3><span class="cnt">${list.length}</span></div>
+    <div class="sec-b">${list.length? `<table class="tbl">
+      <thead><tr><th>품번</th><th>위치</th><th>사양</th><th>애니데스크</th><th>비밀번호</th><th></th></tr></thead>
+      <tbody>${list.map(p=>`
+      <tr><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
+      <td class="dim">${p.spec.n}</td>
+      <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+      <td><span class="mask" data-pwm="${p.pn}">••••••</span>
+        <button class="btn btn-o btn-sm" data-pwshow="${p.pn}">보기</button></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-g btn-sm" data-verok="${p.pn}">접속 확인 완료 → 판매</button>
+        <button class="btn btn-o btn-sm" data-verfail="${p.pn}">접속 실패 → 점검</button></td></tr>`).join('')}
+      </tbody></table>`
+      : `<div class="empty2"><b>검증 대기 PC가 없습니다</b></div>`}
+    </div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: 랙맵 ═══════════════ */
+let RSEL={room:'Y',rack:1};
+function vRack(){
+  const r=ROOMS.find(x=>x.k===RSEL.room);
+  const inRoom=PCS.filter(p=>p.room===r.k);
+  const roomCard=rm=>{
+    const l=PCS.filter(p=>p.room===rm.k);
+    const seg=(st,c)=>{const n=l.filter(p=>p.st===st).length;
+      return n?'<i style="width:'+(n/l.length*100)+'%;background:'+c+'"></i>':''};
+    return `<div class="card roomcard ${RSEL.room===rm.k?'on':''}" data-room="${rm.k}">
+      <b>${rm.name} <span style="font-size:12px;color:var(--ink4)">(${rm.k})</span></b>
+      <div class="sub">${rm.racks}랙 · ${l.length}대 · 다운 ${l.filter(p=>p.st==='down').length}</div>
+      <div class="bar">${seg('rent','#3B62E8')}${seg('ok','#12B76A')}${seg('fix','#E08B00')}${seg('down','#E2233C')}${seg('unv','#8A94A6')}${seg('new','#8A4DE8')}</div>
+    </div>`};
+  const rackBtns=Array.from({length:r.racks},(_,i)=>{
+    const n=i+1, down=inRoom.some(p=>p.rack===n&&p.st==='down');
+    return `<button class="rackbtn ${RSEL.rack===n?'on':''}" data-rack="${n}">${n}번 랙${down?'<span class="d"></span>':''}</button>`}).join('');
+  /* 층은 4→1 (1층이 맨 아래) · 자리는 왼쪽에 14, 오른쪽 끝이 1 */
+  let map='';
+  for(let fl=FLOORS;fl>=1;fl--){
+    let cells='';
+    for(let slot=SLOTS;slot>=1;slot--){
+      const p=inRoom.find(x=>x.rack===RSEL.rack&&x.fl===fl&&x.slot===slot);
+      cells += p
+        ? `<div class="slot s-${p.st}" data-pc="${p.pn||p.ad}" title="${p.pn||'미등록'} · ${ST[p.st]}">${slot}</div>`
+        : `<div class="slot s-empty" title="빈 자리">${slot}</div>`;
+    }
+    map+=`<div class="floor"><span class="fl">${fl}층</span><div class="slots">${cells}</div></div>`;
+  }
+  return `
+  <div class="top"><h1>랙맵</h1>
+    <span class="live">칸을 누르면 PC 상세가 열립니다</span></div>
+  <div class="grid rooms3" style="margin-bottom:14px">${ROOMS.map(roomCard).join('')}</div>
+  <div class="card">
+    <div class="rackrow">${rackBtns}</div>
+    <div class="rackmap">${map}</div>
+    <div class="dirnote">▶ 자리 번호는 <b>오른쪽 끝이 1번</b>입니다 (랙 정면 기준) · 1층이 맨 아래</div>
+    <div class="legend">
+      <span><i style="background:#3B62E8"></i>임대중</span>
+      <span><i style="background:#12B76A"></i>임대 가능</span>
+      <span><i style="background:#E2233C"></i>다운</span>
+      <span><i style="background:#E08B00"></i>점검중</span>
+      <span><i style="background:#8A94A6"></i>미검증</span>
+      <span><i style="background:#8A4DE8"></i>미등록</span>
+      <span><i style="background:#fff;border:1px solid var(--line)"></i>빈 자리</span>
+    </div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: PC 관리 ═══════════════ */
+let PF={room:'',st:'',sp:'',q:'',pg:1};
+function vPcs(){
+  let L=PCS.filter(p=>
+    (!PF.room||p.room===PF.room)&&(!PF.st||p.st===PF.st)&&
+    (!PF.sp||String(p.spec.id)===PF.sp)&&
+    (!PF.q||(p.pn||'').toLowerCase().includes(PF.q)||p.ad.includes(PF.q)||locStr(p).includes(PF.q)));
+  const PER=40, last=Math.max(1,Math.ceil(L.length/PER));
+  if(PF.pg>last)PF.pg=last;
+  const V=L.slice((PF.pg-1)*PER,PF.pg*PER);
+  let pgs='';
+  for(let i=Math.max(1,PF.pg-3);i<=Math.min(last,PF.pg+3);i++)
+    pgs+=`<button data-pg="${i}" class="${i===PF.pg?'on':''}">${i}</button>`;
+  return `
+  <div class="top"><h1>PC 관리</h1><span class="live">총 <b class="num">${w(PCS.length)}</b>대 · 조건 일치 <b class="num">${w(L.length)}</b>대</span></div>
+  <div class="card">
+    <div class="fbar">
+      <select data-f="room"><option value="">서버실 전체</option>${ROOMS.map(r=>`<option value="${r.k}" ${PF.room===r.k?'selected':''}>${r.name} (${r.k})</option>`).join('')}</select>
+      <select data-f="st"><option value="">상태 전체</option>${Object.keys(ST).map(k=>`<option value="${k}" ${PF.st===k?'selected':''}>${ST[k]}</option>`).join('')}</select>
+      <select data-f="sp"><option value="">사양 전체</option>${SPECS.map(s=>`<option value="${s.id}" ${PF.sp==String(s.id)?'selected':''}>${s.n}</option>`).join('')}</select>
+      <input class="grow" data-f="q" value="${PF.q}" placeholder="품번 · 위치 · 애니데스크 번호 검색  (예: Y-042, 영태리 5-4-1)">
+    </div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>품번</th><th>위치</th><th>상태</th><th>사양</th><th>애니데스크</th><th>공인IP</th><th>고객</th></tr></thead>
+      <tbody>${V.map(p=>`
+      <tr data-pc="${p.pn||p.ad}"><td class="pn">${p.pn||'<span class="dim">미등록</span>'}</td>
+      <td class="dim">${locStr(p)}</td><td>${stTag(p)}</td>
+      <td class="dim">${p.spec.n}</td>
+      <td class="num dim">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+      <td class="num dim">${p.ip}</td>
+      <td>${p.order? p.order.nm+(p.order.mis?' <span class="warnbadge">⚠</span>':'') : '<span class="dim">—</span>'}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="pager2">
+        <button data-pg="${PF.pg-1}" ${PF.pg===1?'disabled':''}>‹</button>${pgs}
+        <button data-pg="${PF.pg+1}" ${PF.pg===last?'disabled':''}>›</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: 주문 · 고객 ═══════════════ */
+let OF={q:'',pg:1};
+function vOrders(){
+  let L=ORDERS.filter(o=>!OF.q||o.nm.includes(OF.q)||o.no.includes(OF.q)
+    ||o.pc.pn.toLowerCase().includes(OF.q)||o.ph.replace(/-/g,'').includes(OF.q.replace(/-/g,''))
+    ||(o.userNm&&o.userNm.includes(OF.q))||(o.depositor&&o.depositor.includes(OF.q)));
+  const PER=30, last=Math.max(1,Math.ceil(L.length/PER));
+  if(OF.pg>last)OF.pg=last;
+  const V=L.slice((OF.pg-1)*PER,OF.pg*PER);
+  let pgs='';
+  for(let i=Math.max(1,OF.pg-3);i<=Math.min(last,OF.pg+3);i++)
+    pgs+=`<button data-opg="${i}" class="${i===OF.pg?'on':''}">${i}</button>`;
+  return `
+  <div class="top"><h1>주문 · 고객</h1><span class="live">이용중 <b class="num">${ORDERS.length}</b>건 · 명의 다름 <b class="num">${ORDERS.filter(o=>o.mis).length}</b>건</span></div>
+  <div class="card">
+    <div class="fbar"><input class="grow" data-of="q" value="${OF.q}"
+      placeholder="이름 · 전화 · 주문번호 · 품번 · 입금자명 어느 것으로든 검색"></div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>주문번호</th><th>품번</th><th>회원(결제자)</th><th>실제 이용자</th><th>가입</th><th>결제</th><th>기간</th><th>만료</th></tr></thead>
+      <tbody>${V.map(o=>`
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${o.pc.pn}</td>
+      <td>${o.nm}<div class="dim">${o.ph}</div></td>
+      <td>${o.mis? o.userNm+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
+      <td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
+      <td class="dim">${o.pm}${o.card?'<div class="dim">'+o.card+'</div>':''}${o.depositor?'<div class="dim">입금 '+o.depositor+'</div>':''}</td>
+      <td class="dim num">${o.days}일</td>
+      <td><b style="color:${o.left<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${o.left}</b>
+        <div class="dim">${fmtD(o.end)}</div></td></tr>`).join('')}
+      </tbody></table>
+      <div class="pager2">
+        <button data-opg="${OF.pg-1}" ${OF.pg===1?'disabled':''}>‹</button>${pgs}
+        <button data-opg="${OF.pg+1}" ${OF.pg===last?'disabled':''}>›</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: 알림 발송 ═══════════════ */
+function vNoti(){
+  const exp=ORDERS.filter(o=>o.left<=SET.notiDay);
+  return `
+  <div class="top"><h1>알림 발송</h1>
+    <span class="live">만료 D-${SET.notiDay} 자동 발송 · 알림톡 실패 시 문자로 자동 전환</span></div>
+  <div class="card">
+    <div class="sec-h"><h3>만료 안내 대상</h3><span class="cnt">${exp.length}</span>
+      <div class="r"><button class="btn btn-r btn-sm" id="noti-all">전체 발송 (시뮬레이션)</button></div></div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>품번</th><th>회원</th><th>연락처</th><th>가입</th><th>만료</th><th>발송 채널</th><th>상태</th></tr></thead>
+      <tbody>${exp.map((o,i)=>{
+        const st=i%5===0?'wait':(o.via==='google'&&i%3===0)?'sms':'ok';
+        return `<tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        <td class="num dim">${o.ph}</td><td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
+        <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b> <span class="dim">${fmtD(o.end)}</span></td>
+        <td class="dim">알림톡 → 문자 전환</td>
+        <td>${st==='ok'?'<span class="noti-st n-ok">✓ 알림톡 발송됨</span>'
+             :st==='sms'?'<span class="noti-st n-sms">→ 문자 전환됨</span>'
+             :'<span class="noti-st n-wait">대기</span>'}</td></tr>`}).join('')}
+      </tbody></table></div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="sec-b pad" style="font-size:13px;color:var(--ink3);line-height:1.85">
+    <b style="color:var(--ink)">발송 규칙</b> — 알림톡은 카카오 가입 여부와 무관하게 <b>전화번호로 발송</b>됩니다.
+    카톡 미설치·차단으로 실패하면 같은 내용이 <b>문자(LMS)로 자동 전환</b>됩니다.
+    그래서 구글 가입자도 알림을 받습니다 — 전화번호만 정확하면 됩니다.<br>
+    발송 내용: 만료일 · 품번 · 원클릭 연장 링크 (자동결제 아님, 고객이 눌러서 연장)
+  </div></div>`;
+}
+
+/* ═══════════════ 화면: 통합검색 ═══════════════ */
+let FQ='';
+function vFind(){
+  const q=FQ.trim().toLowerCase(), qp=q.replace(/-/g,'');
+  let pcHits=[],ordHits=[];
+  if(q.length>=2){
+    pcHits=PCS.filter(p=>(p.pn||'').toLowerCase().includes(q)||p.ad.includes(qp)
+      ||locStr(p).includes(q)||p.ip.includes(q)).slice(0,8);
+    ordHits=ORDERS.filter(o=>o.nm.includes(FQ)||o.userNm.includes(FQ)
+      ||(o.payer&&o.payer.includes(FQ))||(o.depositor&&o.depositor.includes(FQ))
+      ||o.ph.replace(/-/g,'').includes(qp)||(o.card&&o.card.includes(FQ))
+      ||o.no.includes(q)).slice(0,8);
+  }
+  return `
+  <div class="top"><h1>통합검색</h1>
+    <span class="live">이름 · 전화 · 품번 · 애니번호 · 입금자명 · 카드 뒷자리 · 위치 — 어느 단서로도 찾습니다</span></div>
+  <div class="bigsearch"><input id="findq" value="${FQ}" placeholder="예: 김민준 · 010-1234 · Y-042 · 영태리 5-4-1 · 1042">
+    <button class="btn btn-r" id="findgo" style="height:50px;padding:0 24px">검색</button></div>
+  ${q.length<2? `<div class="card"><div class="empty2"><b>두 글자 이상 입력하세요</b>고객이 어떤 이름으로 문의해도, 품번 하나만 알아도 찾을 수 있습니다.</div></div>`:`
+  <div class="hitgrp"><div class="gt">PC (${pcHits.length})</div>
+    ${pcHits.map(p=>`<div class="hit" data-pc="${p.pn||p.ad}"><b>${p.pn||'미등록'}</b>
+      <span class="dim">${locStr(p)} · ${p.spec.n} · 애니 ${p.ad}</span>${stTag(p)}</div>`).join('')
+      ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 PC 없음</span></div>'}</div>
+  <div class="hitgrp"><div class="gt">주문 · 고객 (${ordHits.length})</div>
+    ${ordHits.map(o=>`<div class="hit" data-ord="${o.no}"><b>${o.nm}</b>
+      <span class="dim">${o.no} · ${o.pc.pn} · ${o.pm}${o.mis?' · 이용자 '+o.userNm:''}</span>
+      <span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span></div>`).join('')
+      ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 주문 없음</span></div>'}</div>`}`;
+}
+
+/* ═══════════════ 화면: 설정 ═══════════════ */
+function vSet(){
+  return `
+  <div class="top"><h1>설정</h1><span class="live">설정값은 하드코딩하지 않습니다 — 여기서 바꾸면 즉시 반영됩니다</span></div>
+  <div class="card">
+    <div class="setrow"><div class="sl"><b>초기 세팅비</b><span>환불 계산 시 차감되는 금액</span></div>
+      <input type="number" data-set="setup" value="${SET.setup}"></div>
+    <div class="setrow"><div class="sl"><b>다운 판정 시간 (초)</b><span>신호가 이 시간 끊기면 다운으로 표시</span></div>
+      <input type="number" data-set="downSec" value="${SET.downSec}"></div>
+    <div class="setrow"><div class="sl"><b>만료 알림 시점 (D-일)</b><span>만료 며칠 전에 연장 알림을 보낼지</span></div>
+      <input type="number" data-set="notiDay" value="${SET.notiDay}"></div>
+    <div class="setrow"><div class="sl"><b>60일 결제 할인율 (%)</b></div>
+      <input type="number" data-set="off60" value="${SET.off60}"></div>
+    <div class="setrow"><div class="sl"><b>90일 결제 할인율 (%)</b></div>
+      <input type="number" data-set="off90" value="${SET.off90}"></div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn btn-b" id="set-save">저장</button>
+    <button class="btn btn-o" id="set-reset">기본값으로</button>
+    <span id="set-msg" style="align-self:center;font-size:13px;color:var(--gr);font-weight:700"></span>
+  </div>`;
+}
+
+/* ═══════════════ 드로어: PC 상세 ═══════════════ */
+function openPc(key){
+  const p=PCS.find(x=>x.pn===key||x.ad===key); if(!p)return;
+  const o=p.order;
+  $('drawer').innerHTML=`
+  <div class="hd"><b>${p.pn||'미등록 PC'}</b>${stTag(p)}<button class="x" data-close>✕</button></div>
+  <div class="bd">
+    <div class="kv">
+      <span class="k">위치</span><span class="v big">${locStr(p)}</span>
+      <span class="k">상태</span><span class="v">${ST[p.st]} <span class="dim num">· 마지막 신호 ${p.st==='down'?'끊김':p.beat+'초 전'}</span></span>
+      <span class="k">사양</span><span class="v">${p.spec.n} · ${p.spec.core} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
+      <span class="k">그래픽</span><span class="v">${p.spec.gpu}</span>
+      <span class="k">공인IP</span><span class="v num">${p.ip}</span>
+      <span class="k">애니 번호</span><span class="v num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</span>
+      <span class="k">애니 비번</span><span class="v pwrow">
+        <span class="mask" id="dr-pw">••••••</span>
+        <button class="btn btn-o btn-sm" id="dr-pwbtn" data-pn="${p.pn||p.ad}">보기</button></span>
+    </div>
+    ${o? `<div class="blockttl">이 PC를 쓰는 사람</div>
+    <div class="kv">
+      <span class="k">회원</span><span class="v">${o.nm} <span class="dim">${o.via==='kakao'?'카카오':'구글'} 가입</span></span>
+      <span class="k">연락처</span><span class="v num">${o.ph}</span>
+      <span class="k">결제</span><span class="v">${o.pm}${o.card?' · '+o.card:''}${o.depositor?' · 입금자 '+o.depositor:''}</span>
+      <span class="k">이용자</span><span class="v">${o.mis? o.userNm+' · '+(o.userPh||'') : '본인'}</span>
+      <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)} (D-${o.left})</span>
+    </div>
+    ${o.mis? `<div class="mismatch"><b>⚠ 결제자와 이용자가 다릅니다.</b><br>
+      문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다.</div>`:''}`
+    : `<div class="blockttl">임대 정보</div><div class="kv"><span class="k">고객</span><span class="v dim">현재 임대중이 아닙니다</span></div>`}
+    <div class="blockttl">비밀번호 열람 기록 (최근 5건)</div>
+    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,5).map(v=>v.t+' 열람').join('<br>')||'열람 기록 없음'}</div>
+  </div>
+  <div class="dracts">
+    ${p.st==='unv'? `<button class="btn btn-g" data-verok="${p.pn}">접속 확인 완료 → 판매</button>`:''}
+    ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
+    ${p.st==='fix'? `<button class="btn btn-g" data-took="${p.pn}">점검 완료 → 판매</button>`:''}
+    ${p.st==='down'? `<button class="btn btn-r" style="pointer-events:none">⚡ 현장 확인 필요 — ${locStr(p)}</button>`:''}
+    <button class="btn btn-o" data-close>닫기</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+}
+
+/* ═══════════════ 드로어: 주문 상세 ═══════════════ */
+function openOrd(no){
+  const o=ORDERS.find(x=>x.no===no); if(!o)return;
+  const p=o.pc;
+  $('drawer').innerHTML=`
+  <div class="hd"><b>${o.no}</b><span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span>
+    <button class="x" data-close>✕</button></div>
+  <div class="bd">
+    <div class="kv">
+      <span class="k">품번</span><span class="v big">${p.pn} <span class="dim" style="font-size:12px">${locStr(p)}</span></span>
+      <span class="k">사양</span><span class="v">${p.spec.n} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
+      <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
+      <span class="k">금액</span><span class="v num"><b>${w(o.amt)}원</b> <span class="dim">${o.pm}</span></span>
+    </div>
+    <div class="blockttl">신원 — 넷이 다를 수 있습니다</div>
+    <div class="kv">
+      <span class="k">① 회원</span><span class="v">${o.nm} <span class="dim">${o.via==='kakao'?'카카오 (카톡 문의 자동매칭)':'구글 (문의번호로 식별)'}</span></span>
+      <span class="k">② 결제자</span><span class="v">${o.card? o.card+' (카드사 제공)': o.depositor? '입금자 '+o.depositor : o.pm}</span>
+      <span class="k">③ 이용자</span><span class="v">${o.mis? o.userNm+' · '+(o.userPh||'연락처 미입력') : '본인과 동일'}</span>
+      <span class="k">연락처</span><span class="v num">${o.ph}</span>
+    </div>
+    ${o.mis? `<div class="mismatch"><b>⚠ 명의 다름.</b> 문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다 —
+      어느 이름으로 검색해도 이 주문이 나옵니다.</div>`:''}
+    <div class="blockttl">고객이 받은 접속 정보 (결제 직후 화면 + 문자)</div>
+    <div class="credbox">
+      <div class="ch">📱 ${o.nm}님의 가상컴 — 문의번호 ${p.pn}</div>
+      <div class="cb">
+        <div class="cr"><span>접속 주소</span><b class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b></div>
+        <div class="cr"><span>비밀번호</span><b><span class="mask">••••••</span></b></div>
+        <div class="cr"><span>이용 기간</span><b class="num">${fmtD(o.start)} ~ ${fmtD(o.end)}</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="dracts">
+    <button class="btn btn-b" data-resend="${o.no}">접속 정보 문자 재발송</button>
+    <button class="btn btn-o" data-extend="${o.no}">30일 연장 처리</button>
+    <button class="btn btn-o" data-close>닫기</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+}
+function closeDrawer(){$('drawer').classList.remove('on');$('overlay').classList.remove('on')}
+
+/* ═══════════════ 라우터 ═══════════════ */
+const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,rack:vRack,pcs:vPcs,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
+function route(){
+  const v=(location.hash||'#dash').slice(1);
+  const fn=VIEWS[v]||vDash;
+  $('main').innerHTML=fn();
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+  badges();
+  if(v==='find'){const q=$('findq'); if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
+}
+addEventListener('hashchange',route);
+
+/* ═══════════════ 이벤트 (전부 위임 — 재렌더에도 안 죽는다) ═══════════════ */
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(t.closest('[data-close]')||t.id==='overlay'){closeDrawer();return}
+
+  const pc=t.closest('[data-pc]');
+  if(pc&&!t.closest('button')){openPc(pc.dataset.pc);return}
+  const od=t.closest('[data-ord]');
+  if(od&&!t.closest('button')){openOrd(od.dataset.ord);return}
+
+  const rm=t.closest('[data-room]');
+  if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;route();return}
+  const rk=t.closest('[data-rack]');
+  if(rk){RSEL.rack=+rk.dataset.rack;route();return}
+
+  const pg=t.closest('[data-pg]');
+  if(pg&&!pg.disabled){PF.pg=+pg.dataset.pg;route();return}
+  const opg=t.closest('[data-opg]');
+  if(opg&&!opg.disabled){OF.pg=+opg.dataset.opg;route();return}
+
+  /* 미등록 → 품번 부여 → 미검증 */
+  const asg=t.closest('[data-assign]');
+  if(asg){
+    const p=PCS.find(x=>x.ad===asg.dataset.assign); if(!p)return;
+    const inp=document.querySelector('[data-pnin="'+p.ad+'"]');
+    const val=(inp&&inp.value.trim().toUpperCase())||'';
+    if(!/^[KYD]-\d{3}$/.test(val)){alert('품번 형식은 K-001 · Y-042 · D-113 입니다.');return}
+    if(PCS.some(x=>x.pn===val)){alert(val+' 은 이미 사용 중인 품번입니다.');return}
+    p.pn=val; p.st='unv'; seq[p.room]=Math.max(seq[p.room],parseInt(val.slice(2),10));
+    route();return;
+  }
+  /* 검증 확인 / 실패 */
+  const vo=t.closest('[data-verok]');
+  if(vo){const p=PCS.find(x=>x.pn===vo.dataset.verok);if(p){p.st='ok';closeDrawer();route()}return}
+  const vf=t.closest('[data-verfail]');
+  if(vf){const p=PCS.find(x=>x.pn===vf.dataset.verfail);if(p){p.st='fix';route()}return}
+  const tf=t.closest('[data-tofix]');
+  if(tf){const p=PCS.find(x=>x.pn===tf.dataset.tofix);if(p){p.st='fix';closeDrawer();route()}return}
+  const tk=t.closest('[data-took]');
+  if(tk){const p=PCS.find(x=>x.pn===tk.dataset.took);if(p){p.st='ok';closeDrawer();route()}return}
+
+  /* 비번 열람 — 기록 남김 */
+  const ps=t.closest('[data-pwshow]');
+  if(ps){
+    const p=PCS.find(x=>x.pn===ps.dataset.pwshow||x.ad===ps.dataset.pwshow); if(!p)return;
+    const m=document.querySelector('[data-pwm="'+ps.dataset.pwshow+'"]');
+    if(m){m.textContent=p.pw;m.classList.remove('mask')}
+    logView(p.pn||p.ad); ps.remove(); return;
+  }
+  if(t.id==='dr-pwbtn'){
+    const p=PCS.find(x=>x.pn===t.dataset.pn||x.ad===t.dataset.pn); if(!p)return;
+    $('dr-pw').textContent=p.pw; $('dr-pw').classList.remove('mask');
+    logView(p.pn||p.ad); t.remove(); return;
+  }
+
+  if(t.closest('[data-resend]')){alert('실서비스에서는 접속 정보 문자가 재발송됩니다.');return}
+  const ex=t.closest('[data-extend]');
+  if(ex){const o=ORDERS.find(x=>x.no===ex.dataset.extend);
+    if(o){o.left+=30;o.end.setDate(o.end.getDate()+30);ORDERS.sort((a,b)=>a.left-b.left);closeDrawer();route()}return}
+  if(t.id==='noti-all'){alert('실서비스에서는 대상 전원에게 알림톡이 발송되고,\n실패 건은 문자로 자동 전환됩니다.');return}
+
+  if(t.id==='findgo'){FQ=$('findq').value;route();return}
+
+  if(t.id==='set-save'){
+    document.querySelectorAll('[data-set]').forEach(i=>{SET[i.dataset.set]=+i.value||DEFSET[i.dataset.set]});
+    localStorage.setItem('kvc-set',JSON.stringify(SET));
+    $('set-msg').textContent='✓ 저장되었습니다'; setTimeout(()=>{const m=$('set-msg');if(m)m.textContent=''},1800);
+    badges(); return;
+  }
+  if(t.id==='set-reset'){SET=Object.assign({},DEFSET);localStorage.setItem('kvc-set',JSON.stringify(SET));route();return}
+  if(t.id==='gate-go'){tryGate();return}
+});
+document.addEventListener('input',e=>{
+  const f=e.target.closest('[data-f]');
+  if(f){PF[f.dataset.f]=f.value.toLowerCase?f.value.toLowerCase():f.value;
+    if(f.dataset.f!=='q')PF[f.dataset.f]=f.value; PF.pg=1;
+    if(f.tagName==='SELECT')route(); else {clearTimeout(window._ft);window._ft=setTimeout(route,300)} return}
+  const of=e.target.closest('[data-of]');
+  if(of){OF.q=of.value;OF.pg=1;clearTimeout(window._ot);window._ot=setTimeout(route,300);return}
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.id==='findq'){FQ=e.target.value;route()}
+  if(e.key==='Enter'&&e.target.id==='gate-pw'){tryGate()}
+  if(e.key==='Escape')closeDrawer();
+});
+
+/* ═══════════════ 게이트 ═══════════════ */
+function tryGate(){
+  if($('gate-pw').value==='4060'){sessionStorage.setItem('kvc-adm','1');$('gate').classList.add('off')}
+  else{$('gate-err').textContent='코드가 올바르지 않습니다';$('gate-pw').value='';$('gate-pw').focus()}
+}
+if(sessionStorage.getItem('kvc-adm')==='1')$('gate').classList.add('off');
+else setTimeout(()=>$('gate-pw').focus(),100);
+
+/* 하트비트 표시 — 값만 갱신, 화면 재렌더 없음 */
+let tickN=0;
+setInterval(()=>{tickN=(tickN+5)%30;const el=$('tick');if(el)el.textContent=tickN===0?'방금':tickN+'초 전'},5000);
+
+route();
+</script>
+</body>
+</html>

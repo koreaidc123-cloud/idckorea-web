@@ -86,8 +86,7 @@ section.cta .btn-w{color:var(--red)}
 .tb b{color:var(--gold)}
 
 /* ══ 헤더 ══ */
-.hd{position:sticky;top:0;z-index:80;background:rgba(255,255,255,.94);
-  backdrop-filter:blur(16px);border-bottom:1px solid var(--line2)}
+.hd{position:sticky;top:0;z-index:80;background:#fff;border-bottom:1px solid var(--line2)}
 .hd .shell{display:flex;align-items:center;height:78px;gap:38px}
 .gnb{display:flex;gap:2px;margin-right:auto}
 .gnb a{padding:10px 16px;border-radius:7px;font-weight:600;font-size:16px;color:var(--ink2);
@@ -101,9 +100,7 @@ section.cta .btn-w{color:var(--red)}
 .hero{position:relative;height:min(78vh,660px);min-height:480px;overflow:hidden;background:#050912}
 .sl{position:absolute;inset:0;opacity:0;transition:opacity 1.1s ease}
 .sl.on{opacity:1}
-.sl img{width:100%;height:100%;object-fit:cover;transform:scale(1.06);
-  transition:transform 7s linear}
-.sl.on img{transform:scale(1)}
+.sl img{width:100%;height:100%;object-fit:cover}
 /* 글이 얹히는 왼쪽을 확실히 어둡게 눌러 카피가 항상 읽히게 한다 */
 .sl::after{content:'';position:absolute;inset:0;background:
   linear-gradient(96deg,rgba(3,5,12,.95) 0%,rgba(3,5,12,.88) 42%,rgba(3,5,12,.45) 68%,rgba(3,5,12,.15) 100%),
@@ -115,7 +112,7 @@ section.cta .btn-w{color:var(--red)}
 .ht{width:100%;max-width:620px;color:#fff}
 .ht .kick{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;
   border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);
-  backdrop-filter:blur(8px);font-size:13px;font-weight:700}
+  font-size:13px;font-weight:700}
 .ht .kk-wrap{height:32px;margin-bottom:20px}
 .ht h1{font-size:clamp(30px,3.9vw,48px);line-height:1.24;letter-spacing:-.058em;font-weight:800;
   display:block;height:2.48em;white-space:nowrap}
@@ -256,9 +253,7 @@ section.cta .btn-w{color:var(--red)}
 .v:hover{transform:translateY(-4px);box-shadow:var(--sh-l)}
 .v{cursor:pointer;padding:0;width:100%;text-align:inherit;background:#0B0E14}
 /* 배경으로 도는 영상 — 소리 없이 자동 재생, 클릭은 위 오버레이가 받는다 */
-.v .bgv{position:absolute;top:50%;left:50%;width:178%;height:178%;
-  transform:translate(-50%,-50%);border:0;pointer-events:none;opacity:.72;transition:opacity .4s}
-.v.off .bgv{opacity:0}
+.v .thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.88}
 .v::after{content:'';position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(0deg,rgba(5,8,16,.88) 0%,rgba(5,8,16,.2) 52%,rgba(5,8,16,.4) 100%)}
 .v .p{position:relative;z-index:2;text-align:center;color:#fff;display:block}
@@ -273,7 +268,7 @@ section.cta .btn-w{color:var(--red)}
   text-shadow:0 2px 14px rgba(0,0,0,.6)}
 .v .p span{display:block;font-size:13.5px;color:rgba(255,255,255,.75);margin-top:4px;
   text-shadow:0 1px 10px rgba(0,0,0,.6)}
-.v.off .p i{background:rgba(0,0,0,.7)}
+
 
 /* ══ 상담톡 띠 ══ */
 .talk{background:var(--gold);padding:34px 0}
@@ -534,8 +529,10 @@ section.cta .btn-w{color:var(--red)}
       <!-- 화면에 들어오면 소리 없이 자동 재생. 누르면 유튜브가 새 창으로 열린다.
            한 번 더 누르면 배경 재생이 꺼진다. -->
       <button class="v" data-yt="7jDfnU5swvw" data-start="1" aria-label="가상컴 접속방법 영상 보기">
+        <img class="thumb" src="https://i.ytimg.com/vi/7jDfnU5swvw/hqdefault.jpg" alt="" loading="lazy">
         <span class="p"><i></i><b>가상컴 접속방법</b><span>결제 후 바로 접속하는 방법</span></span></button>
       <button class="v" data-yt="tXHqbPxdhfQ" data-start="3" aria-label="가상컴 활용방법 영상 보기">
+        <img class="thumb" src="https://i.ytimg.com/vi/tXHqbPxdhfQ/hqdefault.jpg" alt="" loading="lazy">
         <span class="p"><i></i><b>가상컴 활용방법</b><span>여러 대를 한 화면에서 관리하기</span></span></button>
     </div>
   </div>
@@ -789,39 +786,13 @@ const closePop=()=>{$('pop').classList.add('off');document.body.classList.remove
 $('pop-close').onclick=closePop;
 $('pop-today').onclick=()=>{sessionStorage.setItem('kvc-pop','off');closePop()};
 
-/* 영상 — 누르면 그 자리에서 바로 재생. 썸네일만 먼저 띄워 첫 로딩을 가볍게 한다 */
+/* 영상 — 유튜브 실제 썸네일을 배경으로, 누르면 새 창에서 재생.
+   배경 iframe 자동재생은 영상 2개를 상시 디코딩해 저사양에서
+   화면이 검게 뭉개지는 원인이 되어 뺐다. */
 document.querySelectorAll('.v[data-yt]').forEach(v=>{
-  const id=v.dataset.yt, st=v.dataset.start||0;
-
-  const mount=()=>{
-    if(v.querySelector('.bgv'))return;
-    const f=document.createElement('iframe');
-    f.className='bgv';
-    /* 소리 없이 자동 재생 + 반복. 컨트롤·정보 숨겨 배경 영상처럼 보이게 한다 */
-    f.src=`https://www.youtube-nocookie.com/embed/${id}`
-        +`?autoplay=1&mute=1&loop=1&playlist=${id}&start=${st}`
-        +`&controls=0&modestbranding=1&rel=0&playsinline=1&disablekb=1&iv_load_policy=3`;
-    f.title='한국 가상컴 안내 영상';
-    f.allow='autoplay; encrypted-media; picture-in-picture';
-    f.tabIndex=-1;
-    v.insertBefore(f, v.firstChild);
-  };
-  const unmount=()=>{ const f=v.querySelector('.bgv'); if(f)f.remove(); };
-
-  /* 화면에 보일 때만 재생 — 안 보이면 내려서 데이터를 아낀다 */
-  if('IntersectionObserver' in window){
-    new IntersectionObserver(es=>es.forEach(e=>{
-      if(v.classList.contains('off'))return;
-      e.isIntersecting ? mount() : unmount();
-    }),{threshold:.25}).observe(v);
-  } else mount();
-
   v.addEventListener('click',()=>{
-    if(v.classList.contains('off')){         // 꺼진 상태에서 누르면 다시 켠다
-      v.classList.remove('off'); mount(); return;
-    }
-    window.open(`https://www.youtube.com/watch?v=${id}&t=${st}s`,'_blank','noopener');
-    v.classList.add('off'); unmount();        // 새 창으로 넘어갔으니 배경 재생은 끈다
+    window.open('https://www.youtube.com/watch?v='+v.dataset.yt+'&t='+(v.dataset.start||0)+'s',
+      '_blank','noopener');
   });
 });
 
