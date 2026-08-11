@@ -3,8 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>한국 가상컴 | 가상컴퓨터 임대솔루션 전문회사</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<title>원격PC 임대 · 가상PC 대여 | 한국 가상컴</title>
+<meta name="description" content="원격PC 임대 전문. 가상컴퓨터·가상데스크톱을 월 40,000원부터. 결제 확인 즉시 자동 개통, 개별 공인IP, 무약정 30일 갱신. 6년 무중단 운영.">
+<meta name="keywords" content="원격PC,가상PC,가상컴퓨터,가상데스크톱,원격피시,가상서버,원격PC임대,원격PC대여,가상컴퓨터임대,가상컴퓨터대여,가상컴,원격컴퓨터임대,원격컴퓨터대여,가상서버임대,PC원격임대,가상피씨,가상화PC,원격컴">
+<meta name="author" content="한국가상컴">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://idckorea-dusky.vercel.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="한국 가상컴">
+<meta property="og:title" content="원격PC 임대 · 가상PC 대여 | 한국 가상컴">
+<meta property="og:description" content="원격PC 임대 전문. 가상컴퓨터·가상데스크톱을 월 40,000원부터. 결제 확인 즉시 자동 개통, 개별 공인IP, 무약정 30일 갱신. 6년 무중단 운영.">
+<meta property="og:url" content="https://idckorea-dusky.vercel.app/">
+<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/hero3.jpg">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="naver-site-verification" content=""><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 /* ═══════════════════════════════════════════════════════════════
    한국 가상컴 — 전면 개편 (시안 E)
@@ -26,6 +39,7 @@
 html{scroll-behavior:smooth}
 body{font-family:Pretendard,'Pretendard Variable',-apple-system,'Malgun Gothic',sans-serif;
   background:#fff;color:var(--ink);font-size:16px;line-height:1.65;letter-spacing:-.022em}
+body.lock{overflow:hidden}
 img{display:block;max-width:100%}a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
 .shell{max-width:var(--shell);margin:0 auto;padding:0 28px}
@@ -126,9 +140,10 @@ section.cta .btn-w{color:var(--red)}
   border-top:1px solid rgba(255,255,255,.14);
   border-bottom:1px solid rgba(255,255,255,.08)}
 /* 흐르는 사양 띠 — 오른쪽에서 왼쪽으로 끊김 없이 */
-.live{overflow:hidden;padding:16px 0;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+.live{overflow:hidden;padding:16px 0}
+.live::before,.live::after{content:'';position:absolute;top:0;bottom:0;width:90px;z-index:2;pointer-events:none}
+.live::before{left:0;background:linear-gradient(90deg,#0A1030,rgba(10,16,48,0))}
+.live::after{right:0;background:linear-gradient(270deg,#0A1030,rgba(10,16,48,0))}
 .mq{display:flex;width:max-content;animation:mq 42s linear infinite}
 .live:hover .mq{animation-play-state:paused}
 @keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
@@ -347,10 +362,10 @@ section.cta .btn-w{color:var(--red)}
 .stk .p b{color:#fff;font-size:18px;font-weight:800}
 
 /* ══ 팝업 ══ */
-.pop{position:fixed;inset:0;z-index:200;background:rgba(6,9,18,.72);backdrop-filter:blur(4px);
+.pop{position:fixed;inset:0;z-index:200;background:rgba(5,8,16,.9);
   display:grid;place-items:center;padding:22px}
 .pop.off{display:none}
-.pop{background:rgba(4,6,12,.82);backdrop-filter:blur(8px)}
+.pop{background:rgba(5,8,16,.92)}
 .pop-in{position:relative;width:min(460px,100%);border-radius:20px;overflow:hidden;color:#fff;
   border:1px solid rgba(255,255,255,.14);box-shadow:0 40px 90px rgba(0,0,0,.65);
   background:#0A0C12;animation:popIn .42s cubic-bezier(.2,.8,.3,1)}
@@ -440,7 +455,11 @@ section.cta .btn-w{color:var(--red)}
 @keyframes cntPop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
 .js .pt div{opacity:0;transition:opacity .5s cubic-bezier(.2,.7,.3,1)}
 .js .pt.in div{opacity:1}
-</style>
+/* 로고 — 원본 태극(홍 왼쪽위 · 청 오른쪽아래) + 두꺼운 국문 워드마크 */
+.lgm{flex:none}
+.lg{align-items:center}
+.lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
+.lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
 </head>
 <body>
 
@@ -450,7 +469,7 @@ section.cta .btn-w{color:var(--red)}
 <!-- ═══ 헤더 ═══ -->
 <header class="hd"><div class="shell">
   <a class="lg" href="#">
-    <img src="img/logo.png" alt="한국 가상컴" width="42" height="42">
+    <svg class="lgm" width="44" height="44" viewBox="0 0 100 100" aria-hidden><g transform="rotate(-28 50 50)"><path d="M50 4a46 46 0 0 0 0 92 23 23 0 0 1 0-46 23 23 0 0 0 0-46Z" fill="#E8412E"/><path d="M50 4a46 46 0 0 1 0 92 23 23 0 0 0 0-46 23 23 0 0 1 0-46Z" fill="#1B4FD8"/></g></svg>
     <span class="tx"><b>한국 가상컴</b><span>가상컴퓨터 임대솔루션 전문회사</span></span>
   </a>
   <nav class="gnb">
@@ -467,9 +486,9 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 히어로 슬라이더 ═══ -->
 <section class="hero" id="hero">
-  <div class="sl on"><img src="img/hero1.png" alt=""></div>
-  <div class="sl"><img src="img/hero3.png" alt=""></div>
-  <div class="sl"><img src="img/hero2.png" alt=""></div>
+  <div class="sl on"><img src="img/hero1.jpg" alt=""></div>
+  <div class="sl"><img src="img/hero3.jpg" alt=""></div>
+  <div class="sl"><img src="img/hero2.jpg" alt=""></div>
 
   <div class="hero-tx on"><div class="shell"><div class="ht" id="ht"></div></div></div>
   <div class="dots" id="dots"></div>
@@ -524,7 +543,7 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 회사소개 요약 (자세한 내용은 서브페이지) ═══ -->
 <section class="sec ab-band">
-  <div class="ab-bg"><img src="img/idc-wide.png" alt="24시간 Full가동되는 자체 서버실"></div>
+  <div class="ab-bg"><img src="img/idc-wide.jpg" alt="24시간 Full가동되는 자체 서버실"></div>
   <div class="shell ab-in">
     <div class="lb">회사소개</div>
     <h2>가동을 시작한 이후 <em>6년</em>,<br>단 한 번도 멈추지 않았습니다</h2>
@@ -576,7 +595,7 @@ section.cta .btn-w{color:var(--red)}
   <div class="ft-t">
     <div>
       <div class="lg w" style="margin-bottom:14px">
-        <img src="img/logo.png" alt="" width="36" height="36">
+        <svg class="lgm" width="38" height="38" viewBox="0 0 100 100" aria-hidden><g transform="rotate(-28 50 50)"><path d="M50 4a46 46 0 0 0 0 92 23 23 0 0 1 0-46 23 23 0 0 0 0-46Z" fill="#E8412E"/><path d="M50 4a46 46 0 0 1 0 92 23 23 0 0 0 0-46 23 23 0 0 1 0-46Z" fill="#1B4FD8"/></g></svg>
         <span class="tx"><b>한국 가상컴</b><span>가상컴퓨터 임대솔루션 전문회사</span></span>
       </div>
       <div>24시간 Full가동 · 6년 무중단<br>결제 확인 즉시 자동 개통</div>
@@ -618,8 +637,8 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 불법사용 경고 팝업 ═══ -->
 <div class="pop" id="pop"><div class="pop-in">
-  <div class="pop-bg"><img src="img/pop-warn.png" alt=""
-       onerror="this.src='img/idc-rack.png'"></div>
+  <div class="pop-bg"><img src="img/pop-warn.jpg" alt=""
+       onerror="this.src='img/idc-rack.jpg'"></div>
   <div class="pop-h"><span class="bar"><i></i><i></i><i></i></span> 이용 제한 안내</div>
   <div class="pop-b">
     <div class="ic"></div>
@@ -693,7 +712,7 @@ function prods(){
     const off=Math.round((1-x.p/x.list)*100), few=x.k<=10, u=USECAT[x.u];
     return `<div class="pc">
       <div class="pc-img">
-        <img src="img/${x.img}.png" alt="${x.n}">
+        <img src="img/${x.img}.jpg" alt="${x.n}">
         <div class="pc-ov">
           <div class="nn">${x.n}</div>
           <div class="cc">${x.c} · 램 ${x.ram}GB</div>
@@ -717,13 +736,13 @@ function prods(){
 }
 /* 활용 분야 */
 $('uses').innerHTML=USES.map(([t,d,img])=>
- `<a class="u" href="live.html"><img src="img/${img}.png" alt="${t}"
-   onerror="this.src='img/s1-game.png'">
+ `<a class="u" href="live.html"><img src="img/${img}.jpg" alt="${t}"
+   onerror="this.src='img/s1-game.jpg'">
    <div class="tx"><b>${t}<i>→</i></b><span>${d}</span></div></a>`).join('');
 /* Q&A */
 $('qalist').innerHTML=QA.map(([t,img],i)=>
  `<a class="q" href="qa.html#q${i+1}">
-   <div class="cap"><img src="img/${img}.png" alt="${t}"></div>
+   <div class="cap"><img src="img/${img}.jpg" alt="${t}"></div>
    <div class="bb"><b>${t}</b><span>자세히 보기 →</span></div></a>`).join('');
 
 /* 실시간 재고 띠 */
@@ -765,8 +784,10 @@ $('dots').addEventListener('click',e=>{
 
 /* 팝업 */
 if(sessionStorage.getItem('kvc-pop')==='off') $('pop').classList.add('off');
-$('pop-close').onclick=()=>$('pop').classList.add('off');
-$('pop-today').onclick=()=>{sessionStorage.setItem('kvc-pop','off');$('pop').classList.add('off')};
+else document.body.classList.add('lock');
+const closePop=()=>{$('pop').classList.add('off');document.body.classList.remove('lock')};
+$('pop-close').onclick=closePop;
+$('pop-today').onclick=()=>{sessionStorage.setItem('kvc-pop','off');closePop()};
 
 /* 영상 — 누르면 그 자리에서 바로 재생. 썸네일만 먼저 띄워 첫 로딩을 가볍게 한다 */
 document.querySelectorAll('.v[data-yt]').forEach(v=>{
@@ -805,8 +826,9 @@ document.querySelectorAll('.v[data-yt]').forEach(v=>{
 });
 
 /* 재고 미세 변동 */
-setInterval(()=>{const x=P[Math.floor(Math.random()*P.length)];
-  x.k=Math.max(1,x.k+(Math.random()<.5?-1:1));prods();live()},5000);
+/* 재고 숫자를 카드에서 뺀 뒤로는 주기 재렌더가 필요 없다.
+   5초마다 innerHTML 을 다시 그리면 이미지 26장이 매번 재디코딩되어
+   렌더러가 쉬지 못하고, 저사양 환경에서 화면이 검게 나온다. */
 
 prods();live();paint();
 
