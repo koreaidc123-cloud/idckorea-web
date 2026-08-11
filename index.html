@@ -235,11 +235,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .v{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#0B0E14;
   border:1px solid var(--line);display:grid;place-items:center;transition:.2s}
 .v:hover{transform:translateY(-4px);box-shadow:var(--sh-l)}
-.v{cursor:pointer;padding:0;width:100%;text-align:inherit}
-.v img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.62;transition:.4s}
-.v:hover img{opacity:.5;transform:scale(1.03)}
-.v::after{content:'';position:absolute;inset:0;
-  background:linear-gradient(0deg,rgba(5,8,16,.86) 0%,rgba(5,8,16,.25) 55%,rgba(5,8,16,.35) 100%)}
+.v{cursor:pointer;padding:0;width:100%;text-align:inherit;background:#0B0E14}
+/* 배경으로 도는 영상 — 소리 없이 자동 재생, 클릭은 위 오버레이가 받는다 */
+.v .bgv{position:absolute;top:50%;left:50%;width:178%;height:178%;
+  transform:translate(-50%,-50%);border:0;pointer-events:none;opacity:.72;transition:opacity .4s}
+.v.off .bgv{opacity:0}
+.v::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(0deg,rgba(5,8,16,.88) 0%,rgba(5,8,16,.2) 52%,rgba(5,8,16,.4) 100%)}
 .v .p{position:relative;z-index:2;text-align:center;color:#fff;display:block}
 /* 유튜브 재생 삼각형 */
 .v .p i{display:grid;place-items:center;width:70px;height:70px;border-radius:18px;margin:0 auto 14px;
@@ -252,9 +254,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   text-shadow:0 2px 14px rgba(0,0,0,.6)}
 .v .p span{display:block;font-size:13.5px;color:rgba(255,255,255,.75);margin-top:4px;
   text-shadow:0 1px 10px rgba(0,0,0,.6)}
-.v.play{cursor:default}
-.v.play::after,.v.play .p,.v.play img{display:none}
-.v iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.v.off .p i{background:rgba(0,0,0,.7)}
 
 /* ══ 상담톡 띠 ══ */
 .talk{background:var(--gold);padding:34px 0}
@@ -458,14 +458,11 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
     <div class="sh"><h2>쉽고빠른 영상 <em>guide</em></h2>
       <p>처음이셔도 괜찮습니다. 접속부터 활용까지 영상으로 안내해 드립니다.</p></div>
     <div class="vids">
-      <!-- 썸네일만 먼저 띄우고, 누르면 그 자리에서 유튜브가 바로 재생된다 -->
-      <button class="v" data-yt="7jDfnU5swvw" data-start="1" aria-label="가상컴 접속방법 영상 재생">
-        <img src="https://i.ytimg.com/vi/7jDfnU5swvw/maxresdefault.jpg"
-             onerror="this.src='https://i.ytimg.com/vi/7jDfnU5swvw/hqdefault.jpg'" alt="">
+      <!-- 화면에 들어오면 소리 없이 자동 재생. 누르면 유튜브가 새 창으로 열린다.
+           한 번 더 누르면 배경 재생이 꺼진다. -->
+      <button class="v" data-yt="7jDfnU5swvw" data-start="1" aria-label="가상컴 접속방법 영상 보기">
         <span class="p"><i></i><b>가상컴 접속방법</b><span>결제 후 바로 접속하는 방법</span></span></button>
-      <button class="v" data-yt="tXHqbPxdhfQ" data-start="3" aria-label="가상컴 활용방법 영상 재생">
-        <img src="https://i.ytimg.com/vi/tXHqbPxdhfQ/maxresdefault.jpg"
-             onerror="this.src='https://i.ytimg.com/vi/tXHqbPxdhfQ/hqdefault.jpg'" alt="">
+      <button class="v" data-yt="tXHqbPxdhfQ" data-start="3" aria-label="가상컴 활용방법 영상 보기">
         <span class="p"><i></i><b>가상컴 활용방법</b><span>여러 대를 한 화면에서 관리하기</span></span></button>
     </div>
   </div>
@@ -482,7 +479,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
     <div class="ab-n">
       <div><b class="num">6년</b><span>무중단 가동</span></div>
       <div><b class="num">3곳</b><span>자체 서버실 운영</span></div>
-      <div><b class="num">1,000대</b><span>보유 임대 PC</span></div>
+      <div><b class="num">1,200+</b><span>보유 임대 PC</span></div>
       <div><b class="num">24시간</b><span>Full 가동</span></div>
     </div>
     <a class="btn btn-w" href="about.html" style="margin-top:30px">회사소개 자세히 보기 →</a>
@@ -714,16 +711,37 @@ $('pop-today').onclick=()=>{sessionStorage.setItem('kvc-pop','off');$('pop').cla
 
 /* 영상 — 누르면 그 자리에서 바로 재생. 썸네일만 먼저 띄워 첫 로딩을 가볍게 한다 */
 document.querySelectorAll('.v[data-yt]').forEach(v=>{
-  v.addEventListener('click',()=>{
-    if(v.classList.contains('play'))return;
-    const id=v.dataset.yt, st=v.dataset.start||0;
+  const id=v.dataset.yt, st=v.dataset.start||0;
+
+  const mount=()=>{
+    if(v.querySelector('.bgv'))return;
     const f=document.createElement('iframe');
-    f.src=`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&start=${st}&rel=0&modestbranding=1&playsinline=1`;
+    f.className='bgv';
+    /* 소리 없이 자동 재생 + 반복. 컨트롤·정보 숨겨 배경 영상처럼 보이게 한다 */
+    f.src=`https://www.youtube-nocookie.com/embed/${id}`
+        +`?autoplay=1&mute=1&loop=1&playlist=${id}&start=${st}`
+        +`&controls=0&modestbranding=1&rel=0&playsinline=1&disablekb=1&iv_load_policy=3`;
     f.title='한국 가상컴 안내 영상';
-    f.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-    f.allowFullscreen=true;
-    v.classList.add('play');
-    v.appendChild(f);
+    f.allow='autoplay; encrypted-media; picture-in-picture';
+    f.tabIndex=-1;
+    v.insertBefore(f, v.firstChild);
+  };
+  const unmount=()=>{ const f=v.querySelector('.bgv'); if(f)f.remove(); };
+
+  /* 화면에 보일 때만 재생 — 안 보이면 내려서 데이터를 아낀다 */
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(es=>es.forEach(e=>{
+      if(v.classList.contains('off'))return;
+      e.isIntersecting ? mount() : unmount();
+    }),{threshold:.25}).observe(v);
+  } else mount();
+
+  v.addEventListener('click',()=>{
+    if(v.classList.contains('off')){         // 꺼진 상태에서 누르면 다시 켠다
+      v.classList.remove('off'); mount(); return;
+    }
+    window.open(`https://www.youtube.com/watch?v=${id}&t=${st}s`,'_blank','noopener');
+    v.classList.add('off'); unmount();        // 새 창으로 넘어갔으니 배경 재생은 끈다
   });
 });
 
