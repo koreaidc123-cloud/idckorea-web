@@ -294,8 +294,6 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   <!-- 탭 -->
   <div class="tabs" id="tabs">
     <button data-p="0" class="on">상품정보</button>
-    <button data-p="1">사용후기 <b class="num">336</b></button>
-    <button data-p="2">상품문의</button>
     <button data-p="3">환불 · 취소</button>
   </div>
 
@@ -315,39 +313,18 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
        카카오톡 상담으로 문의해 주시면 안내해 드리겠습니다.</p>
   </div>
 
-  <div class="pane" data-p="1">
-    <div class="rvhead">
-      <div><div class="s num">4.95</div><div class="st">★★★★★</div>
-        <div class="c">네이버 스마트스토어 리뷰 <b class="num">336</b>건</div></div>
-      <div class="rvtags" id="rvtags"></div>
-    </div>
-    <div class="rv"><div class="st">★★★★★</div>
-      <p>“친절하고 응대도 빠르고 좋아요”</p>
-      <div class="m"><b>ksa5***</b><span class="num">26.07.21</span><em>재구매</em></div></div>
-    <p style="font-size:13.5px;color:var(--ink4);margin-top:14px">
-      ※ 위 태그는 네이버가 실제 후기에서 자동으로 추출한 것입니다. 저희가 고른 문구가 아닙니다.</p>
-  </div>
-
-  <div class="pane" data-p="2">
-    <h3>상품에 대해 궁금한 점이 있으신가요</h3>
-    <p>가장 빠른 방법은 카카오톡 상담입니다. 상담 가능 시간은 오전 09시부터 오후 12시까지이며
-       (점심 12:00~13:00), 유선 상담도 함께 운영하고 있습니다.</p>
-    <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
-      <a class="btn btn-b" href="http://pf.kakao.com/_GxcgFxj" target="_blank" rel="noopener">💬 카카오톡 상담하기</a>
-      <a class="btn btn-o" href="tel:01084468710">📞 010-8446-8710</a>
-      <button class="btn btn-o">상품문의 글쓰기</button>
-    </div>
-  </div>
-
   <div class="pane" data-p="3">
     <h3>환불 · 취소 규정</h3>
-    <p>무약정 상품이라 위약금이 없습니다. 남은 기간은 일할로 계산해 환불해 드립니다.</p>
+    <p>무약정 상품이라 위약금이 없습니다. 사용하신 기간만 일할로 계산하고
+       <b>남은 금액은 현금으로 환불</b>해 드립니다. 포인트로 대체하지 않습니다.</p>
     <ul>
-      <li><b>이용 시작 전 취소</b> — 전액 환불</li>
-      <li><b>7일 이내 해지</b> — 남은 기간 정산 후 현금 90% 또는 포인트 100% 중 선택</li>
-      <li><b>7일 이후 해지</b> — 남은 기간 정산 후 포인트로 환급</li>
-      <li><b>서버 장애로 이용 불가</b> — 즉시 동급 이상 PC로 교체, 중단된 기간만큼 이용 기간 연장</li>
+      <li><b>개통 전 취소</b> — 전액 환불</li>
+      <li><b>개통 후 해지</b> — 사용일수를 일할 차감한 잔액을 현금 환불</li>
+      <li><b>서버 장애로 이용 불가</b> — 즉시 동급 이상 PC로 교체하고, 중단된 기간만큼 이용 기간을 연장해 드립니다</li>
+      <li><b>환불 처리 기간</b> — 접수 후 영업일 기준 3일 이내, 결제하신 수단으로 환급</li>
     </ul>
+    <p style="font-size:14px;color:var(--ink3)">
+      ※ 일할 계산식 — 결제금액 ÷ 결제일수 × 남은 일수</p>
     <h3>고장 시 처리</h3>
     <p>서버실에 임직원이 상주하며 24시간 모니터링하고 있습니다. 신호가 끊기면 저희가 먼저 확인하고
        조치합니다. 수리가 길어질 경우 동급 이상 PC로 우선 교체해 드립니다.</p>
@@ -383,15 +360,11 @@ const P=[
  {id:'kk',n:'카카오페이',t:'<b>결제 즉시</b> 개통됩니다. 접속 정보는 카카오톡으로도 보내드립니다.'},
  {id:'nv',n:'네이버페이',t:'<b>결제 즉시</b> 개통됩니다. 네이버 포인트도 그대로 적립됩니다.'},
 ];
-const TAGS=[['응대가 빨라요',1],['끊김이 없어요',1],['바로 사용 가능해요',1],['친절해요',1],
- ['사양이 좋아요',0],['속도가 빨라요',0],['안전해요',0],['가격이 저렴해요',0],
- ['연결이 잘 돼요',0],['관리가 편해요',0],['성능이 좋아요',0],['구매를 추천해요',0]];
 const BASE=65000, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
 let S={d:30,p:'vb'};
 
 $('thumbs').innerHTML=IMGS.map((x,i)=>
  `<button class="${i?'':'on'}" data-i="${i}"><img src="img/${x}.png" alt=""></button>`).join('');
-$('rvtags').innerHTML=TAGS.map(([t,h])=>`<span class="${h?'hot':''}">${t}</span>`).join('');
 
 function terms(){$('terms').innerHTML=TM.map(t=>
  `<button class="${S.d===t.d?'on':''}" data-t="${t.d}"><b>${t.n}</b>
