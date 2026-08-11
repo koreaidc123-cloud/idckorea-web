@@ -780,11 +780,19 @@ $('dots').addEventListener('click',e=>{
 });
 
 /* 팝업 */
+/* 팝업 — 열려 있는 동안엔 스크롤을 잠그고,
+   어떤 경로로든(배경 클릭·휠·터치·ESC) 즉시 닫히게 해서
+   "어두운 막이 씌워진 채 스크롤되는" 상태가 아예 생길 수 없게 한다 */
 if(sessionStorage.getItem('kvc-pop')==='off') $('pop').classList.add('off');
 else document.body.classList.add('lock');
 const closePop=()=>{$('pop').classList.add('off');document.body.classList.remove('lock')};
 $('pop-close').onclick=closePop;
 $('pop-today').onclick=()=>{sessionStorage.setItem('kvc-pop','off');closePop()};
+$('pop').addEventListener('click',e=>{if(e.target.id==='pop')closePop()});
+['wheel','touchmove'].forEach(ev=>addEventListener(ev,()=>{
+  if(!$('pop').classList.contains('off'))closePop();
+},{passive:true}));
+addEventListener('keydown',e=>{if(e.key==='Escape')closePop()});
 
 /* 영상 — 유튜브 실제 썸네일을 배경으로, 누르면 새 창에서 재생.
    배경 iframe 자동재생은 영상 2개를 상시 디코딩해 저사양에서
