@@ -423,6 +423,23 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   .quick .shell{grid-template-columns:repeat(3,1fr)}
   .stk .p{display:none}
 }
+/* ══ 스크롤 등장 · 숫자 카운트업 ══
+   기본은 항상 보이게 두고 JS 가 살아 있을 때만 감춘다 (전 페이지 안 보이는 사고 방지) */
+.js .rv{opacity:0;transform:translateY(22px);
+  transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
+.js .rv.in{opacity:1;transform:none}
+.js .rv-d1{transition-delay:.08s}.js .rv-d2{transition-delay:.16s}
+.js .rv-d3{transition-delay:.24s}.js .rv-d4{transition-delay:.32s}
+@media(prefers-reduced-motion:reduce){.js .rv{opacity:1;transform:none;transition:none}}
+.pc,.u,.q,.g{will-change:transform}
+.pc .pc-img img{transition:transform .6s cubic-bezier(.2,.7,.3,1)}
+.pc:hover .pc-img img{transform:scale(1.08)}
+.pc-b .btn{transition:.18s}
+.pc:hover .pc-b .btn{box-shadow:0 10px 24px rgba(226,35,60,.3)}
+.cnt.pop{animation:cntPop .5s cubic-bezier(.2,.9,.3,1)}
+@keyframes cntPop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.js .pt div{opacity:0;transform:translateY(12px);transition:.5s cubic-bezier(.2,.7,.3,1)}
+.js .pt.in div{opacity:1;transform:none}
 </style>
 </head>
 <body>
@@ -792,6 +809,45 @@ setInterval(()=>{const x=P[Math.floor(Math.random()*P.length)];
   x.k=Math.max(1,x.k+(Math.random()<.5?-1:1));prods();live()},5000);
 
 prods();live();paint();
+
+/* ══ 스크롤 등장 · 숫자 카운트업 ══════════════════════════ */
+document.documentElement.classList.add('js');
+(function(){
+  document.querySelectorAll('.sh, .prods > *, .uses > *, .vids > *, .pt, .qa > *, .ab-in, .pnote')
+    .forEach(el=>{
+      el.classList.add('rv');
+      const p=el.parentElement;
+      if(p && /prods|uses|qa|vids/.test(p.className)){
+        el.classList.add('rv-d'+([...p.children].indexOf(el)%4+1));
+      }
+    });
+  document.querySelectorAll('.pt div').forEach((el,i)=>el.style.transitionDelay=(i*.05)+'s');
+
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting)return;
+    e.target.classList.add('in'); io.unobserve(e.target);
+  }),{threshold:.12,rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+
+  /* 6년 · 3곳 · 1,200+ · 24시간 처럼 단위가 붙어도 숫자만 올린다 */
+  const cio=new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting)return;
+    const el=e.target, m=el.textContent.trim().match(/^([^\d]*)([\d,]+)(.*)$/);
+    cio.unobserve(el);
+    if(!m)return;
+    const pre=m[1], suf=m[3], target=parseInt(m[2].replace(/,/g,''),10);
+    if(!target)return;
+    const dur=1100, t0=performance.now();
+    el.classList.add('cnt');
+    const tick=now=>{
+      const p=Math.min(1,(now-t0)/dur), e2=1-Math.pow(1-p,3);
+      el.textContent=pre+Math.round(target*e2).toLocaleString('ko-KR')+suf;
+      if(p<1)requestAnimationFrame(tick); else el.classList.add('pop');
+    };
+    requestAnimationFrame(tick);
+  }),{threshold:.5});
+  document.querySelectorAll('.ab-n b').forEach(el=>cio.observe(el));
+})();
 </script>
 </body>
 </html>
