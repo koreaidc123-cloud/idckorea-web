@@ -380,8 +380,47 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   <button class="btn btn-r" onclick="document.getElementById('go').click()">결제하고 바로 이용하기 →</button>
 </div></div>
 
+<script src="https://js.tosspayments.com/v2/standard"></script>
 <script>
 const IMGS=['pc-black','pc-cpu','idc-rack','idc-hall'];
+/* 토스페이먼츠 — 공식 문서 공개 샌드박스 키 (실결제 불가).
+   실서비스 전환 시: 클라이언트 키만 교체 + Vercel 환경변수에 시크릿 키 등록 */
+const TOSS_CK='test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
+let _pay=null;
+function tossPay(){
+  if(!_pay)_pay=TossPayments(TOSS_CK).payment({customerKey:'GUEST-'+Math.random().toString(36).slice(2,12)});
+  return _pay;
+}
+async function startPay(){
+  const m=TM.find(t=>t.d===S.d);
+  const base=Math.round(BASE*S.d/30), tot=base-Math.round(base*m.o/100);
+  const orderId='KVC'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*900+100);
+  sessionStorage.setItem('kvc-last-order',JSON.stringify(
+    {orderId,pn:'Y-042',name:'라이젠 3700X 8코어',days:S.d,amt:tot,pm:S.p}));
+  const common={
+    amount:{currency:'KRW',value:tot},
+    orderId, orderName:'라이젠 3700X 가상컴 '+m.n,
+    successUrl:location.origin+'/success.html',
+    failUrl:location.origin+'/fail.html',
+  };
+  try{
+    const pay=tossPay();
+    if(S.p==='vb'){
+      await pay.requestPayment({method:'VIRTUAL_ACCOUNT',...common,
+        virtualAccount:{cashReceipt:{type:'소득공제'},useEscrow:false,validHours:24}});
+    }else if(S.p==='kk'){
+      await pay.requestPayment({method:'EASY_PAY',easyPay:{provider:'KAKAOPAY'},...common});
+    }else if(S.p==='nv'){
+      await pay.requestPayment({method:'EASY_PAY',easyPay:{provider:'NAVERPAY'},...common});
+    }else{
+      await pay.requestPayment({method:'CARD',...common,
+        card:{useEscrow:false,flowMode:'DEFAULT',useCardPoint:false,useAppCardOnly:false}});
+    }
+  }catch(e){
+    if(e&&e.code==='USER_CANCEL')return;              // 고객이 창을 닫음 — 조용히
+    alert('결제창을 열지 못했습니다.\n'+(e&&(e.message||e.code)||'잠시 후 다시 시도해 주세요.'));
+  }
+}
 const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
 const LOGO={
  vb:'<svg width="22" height="22" viewBox="0 0 24 24" fill="#0B2FE8"><path d="M12 2 2 7v2h20V7L12 2Zm-7 9v7H3v2h18v-2h-2v-7h-2v7h-3v-7h-2v7H9v-7H7v7H5v-7Z"/></svg>',
@@ -432,8 +471,7 @@ document.addEventListener('click',e=>{
    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('on'));tb.classList.add('on');
    document.querySelectorAll('.pane').forEach(x=>x.classList.toggle('on',x.dataset.p===n));
    window.scrollBy({top:-1});return}
- if(e.target.closest('#go'))
-   alert('실제 서비스에서는 여기서 결제창이 열리고,\n결제 확인 즉시 접속 주소와 비밀번호가 표시됩니다.');
+ if(e.target.closest('#go')){startPay()}
 });
 terms();pays();calc();
 </script>
