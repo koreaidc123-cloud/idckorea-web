@@ -262,13 +262,38 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
   b.classList.add('on');
   document.querySelectorAll('.pane').forEach(p=>p.hidden = p.dataset.p!==b.dataset.t);
 }));
-/* 로그인 (실서비스에서는 각 소셜 인증으로 연결) */
+/* ── 세션 ──
+   실서비스에서는 카카오/구글 OAuth 후 서버가 세션 쿠키를 내려준다.
+   지금은 그 자리에 같은 모양의 데이터를 만들어 로그인 이후 화면이 실제로 돌아가게 한다. */
+const AFTER=new URLSearchParams(location.search).get('next')||'mypage.html';
+function signIn(via,name,phone){
+  const today=new Date();
+  const mk=(pn,spec,ad,pw,days,left)=>{
+    const end=new Date(today); end.setDate(end.getDate()+left);
+    const start=new Date(end); start.setDate(start.getDate()-days);
+    return {pn,spec,ad,pw,days,left,start:start.toISOString(),end:end.toISOString()};
+  };
+  const u={via,name,phone,
+    pcs:[ mk('Y-042','라이젠 3700X · 8코어 · 램 32GB','1 042 887 613','한국1212',30,4),
+          mk('K-118','라이젠 3200G · 4코어 · 램 8GB','1 771 204 559','경기3318',90,61) ],
+    orders:[
+      {no:'2608-2731',name:'라이젠 3700X 8코어',days:30,pm:'가상계좌',amt:65000},
+      {no:'2607-2519',name:'라이젠 3200G 4코어',days:90,pm:'신용카드',amt:114000},
+    ]};
+  localStorage.setItem('kvc-user',JSON.stringify(u));
+  location.href=AFTER;
+}
+const NAMES={kakao:'김정환',google:'이서연'};
+
+/* 로그인 */
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{
-  alert(`실제 서비스에서는 여기서 ${b.dataset.go==='kakao'?'카카오':'구글'} 로그인 창이 열립니다.`);
+  const via=b.dataset.go;
+  signIn(via,NAMES[via],via==='kakao'?'010-2323-4060':'010-8446-8710');
 }));
 /* 가입 — 소셜 선택에 따라 다음 단계가 달라진다 */
 document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.up;
+  window._via=k;
   $('s-kakao').classList.toggle('on', k==='kakao');
   $('s-google').classList.toggle('on', k==='google');
   $('agree').hidden=false; $('join').hidden=false;
@@ -294,8 +319,13 @@ function check(){
   $('join').disabled = !(need.length && need.every(x=>x.checked));
 }
 $('join').addEventListener('click',()=>{
-  alert('가입이 완료되면 바로 실시간 PC 목록으로 이동합니다.');
-  location.href='live.html';
+  const via=window._via||'kakao';
+  const phone = via==='kakao' ? '010-2323-4060' : ($('ph').value.trim()||'010-0000-0000');
+  if(via==='google' && $('cmsg') && !$('cmsg').classList.contains('ok')){
+    alert('연락처 인증을 완료해 주세요.\n접속 정보를 문자로 보내드리려면 번호 확인이 필요합니다.');
+    return;
+  }
+  signIn(via,NAMES[via],phone);
 });
 </script>
 </body>

@@ -315,6 +315,7 @@ a{color:inherit;text-decoration:none}
     <a href="#today" data-v="today"><i>✅</i><span>오늘 할 일</span><em class="bd hot" id="bd-today"></em></a>
     <a href="#rack" data-v="rack"><i>🗄️</i><span>랙맵</span></a>
     <a href="#pcs" data-v="pcs"><i>🖥️</i><span>PC 관리</span></a>
+    <a href="#members" data-v="members"><i>👤</i><span>회원 관리</span></a>
     <a href="#orders" data-v="orders"><i>🧾</i><span>주문 · 고객</span></a>
     <a href="#noti" data-v="noti"><i>🔔</i><span>알림 발송</span><em class="bd" id="bd-noti"></em></a>
     <div class="sep">도구</div>
@@ -750,8 +751,131 @@ function vPcs(){
   </div>`;
 }
 
+/* ═══════════════ 회원 — 주문을 사람 단위로 묶는다 ═══════════════ */
+const MEMBERS=(()=>{
+  const map=new Map();
+  ORDERS.forEach(o=>{
+    const key=o.ph;
+    if(!map.has(key)) map.set(key,{nm:o.nm,ph:o.ph,via:o.via,orders:[],pcs:[],amt:0,joined:null});
+    const m=map.get(key);
+    m.orders.push(o); m.pcs.push(o.pc); m.amt+=o.amt;
+    if(!m.joined||o.start<m.joined) m.joined=o.start;
+    if(o.mis) m.mis=true;
+  });
+  return [...map.values()].sort((a,b)=>b.amt-a.amt);
+})();
+const viaLabel=v=>v==='kakao'?'카카오':v==='google'?'구글':'수동등록';
+const canAlim=m=>m.via!=='manual';
+
+function vMembers(){
+  const q=(MF.q||'').trim();
+  let L=MEMBERS.filter(m=>!q||m.nm.includes(q)||m.ph.replace(/-/g,'').includes(q.replace(/-/g,''))
+    ||m.pcs.some(p=>p.pn.toLowerCase().includes(q.toLowerCase())));
+  if(MF.via) L=L.filter(m=>m.via===MF.via);
+  if(MF.risk) L=L.filter(m=>m.orders.some(o=>o.left<=SET.notiDay));
+  const PER=25, last=Math.max(1,Math.ceil(L.length/PER));
+  if(MF.pg>last)MF.pg=last;
+  const V=L.slice((MF.pg-1)*PER,MF.pg*PER);
+  let pgs=''; for(let i=Math.max(1,MF.pg-3);i<=Math.min(last,MF.pg+3);i++)
+    pgs+=`<button data-mpg="${i}" class="${i===MF.pg?'on':''}">${i}</button>`;
+  const kk=MEMBERS.filter(m=>m.via==='kakao').length;
+  return `
+  <div class="top"><h1>회원 관리</h1>
+    <span class="live">총 <b class="num">${MEMBERS.length}</b>명 · 카카오 <b class="num">${kk}</b>명
+      (카톡 문의 자동매칭 가능)</span></div>
+  <div class="grid kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="card kpi"><span class="l">전체 회원</span><b class="num">${MEMBERS.length}명</b></div>
+    <div class="card kpi"><span class="l">카카오 가입</span><b class="num" style="color:var(--gr)">${kk}명</b>
+      <span class="sub">문의 시 자동 식별</span></div>
+    <div class="card kpi"><span class="l">2대 이상 이용</span><b class="num">${MEMBERS.filter(m=>m.pcs.length>1).length}명</b></div>
+    <div class="card kpi ${MEMBERS.filter(m=>m.mis).length?'crit':''}"><span class="l">명의 다름</span>
+      <b class="num">${MEMBERS.filter(m=>m.mis).length}명</b><span class="sub">결제자≠이용자</span></div>
+  </div>
+  <div class="card">
+    <div class="fbar">
+      <input class="grow" data-mf="q" value="${MF.q||''}" placeholder="이름 · 연락처 · 품번으로 검색">
+      <select data-mf="via"><option value="">가입경로 전체</option>
+        <option value="kakao" ${MF.via==='kakao'?'selected':''}>카카오</option>
+        <option value="google" ${MF.via==='google'?'selected':''}>구글</option>
+        <option value="manual" ${MF.via==='manual'?'selected':''}>수동등록</option></select>
+      <button class="btn ${MF.risk?'btn-r':'btn-o'} btn-sm" data-mrisk>만료 임박만</button>
+    </div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>회원</th><th>연락처</th><th>가입</th><th>이용 PC</th><th>누적 결제</th><th>최근 만료</th><th></th></tr></thead>
+      <tbody>${V.map(m=>{
+        const soon=Math.min(...m.orders.map(o=>o.left));
+        return `<tr data-mem="${m.ph}">
+        <td class="pn">${m.nm}${m.mis?' <span class="warnbadge">⚠</span>':''}</td>
+        <td class="num dim">${m.ph}</td>
+        <td><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span></td>
+        <td>${m.pcs.length}대 <span class="dim">${m.pcs.slice(0,2).map(p=>p.pn).join(', ')}${m.pcs.length>2?' 외':''}</span></td>
+        <td class="num"><b>${w(m.amt)}원</b></td>
+        <td><b style="color:${soon<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${soon}</b></td>
+        <td><button class="btn btn-b btn-sm" data-send="${m.ph}">알림 보내기</button></td></tr>`}).join('')}
+      </tbody></table>
+      <div class="pager2"><button data-mpg="${MF.pg-1}" ${MF.pg===1?'disabled':''}>‹</button>${pgs}
+        <button data-mpg="${MF.pg+1}" ${MF.pg===last?'disabled':''}>›</button></div>
+    </div>
+  </div>`;
+}
+
+/* 회원 상세 */
+function openMem(ph){
+  const m=MEMBERS.find(x=>x.ph===ph); if(!m)return;
+  $('drawer').innerHTML=`
+  <div class="hd"><b>${m.nm}</b><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span>
+    <button class="x" data-close>✕</button></div>
+  <div class="bd">
+    <div class="kv">
+      <span class="k">연락처</span><span class="v big num">${m.ph}</span>
+      <span class="k">가입 경로</span><span class="v">${viaLabel(m.via)}
+        ${m.via==='kakao'?'<span class="dim">· 카톡 문의 시 자동 식별됨</span>'
+          :'<span class="dim">· 문의 시 품번으로 확인 필요</span>'}</span>
+      <span class="k">이용 PC</span><span class="v">${m.pcs.length}대</span>
+      <span class="k">누적 결제</span><span class="v num"><b>${w(m.amt)}원</b> <span class="dim">${m.orders.length}건</span></span>
+    </div>
+    ${m.mis?`<div class="mismatch"><b>⚠ 결제자와 이용자가 다른 주문이 있습니다.</b><br>
+      문의가 다른 이름으로 올 수 있습니다.</div>`:''}
+    <div class="blockttl">이용 중인 PC</div>
+    <table class="tbl"><tbody>${m.orders.map(o=>`
+      <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td>
+      <td class="dim">${o.pc.spec.n}</td>
+      <td><b style="color:${o.left<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${o.left}</b></td>
+      <td class="num">${w(o.amt)}원</td></tr>`).join('')}</tbody></table>
+    <div class="blockttl">알림 보내기</div>
+    <div class="kv"><span class="k">템플릿</span><span class="v">
+      <select id="al-t" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px">
+        <option value="exp">만료 연장 안내</option>
+        <option value="cred">접속 정보 재발송</option>
+        <option value="down">장애 복구 완료 안내</option>
+        <option value="free">직접 입력</option>
+      </select></span></div>
+    <textarea id="al-msg" style="width:100%;height:120px;border:1px solid var(--line);border-radius:9px;
+      padding:11px 13px;font:inherit;line-height:1.7;resize:vertical"></textarea>
+    <div class="dim" style="font-size:12px;margin-top:6px">
+      알림톡으로 발송되고, 카톡 미설치·차단이면 <b>문자로 자동 전환</b>됩니다.</div>
+  </div>
+  <div class="dracts">
+    <button class="btn btn-r" data-dosend="${m.ph}">알림톡 발송</button>
+    <button class="btn btn-o" data-close>닫기</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+  fillTpl(m);
+  $('al-t').addEventListener('change',()=>fillTpl(m));
+}
+function fillTpl(m){
+  const t=$('al-t').value, o=m.orders[0], pc=o.pc;
+  const tp={
+    exp:`[한국 가상컴] ${m.nm}님\n이용 중이신 ${pc.pn} 이 ${fmtD(o.end)} 만료됩니다.\n연장하지 않으시면 자료가 초기화되니 미리 연장해 주세요.\n\n연장하기: idckorea1.com/mypage`,
+    cred:`[한국 가상컴] ${m.nm}님\n요청하신 접속 정보를 다시 보내드립니다.\n문의번호: ${pc.pn}\n접속 주소: ${pc.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}\n비밀번호는 보안상 내 가상컴에서 확인해 주세요.`,
+    down:`[한국 가상컴] ${m.nm}님\n${pc.pn} 접속 장애가 복구되었습니다.\n중단된 기간만큼 이용 기간을 연장해 드렸습니다.\n불편을 드려 죄송합니다.`,
+    free:''
+  };
+  $('al-msg').value=tp[t];
+}
 /* ═══════════════ 화면: 주문 · 고객 ═══════════════ */
 let OF={q:'',pg:1};
+let MF={q:'',via:'',risk:false,pg:1};
 function vOrders(){
   let L=ORDERS.filter(o=>!OF.q||o.nm.includes(OF.q)||o.no.includes(OF.q)
     ||o.pc.pn.toLowerCase().includes(OF.q)||o.ph.replace(/-/g,'').includes(OF.q.replace(/-/g,''))
@@ -1044,7 +1168,7 @@ function openManual(){
 }
 
 /* ═══════════════ 라우터 ═══════════════ */
-const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
+const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,members:vMembers,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
 function route(){
   const v=(location.hash||'#dash').slice(1);
   const fn=VIEWS[v]||vDash;
@@ -1133,6 +1257,25 @@ document.addEventListener('click',e=>{
   const tk=t.closest('[data-took]');
   if(tk){const p=PCS.find(x=>x.pn===tk.dataset.took);if(p){p.st='ok';closeDrawer();route()}return}
 
+  /* 회원 관리 */
+  const mem=t.closest('[data-mem]');
+  if(mem&&!t.closest('button')){openMem(mem.dataset.mem);return}
+  const snd=t.closest('[data-send]');
+  if(snd){openMem(snd.dataset.send);return}
+  const mpg=t.closest('[data-mpg]');
+  if(mpg&&!mpg.disabled){MF.pg=+mpg.dataset.mpg;route();return}
+  if(t.closest('[data-mrisk]')){MF.risk=!MF.risk;MF.pg=1;route();return}
+  const dosend=t.closest('[data-dosend]');
+  if(dosend){
+    const m=MEMBERS.find(x=>x.ph===dosend.dataset.dosend);
+    const msg=$('al-msg').value.trim();
+    if(!msg){alert('보낼 내용을 입력해 주세요.');return}
+    logView(m.pcs[0].pn,'알림 발송 — '+m.nm+' ('+m.ph+')');
+    dosend.textContent='✓ 발송 요청됨'; dosend.disabled=true;
+    setTimeout(()=>{closeDrawer();
+      alert('실서비스에서는 여기서 알림톡이 발송되고,\n실패 시 문자로 자동 전환됩니다.\n\n대상: '+m.nm+' ('+m.ph+')')},400);
+    return;
+  }
   /* PC 정보 수정 (품번 · 애니번호 · 비번 · 위치 · 메모) */
   const ep=t.closest('[data-editpc]');
   if(ep){openPc(ep.dataset.editpc, !ep.dataset.off);return}
@@ -1257,6 +1400,9 @@ document.addEventListener('input',e=>{
   if(f){PF[f.dataset.f]=f.value.toLowerCase?f.value.toLowerCase():f.value;
     if(f.dataset.f!=='q')PF[f.dataset.f]=f.value; PF.pg=1;
     if(f.tagName==='SELECT')route(); else {clearTimeout(window._ft);window._ft=setTimeout(route,300)} return}
+  const mf=e.target.closest('[data-mf]');
+  if(mf){MF[mf.dataset.mf]=mf.value;MF.pg=1;
+    if(mf.tagName==='SELECT')route(); else {clearTimeout(window._mt);window._mt=setTimeout(route,300)} return}
   const of=e.target.closest('[data-of]');
   if(of){OF.q=of.value;OF.pg=1;clearTimeout(window._ot);window._ot=setTimeout(route,300);return}
 });

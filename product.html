@@ -402,6 +402,9 @@ function tossPay(){
   return _pay;
 }
 async function startPay(){
+  /* 결제 전 로그인 필수 — 결제자·이용자 식별과 접속정보 전달의 전제 */
+  let U=null; try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+  if(!U){ if(confirm('결제하시려면 로그인이 필요합니다.\\n카카오·구글로 3초면 됩니다.\\n\\n지금 로그인하시겠습니까?')) location.href='login.html?next=product.html'; return; }
   const m=TM.find(t=>t.d===S.d);
   const base=Math.round(BASE*S.d/30), tot=base-Math.round(base*m.o/100);
   const orderId='KVC'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*900+100);
@@ -508,5 +511,21 @@ terms();pays();calc();
 .lg{align-items:center}
 .lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
 .lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
+<script>
+/* 로그인 상태를 헤더에 반영 — 로그인 전:로그인/회원가입, 후:내 가상컴 */
+(function(){
+  let U=null; try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+  document.querySelectorAll('a[href="login.html"]').forEach(a=>{
+    if(U){ a.href='mypage.html'; a.textContent='내 가상컴 ('+U.name+')'; }
+  });
+  if(U){
+    document.querySelectorAll('.gnb').forEach(n=>{
+      if(n.querySelector('a[href="mypage.html"]'))return;
+      const a=document.createElement('a'); a.href='mypage.html'; a.textContent='내 가상컴';
+      n.appendChild(a);
+    });
+  }
+})();
+</script>
 </body>
 </html>

@@ -347,5 +347,21 @@ if(location.hash.startsWith('#q')){const el=document.querySelector(location.hash
 .lg{align-items:center}
 .lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
 .lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
+<script>
+/* 로그인 상태를 헤더에 반영 — 로그인 전:로그인/회원가입, 후:내 가상컴 */
+(function(){
+  let U=null; try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+  document.querySelectorAll('a[href="login.html"]').forEach(a=>{
+    if(U){ a.href='mypage.html'; a.textContent='내 가상컴 ('+U.name+')'; }
+  });
+  if(U){
+    document.querySelectorAll('.gnb').forEach(n=>{
+      if(n.querySelector('a[href="mypage.html"]'))return;
+      const a=document.createElement('a'); a.href='mypage.html'; a.textContent='내 가상컴';
+      n.appendChild(a);
+    });
+  }
+})();
+</script>
 </body>
 </html>

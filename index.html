@@ -916,5 +916,21 @@ if(!SAFE)document.documentElement.classList.add('js');
 /* kvc-console-notice */
 try{console.log('%c! 한국가상컴 저작권 안내','font-size:18px;font-weight:bold;color:#E2233C');console.log('이 사이트의 디자인·코드·문구는 저작권법의 보호를 받습니다. 무단 복제 시 법적 책임이 따릅니다.')}catch(e){}
 </script>
+<script>
+/* 로그인 상태를 헤더에 반영 — 로그인 전:로그인/회원가입, 후:내 가상컴 */
+(function(){
+  let U=null; try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+  document.querySelectorAll('a[href="login.html"]').forEach(a=>{
+    if(U){ a.href='mypage.html'; a.textContent='내 가상컴 ('+U.name+')'; }
+  });
+  if(U){
+    document.querySelectorAll('.gnb').forEach(n=>{
+      if(n.querySelector('a[href="mypage.html"]'))return;
+      const a=document.createElement('a'); a.href='mypage.html'; a.textContent='내 가상컴';
+      n.appendChild(a);
+    });
+  }
+})();
+</script>
 </body>
 </html>

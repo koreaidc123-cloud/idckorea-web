@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="only light">
+<meta name="darkreader-lock">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>내 가상컴 — 한국 가상컴</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+:root{color-scheme:only light;
+ --blue:#0B2FE8;--blue-l:#EEF1FE;--red:#E2233C;--red-l:#FDEEF0;--gr:#0FA45E;--gr-l:#E9FBF1;
+ --org:#E08B00;--org-l:#FFF6E5;--gold:#FFB808;
+ --ink:#0B0E14;--ink2:#39404A;--ink3:#6B7381;--ink4:#9AA2AE;
+ --line:#E3E6EC;--line2:#F0F2F5;--bg2:#F6F8FB;
+ --sh:0 1px 2px rgba(11,14,20,.04),0 10px 30px rgba(11,14,20,.07)}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+body{font-family:Pretendard,-apple-system,'Malgun Gothic',sans-serif;background:var(--bg2);
+ color:var(--ink);font-size:15.5px;line-height:1.65;letter-spacing:-.022em;padding-bottom:60px}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter-spacing:inherit}
+.num{font-variant-numeric:tabular-nums}
+.shell{max-width:1100px;margin:0 auto;padding:0 22px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;padding:0 18px;
+ border-radius:8px;font-weight:700;font-size:14.5px;transition:.14s;white-space:nowrap}
+.btn-r{background:var(--red);color:#fff}.btn-r:hover{background:#C41B32}
+.btn-b{background:var(--blue);color:#fff}
+.btn-o{border:1px solid var(--line);background:#fff}.btn-o:hover{border-color:var(--blue);color:var(--blue)}
+.btn-sm{height:34px;padding:0 12px;font-size:13px}
+.dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;animation:pp 1.6s ease-in-out infinite}
+@keyframes pp{50%{opacity:.35}}
+
+.tb{background:var(--ink);color:#fff;font-size:13px;text-align:center;padding:8px 0;font-weight:600}
+.tb b{color:var(--gold)}
+.hd{background:#fff;border-bottom:1px solid var(--line2);position:sticky;top:0;z-index:50}
+.hd .shell{display:flex;align-items:center;height:68px;gap:30px}
+.lg{display:flex;align-items:center;gap:10px}
+.lg b{font-size:18px;font-weight:900;letter-spacing:-.07em}
+.gnb{display:flex;gap:2px;margin-right:auto}
+.gnb a{padding:9px 14px;border-radius:7px;font-weight:600;font-size:15px;color:var(--ink2)}
+.gnb a:hover{background:var(--bg2);color:var(--blue)}
+.gnb a.on{color:var(--blue);font-weight:700}
+
+.ph{padding:28px 0 20px}
+.ph h1{font-size:25px;font-weight:800;letter-spacing:-.05em}
+.ph p{margin-top:6px;font-size:14.5px;color:var(--ink3)}
+.who{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);
+ border-radius:14px;padding:16px 20px;margin-top:16px;flex-wrap:wrap}
+.who .av{width:44px;height:44px;border-radius:50%;background:var(--blue-l);color:var(--blue);
+ display:grid;place-items:center;font-size:18px;font-weight:800;flex:none}
+.who b{font-size:16.5px;font-weight:800}
+.who .sub{font-size:13px;color:var(--ink4)}
+.who .via{margin-left:auto;display:flex;align-items:center;gap:8px}
+.badge{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:99px;
+ font-size:12px;font-weight:800}
+.b-kk{background:#FEE500;color:#3C1E1E}
+.b-gg{background:#fff;border:1px solid var(--line);color:var(--ink2)}
+
+.sec{margin-top:26px}
+.sec-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.sec-h h2{font-size:17px;font-weight:800;letter-spacing:-.04em}
+.sec-h .cnt{font-size:12.5px;font-weight:800;color:var(--ink3);background:#fff;
+ border:1px solid var(--line);padding:2px 9px;border-radius:99px}
+.sec-h .r{margin-left:auto}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.pc{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--sh)}
+.pc-h{display:flex;align-items:center;gap:9px;padding:14px 18px;border-bottom:1px solid var(--line2)}
+.pc-h b{font-size:16.5px;font-weight:800;letter-spacing:-.04em}
+.pc-h .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;
+ font-weight:800;color:var(--gr);background:var(--gr-l);padding:4px 10px;border-radius:99px}
+.pc-b{padding:6px 18px 16px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;
+ border-bottom:1px solid var(--line2);font-size:14px}
+.row:last-of-type{border-bottom:0}
+.row .k{color:var(--ink3);font-size:13px}
+.row .v{font-weight:700;display:flex;align-items:center;gap:7px;letter-spacing:.01em}
+.cp{border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:11.5px;
+ font-weight:700;color:var(--ink3)}
+.cp:hover{border-color:var(--blue);color:var(--blue)}
+.mask{letter-spacing:.15em;color:var(--ink4)}
+.bar{height:6px;background:var(--line2);border-radius:99px;overflow:hidden;margin:12px 0 6px}
+.bar i{display:block;height:100%;background:var(--gr);border-radius:99px}
+.bar.warn i{background:var(--org)}
+.bar.crit i{background:var(--red)}
+.left{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink4)}
+.left b{color:var(--ink)}
+.acts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:14px}
+.acts .btn{height:40px;font-size:13.5px;padding:0 8px}
+
+.expsoon{background:var(--org-l);border:1px solid #F6DFA8;border-radius:12px;padding:13px 16px;
+ font-size:13.5px;color:#7A5200;line-height:1.6;margin-bottom:14px}
+.expsoon b{font-weight:800}
+
+.empty{background:#fff;border:1px solid var(--line);border-radius:16px;padding:52px 20px;
+ text-align:center;color:var(--ink4)}
+.empty b{display:block;font-size:17px;color:var(--ink2);margin-bottom:6px;font-weight:800}
+.empty .btn{margin-top:16px}
+
+/* 주문 내역 */
+.tbl{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tr{display:grid;grid-template-columns:110px 1fr 90px 110px 96px;gap:12px;align-items:center;
+ padding:12px 18px;border-bottom:1px solid var(--line2);font-size:13.5px}
+.tr:last-child{border-bottom:0}
+.tr.h{background:var(--bg2);font-size:12px;font-weight:800;color:var(--ink3);padding:10px 18px}
+.tr .pn{font-weight:800}
+
+/* 게이트 */
+.gate{position:fixed;inset:0;z-index:200;background:rgba(8,11,18,.92);display:grid;place-items:center;padding:22px}
+.gate.off{display:none}
+.gate-in{width:min(400px,100%);background:#fff;border-radius:18px;padding:32px 28px;text-align:center}
+.gate-in h2{font-size:20px;font-weight:800;letter-spacing:-.045em}
+.gate-in p{margin-top:9px;font-size:14px;color:var(--ink3);line-height:1.7}
+.gate-in .btns{display:flex;flex-direction:column;gap:8px;margin-top:20px}
+.so{display:flex;align-items:center;justify-content:center;gap:9px;height:50px;border-radius:9px;
+ font-weight:700;font-size:15px}
+.so-kk{background:#FEE500;color:#191600}
+.so-gg{background:#fff;border:1px solid var(--line);color:#2C2C2C}
+
+@media(max-width:720px){
+ .gnb{display:none}
+ .tr{grid-template-columns:1fr 1fr;gap:6px}
+ .tr.h{display:none}
+ .acts{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="tb">빠른물량 소진중 <b>10대 이상은 별도문의!</b></div>
+
+<header class="hd"><div class="shell">
+  <a class="lg" href="index.html">
+    <svg class="lgm" width="34" height="34" viewBox="0 0 100 100" aria-hidden><g transform="rotate(-28 50 50)">
+      <path d="M50 4a46 46 0 0 0 0 92 23 23 0 0 1 0-46 23 23 0 0 0 0-46Z" fill="#E8412E"/>
+      <path d="M50 4a46 46 0 0 1 0 92 23 23 0 0 0 0-46 23 23 0 0 1 0-46Z" fill="#1B4FD8"/>
+    </g></svg><b>한국 가상컴</b></a>
+  <nav class="gnb">
+    <a href="about.html">회사소개</a>
+    <a href="index.html#price">요금제</a>
+    <a href="live.html">실시간 PC임대</a>
+    <a href="#" class="on">내 가상컴</a>
+    <a href="qa.html">Q&amp;A안내</a>
+  </nav>
+  <button class="btn btn-o btn-sm" id="logout">로그아웃</button>
+</div></header>
+
+<div class="shell">
+  <div class="ph">
+    <h1>내 가상컴</h1>
+    <p>접속 정보 확인 · 연장 · 재부팅을 여기서 직접 하실 수 있습니다.</p>
+    <div class="who">
+      <span class="av" id="av">한</span>
+      <div><b id="uname">—</b><div class="sub" id="uphone">—</div></div>
+      <div class="via"><span class="badge" id="uvia">—</span>
+        <span class="badge b-gg">문의번호는 각 PC 품번입니다</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>이용 중인 PC</h2><span class="cnt" id="cnt">0</span>
+      <div class="r"><a class="btn btn-r btn-sm" href="live.html">＋ PC 추가 임대</a></div></div>
+    <div id="warnbox"></div>
+    <div class="cards" id="cards"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><h2>결제 내역</h2></div>
+    <div class="tbl" id="hist"></div>
+  </div>
+</div>
+
+<div class="gate" id="gate"><div class="gate-in">
+  <h2>로그인이 필요합니다</h2>
+  <p>내 가상컴은 회원 전용입니다.<br>카카오 또는 구글로 3초면 시작하실 수 있습니다.</p>
+  <div class="btns">
+    <a class="so so-kk" href="login.html">카카오로 로그인</a>
+    <a class="so so-gg" href="login.html">구글로 로그인</a>
+  </div>
+</div></div>
+
+<script>
+const $=i=>document.getElementById(i);
+const w=n=>Number(n).toLocaleString('ko-KR');
+const fmt=d=>{const x=new Date(d);return x.getFullYear()+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+String(x.getDate()).padStart(2,'0')};
+
+/* 로그인 상태 — 실서비스에서는 서버 세션. 지금은 로그인 페이지가 심는 값을 읽는다. */
+let U=null;
+try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+if(!U){ $('gate').classList.remove('off'); }
+else{
+  $('gate').classList.add('off');
+  $('uname').textContent=U.name+'님';
+  $('uphone').textContent=U.phone;
+  $('av').textContent=U.name.charAt(0);
+  $('uvia').textContent=U.via==='kakao'?'카카오 로그인':'구글 로그인';
+  $('uvia').className='badge '+(U.via==='kakao'?'b-kk':'b-gg');
+  render();
+}
+$('logout').onclick=()=>{localStorage.removeItem('kvc-user');location.href='index.html'};
+
+function render(){
+  const list=U.pcs||[];
+  $('cnt').textContent=list.length+'대';
+  const soon=list.filter(p=>p.left<=5);
+  $('warnbox').innerHTML=soon.length
+    ? `<div class="expsoon"><b>⏰ ${soon.length}대가 곧 만료됩니다.</b>
+       만료되면 PC가 초기화되고 <b>자료는 복구되지 않습니다.</b> 미리 연장해 주세요.<br>
+       ${soon.map(p=>p.pn+' (D-'+p.left+')').join(' · ')}</div>` : '';
+
+  $('cards').innerHTML = list.length ? list.map((p,i)=>{
+    const pct=Math.round(p.left/p.days*100);
+    const cls=p.left<=2?'crit':p.left<=5?'warn':'';
+    return `<div class="pc">
+      <div class="pc-h"><b>${p.pn}</b>
+        <span class="st"><span class="dot"></span>가동 중</span></div>
+      <div class="pc-b">
+        <div class="row"><span class="k">사양</span><span class="v">${p.spec}</span></div>
+        <div class="row"><span class="k">접속 주소</span><span class="v"><span class="num">${p.ad}</span>
+          <button class="cp" data-c="${p.ad.replace(/ /g,'')}">복사</button></span></div>
+        <div class="row"><span class="k">비밀번호</span><span class="v">
+          <span class="mask" id="pw${i}">••••••</span>
+          <button class="cp" data-pw="${i}">보기</button></span></div>
+        <div class="row"><span class="k">이용 기간</span><span class="v num">${fmt(p.start)} ~ ${fmt(p.end)}</span></div>
+        <div class="bar ${cls}"><i style="width:${pct}%"></i></div>
+        <div class="left"><span>남은 기간</span><b>D-${p.left}</b></div>
+        <div class="acts">
+          <button class="btn btn-o" data-reboot="${p.pn}">재부팅</button>
+          <button class="btn btn-o" data-newpw="${p.pn}">비번 재발급</button>
+          <button class="btn btn-r" data-ext="${p.pn}">연장</button>
+        </div>
+      </div></div>`}).join('')
+    : `<div class="empty"><b>아직 이용 중인 PC가 없습니다</b>
+       원하시는 사양을 고르고 결제하시면 바로 이용하실 수 있습니다.
+       <div><a class="btn btn-r" href="live.html">실시간 PC 보러가기</a></div></div>`;
+
+  const H=U.orders||[];
+  $('hist').innerHTML=`<div class="tr h"><div>주문번호</div><div>상품</div><div>기간</div><div>결제수단</div><div style="text-align:right">금액</div></div>`
+    + (H.length? H.map(o=>`<div class="tr"><div class="pn num">${o.no}</div>
+        <div>${o.name}</div><div class="num">${o.days}일</div><div>${o.pm}</div>
+        <div class="num" style="text-align:right;font-weight:800">${w(o.amt)}원</div></div>`).join('')
+      : `<div class="tr"><div style="grid-column:1/-1;color:var(--ink4);padding:20px 0;text-align:center">결제 내역이 없습니다</div></div>`);
+}
+
+document.addEventListener('click',e=>{
+  const c=e.target.closest('[data-c]');
+  if(c){navigator.clipboard&&navigator.clipboard.writeText(c.dataset.c);
+    c.textContent='✓';setTimeout(()=>c.textContent='복사',1200);return}
+  const pw=e.target.closest('[data-pw]');
+  if(pw){const i=pw.dataset.pw, el=$('pw'+i);
+    el.textContent=(U.pcs[i].pw||'••••••'); el.classList.remove('mask'); pw.remove(); return}
+  const rb=e.target.closest('[data-reboot]');
+  if(rb){if(confirm(rb.dataset.reboot+' 을 재부팅할까요?\n작업 중인 내용은 저장 후 진행해 주세요.'))
+    alert('재부팅 요청이 접수되었습니다.\n1~2분 뒤 다시 접속해 주세요.');return}
+  const np=e.target.closest('[data-newpw]');
+  if(np){if(confirm('비밀번호를 새로 발급할까요?\n기존 비밀번호는 즉시 사용할 수 없습니다.'))
+    alert('새 비밀번호가 문자로 발송됩니다.');return}
+  const ex=e.target.closest('[data-ext]');
+  if(ex){location.href='product.html?ext='+ex.dataset.ext;return}
+});
+</script>
+</body>
+</html>
