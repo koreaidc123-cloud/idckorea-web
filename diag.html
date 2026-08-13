@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>그래픽 진단 — 한국 가상컴</title>
+<style>
+body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:#fff;color:#111;
+ padding:24px;line-height:1.7;max-width:760px;margin:0 auto}
+h1{font-size:20px;margin-bottom:4px}
+p.sub{color:#666;font-size:14px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{border-bottom:1px solid #e5e5e5;padding:10px 8px;vertical-align:top}
+td:first-child{color:#666;width:180px;font-size:13px}
+td:last-child{font-weight:600;word-break:break-all}
+.ok{color:#0a8}.bad{color:#d22;font-weight:800}
+.box{margin-top:20px;background:#f6f8fb;border-radius:10px;padding:16px;font-size:13.5px;color:#444}
+.box b{color:#111}
+</style>
+</head>
+<body>
+<h1>그래픽 진단</h1>
+<p class="sub">이 화면을 캡처해서 보내주세요. 검은 화면의 원인을 확정합니다.</p>
+<table id="t"></table>
+<div class="box" id="verdict">측정 중…</div>
+
+<script>
+const rows=[];
+function add(k,v,cls){rows.push('<tr><td>'+k+'</td><td class="'+(cls||'')+'">'+v+'</td></tr>')}
+
+let gpu='확인 불가', maxTex=0, accel='꺼짐 (소프트웨어 렌더링)', accelCls='bad';
+try{
+  const c=document.createElement('canvas');
+  const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+  if(gl){
+    accel='켜짐 (하드웨어 가속)'; accelCls='ok';
+    maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+    if(dbg) gpu=gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+    else gpu=gl.getParameter(gl.RENDERER);
+  }
+}catch(e){}
+
+add('그래픽 카드', gpu);
+add('하드웨어 가속', accel, accelCls);
+add('최대 텍스처 크기', maxTex? maxTex+' px' : '측정 실패', maxTex&&maxTex<8192?'bad':'ok');
+add('기기 메모리', (navigator.deviceMemory? navigator.deviceMemory+' GB':'미제공'),
+    (navigator.deviceMemory&&navigator.deviceMemory<=4)?'bad':'');
+add('CPU 코어', navigator.hardwareConcurrency||'미제공');
+add('화면 배율', (window.devicePixelRatio||1)+'x  ('+screen.width+'×'+screen.height+')',
+    (window.devicePixelRatio>1.4)?'bad':'');
+add('창 크기', innerWidth+'×'+innerHeight);
+add('브라우저', navigator.userAgent.replace(/^Mozilla\/5\.0 /,''));
+
+document.getElementById('t').innerHTML=rows.join('');
+
+const risky=[];
+if(accelCls==='bad') risky.push('하드웨어 가속이 꺼져 있습니다');
+if(maxTex&&maxTex<8192) risky.push('텍스처 한계가 낮습니다 ('+maxTex+'px)');
+if(navigator.deviceMemory&&navigator.deviceMemory<=4) risky.push('메모리가 4GB 이하입니다');
+if(window.devicePixelRatio>1.4) risky.push('화면 배율이 '+window.devicePixelRatio+'배라 실제 렌더링 픽셀이 '+Math.round(window.devicePixelRatio*window.devicePixelRatio*100)+'% 로 늘어납니다');
+
+document.getElementById('verdict').innerHTML = risky.length
+  ? '<b>⚠ 위험 요인이 발견되었습니다</b><br>· '+risky.join('<br>· ')+
+    '<br><br>이 항목들이 검은 화면의 직접 원인일 수 있습니다. 이 화면을 캡처해서 보내주세요.'
+  : '<b>✓ 그래픽 환경은 정상 범위입니다</b><br>이 경우 원인은 페이지 쪽에 있습니다. 이 화면을 캡처해서 보내주세요.';
+</script>
+</body>
+</html>

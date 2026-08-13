@@ -459,7 +459,13 @@ section.cta .btn-w{color:var(--red)}
 .lgm{flex:none}
 .lg{align-items:center}
 .lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
-.lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
+.lg .tx span{font-weight:600;letter-spacing:-.03em}/* ══ 저사양 PC 대응 ══
+   화면 밖 섹션은 브라우저가 렌더링 자체를 건너뛰게 한다.
+   이미지 31장을 한꺼번에 디코딩하면 80MB+ 라 내장그래픽 VRAM 을 넘겨
+   화면이 검게 깨진다. 아래 두 줄이 그 근본 대책. */
+.sec,.ab-band,.live{content-visibility:auto;contain-intrinsic-size:auto 640px}
+.hero{content-visibility:visible}
+img{content-visibility:auto}</style>
 </head>
 <body>
 
@@ -487,8 +493,8 @@ section.cta .btn-w{color:var(--red)}
 <!-- ═══ 히어로 슬라이더 ═══ -->
 <section class="hero" id="hero">
   <div class="sl on"><img src="img/hero1.jpg" alt=""></div>
-  <div class="sl"><img src="img/hero3.jpg" alt=""></div>
-  <div class="sl"><img src="img/hero2.jpg" alt=""></div>
+  <div class="sl"><img loading="lazy" decoding="async" src="img/hero3.jpg" alt=""></div>
+  <div class="sl"><img loading="lazy" decoding="async" src="img/hero2.jpg" alt=""></div>
 
   <div class="hero-tx on"><div class="shell"><div class="ht" id="ht"></div></div></div>
   <div class="dots" id="dots"></div>
@@ -534,10 +540,10 @@ section.cta .btn-w{color:var(--red)}
       <!-- 화면에 들어오면 소리 없이 자동 재생. 누르면 유튜브가 새 창으로 열린다.
            한 번 더 누르면 배경 재생이 꺼진다. -->
       <button class="v" data-yt="7jDfnU5swvw" data-start="1" aria-label="가상컴 접속방법 영상 보기">
-        <img class="thumb" src="https://i.ytimg.com/vi/7jDfnU5swvw/hqdefault.jpg" alt="" loading="lazy">
+        <img class="thumb" loading="lazy" decoding="async" src="https://i.ytimg.com/vi/7jDfnU5swvw/hqdefault.jpg" alt="" loading="lazy">
         <span class="p"><i></i><b>가상컴 접속방법</b><span>결제 후 바로 접속하는 방법</span></span></button>
       <button class="v" data-yt="tXHqbPxdhfQ" data-start="3" aria-label="가상컴 활용방법 영상 보기">
-        <img class="thumb" src="https://i.ytimg.com/vi/tXHqbPxdhfQ/hqdefault.jpg" alt="" loading="lazy">
+        <img class="thumb" loading="lazy" decoding="async" src="https://i.ytimg.com/vi/tXHqbPxdhfQ/hqdefault.jpg" alt="" loading="lazy">
         <span class="p"><i></i><b>가상컴 활용방법</b><span>여러 대를 한 화면에서 관리하기</span></span></button>
     </div>
   </div>
@@ -545,7 +551,7 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 회사소개 요약 (자세한 내용은 서브페이지) ═══ -->
 <section class="sec ab-band">
-  <div class="ab-bg"><img src="img/idc-wide.jpg" alt="24시간 Full가동되는 자체 서버실"></div>
+  <div class="ab-bg"><img loading="lazy" decoding="async" src="img/idc-wide.jpg" alt="24시간 Full가동되는 자체 서버실"></div>
   <div class="shell ab-in">
     <div class="lb">회사소개</div>
     <h2>가동을 시작한 이후 <em>6년</em>,<br>단 한 번도 멈추지 않았습니다</h2>
@@ -639,7 +645,7 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 불법사용 경고 팝업 ═══ -->
 <div class="pop" id="pop"><div class="pop-in">
-  <div class="pop-bg"><img src="img/pop-warn.jpg" alt=""
+  <div class="pop-bg"><img loading="lazy" decoding="async" src="img/pop-warn.jpg" alt=""
        onerror="this.src='img/idc-rack.jpg'"></div>
   <div class="pop-h"><span class="bar"><i></i><i></i><i></i></span> 이용 제한 안내</div>
   <div class="pop-b">
@@ -661,6 +667,7 @@ section.cta .btn-w{color:var(--red)}
 <script>
 /* 진단용 저사양 모드 - ?safe=1 로 열면 모든 애니메이션·흐르는 띠를 끈다 */
 const SAFE=new URLSearchParams(location.search).has('safe');
+if(new URLSearchParams(location.search).has('noimg')){const s2=document.createElement('style');s2.textContent='img{display:none!important}.sl,.ab-bg{background:#111!important}';document.head.appendChild(s2);}
 if(SAFE){const st=document.createElement('style');
   st.textContent='*,*::before,*::after{animation:none!important;transition:none!important}.live{display:none!important}';
   document.head.appendChild(st);}
@@ -720,7 +727,7 @@ function prods(){
     const off=Math.round((1-x.p/x.list)*100), few=x.k<=10, u=USECAT[x.u];
     return `<div class="pc">
       <div class="pc-img">
-        <img src="img/${x.img}.jpg" alt="${x.n}">
+        <img src="img/${x.img}.jpg" loading="lazy" decoding="async" alt="${x.n}">
         <div class="pc-ov">
           <div class="nn">${x.n}</div>
           <div class="cc">${x.c} · 램 ${x.ram}GB</div>
@@ -744,13 +751,13 @@ function prods(){
 }
 /* 활용 분야 */
 $('uses').innerHTML=USES.map(([t,d,img])=>
- `<a class="u" href="live.html"><img src="img/${img}.jpg" alt="${t}"
+ `<a class="u" href="live.html"><img src="img/${img}.jpg" loading="lazy" decoding="async" alt="${t}"
    onerror="this.src='img/s1-game.jpg'">
    <div class="tx"><b>${t}<i>→</i></b><span>${d}</span></div></a>`).join('');
 /* Q&A */
 $('qalist').innerHTML=QA.map(([t,img],i)=>
  `<a class="q" href="qa.html#q${i+1}">
-   <div class="cap"><img src="img/${img}.jpg" alt="${t}"></div>
+   <div class="cap"><img src="img/${img}.jpg" loading="lazy" decoding="async" alt="${t}"></div>
    <div class="bb"><b>${t}</b><span>자세히 보기 →</span></div></a>`).join('');
 
 /* 실시간 재고 띠 */
