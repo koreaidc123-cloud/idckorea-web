@@ -465,9 +465,9 @@ section.cta .btn-w{color:var(--red)}
    화면 밖 섹션은 브라우저가 렌더링 자체를 건너뛰게 한다.
    이미지 31장을 한꺼번에 디코딩하면 80MB+ 라 내장그래픽 VRAM 을 넘겨
    화면이 검게 깨진다. 아래 두 줄이 그 근본 대책. */
-.sec,.ab-band,.live{content-visibility:auto;contain-intrinsic-size:auto 640px}
+.sec:not(.ab-band){content-visibility:auto;contain-intrinsic-size:auto 640px}
 .hero{content-visibility:visible}
-img{content-visibility:auto}</style>
+</style>
 </head>
 <body>
 
