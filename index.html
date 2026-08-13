@@ -61,8 +61,8 @@ section.cta .btn-w{color:var(--red)}
 .btn-lg{height:58px;padding:0 32px;font-size:17px}
 .btn-sm{height:40px;padding:0 15px;font-size:14px}
 .dot{width:7px;height:7px;border-radius:50%;background:#12D06E;flex:none;
-  box-shadow:0 0 0 0 rgba(18,208,110,.55);animation:pp 2s infinite}
-@keyframes pp{70%{box-shadow:0 0 0 8px rgba(18,208,110,0)}100%{box-shadow:0 0 0 0 rgba(18,208,110,0)}}
+  animation:pp 1.6s ease-in-out infinite}
+@keyframes pp{50%{opacity:.35}}
 
 .sec{padding:96px 0}
 .sec-g{background:var(--bg2)}
@@ -260,7 +260,7 @@ section.cta .btn-w{color:var(--red)}
 /* 유튜브 재생 삼각형 */
 .v .p i{display:grid;place-items:center;width:70px;height:70px;border-radius:18px;margin:0 auto 14px;
   background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.28);
-  backdrop-filter:blur(6px);transition:.2s}
+  transition:.2s}
 .v .p i::before{content:'';width:0;height:0;margin-left:4px;
   border-left:20px solid #fff;border-top:12px solid transparent;border-bottom:12px solid transparent}
 .v:hover .p i{background:#FF0000;border-color:#FF0000;transform:scale(1.07)}
@@ -772,11 +772,11 @@ function paint(){
   tx.classList.remove('on'); void tx.offsetWidth; tx.classList.add('on');
 }
 $('dots').innerHTML=SLIDES.map((_,i)=>`<button data-s="${i}"></button>`).join('');
-let timer=setInterval(()=>{si=(si+1)%SLIDES.length;paint()},6500);
+let timer=setInterval(()=>{si=(si+1)%SLIDES.length;paint()},9000);
 $('dots').addEventListener('click',e=>{
   const b=e.target.closest('[data-s]'); if(!b)return;
   si=+b.dataset.s; paint(); clearInterval(timer);
-  timer=setInterval(()=>{si=(si+1)%SLIDES.length;paint()},6500);
+  timer=setInterval(()=>{si=(si+1)%SLIDES.length;paint()},9000);
 });
 
 /* 팝업 */
@@ -848,6 +848,16 @@ document.documentElement.classList.add('js');
     requestAnimationFrame(tick);
   }),{threshold:.5});
   document.querySelectorAll('.ab-n b').forEach(el=>cio.observe(el));
+})();
+
+/* 흐르는 띠 - 화면 밖이나 백그라운드 탭에서는 정지시켜 GPU 를 아낀다 */
+(function(){
+  const mq=document.querySelector('.mq'), band=document.querySelector('.live');
+  if(!mq||!band)return;
+  const set=on=>{mq.style.animationPlayState=on?'running':'paused'};
+  if('IntersectionObserver' in window)
+    new IntersectionObserver(es=>es.forEach(e=>set(e.isIntersecting&&!document.hidden))).observe(band);
+  document.addEventListener('visibilitychange',()=>set(!document.hidden));
 })();
 </script>
 </body>
