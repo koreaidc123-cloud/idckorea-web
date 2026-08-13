@@ -309,6 +309,7 @@ a{color:inherit;text-decoration:none}
     <a href="#newpc" data-v="newpc"><i>📦</i><span>미등록 PC</span><em class="bd" id="bd-new"></em></a>
     <a href="#verify" data-v="verify"><i>🔍</i><span>검증 대기</span><em class="bd" id="bd-unv"></em></a>
     <div class="sep">운영</div>
+    <a href="#today" data-v="today"><i>✅</i><span>오늘 할 일</span><em class="bd hot" id="bd-today"></em></a>
     <a href="#rack" data-v="rack"><i>🗄️</i><span>랙맵</span></a>
     <a href="#pcs" data-v="pcs"><i>🖥️</i><span>PC 관리</span></a>
     <a href="#orders" data-v="orders"><i>🧾</i><span>주문 · 고객</span></a>
@@ -390,7 +391,7 @@ const SUR='김이박최정강조윤장임한오서신권황안송전홍'.split('
 const GN=['민준','서연','도윤','지우','예준','하은','시우','수아','주원','지호','준서','다은','건우','채원','현우','유진','우진','서현','민재','가은'];
 const name=()=>SUR[Math.floor(rnd()*SUR.length)]+GN[Math.floor(rnd()*GN.length)];
 const phone=()=>'010-'+(1000+Math.floor(rnd()*9000))+'-'+(1000+Math.floor(rnd()*9000));
-const PMS=['가상계좌','신용카드','카카오페이','네이버페이'];
+const PMS=['가상계좌','신용카드','카카오페이','네이버페이','스마트스토어'];
 const CARDS=['신한','국민','현대','삼성','롯데','우리'];
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 const fmtD=d=>{const x=new Date(d);return (x.getMonth()+1)+'/'+x.getDate()};
@@ -455,6 +456,8 @@ function badges(){
   $('bd-unv').textContent=cnt('unv');
   $('bd-noti').textContent=ORDERS.filter(o=>o.left<=SET.notiDay).length;
   if(dn>0){$('bd-warn').hidden=false;$('bd-warn').textContent=dn}else{$('bd-warn').hidden=true}
+  const tc=todayCounts(); const tn=tc.downs.length+tc.hub.length+tc.d1.length;
+  $('bd-today').textContent=tn; $('bd-today').hidden=tn===0;
 }
 
 /* ═══════════════ 화면: 대시보드 ═══════════════ */
@@ -566,6 +569,60 @@ function vVerify(){
       </tbody></table>`
       : `<div class="empty2"><b>검증 대기 PC가 없습니다</b></div>`}
     </div>
+  </div>`;
+}
+
+/* ═══════════════ 화면: 오늘 할 일 ═══════════════ */
+function todayCounts(){
+  const downs=PCS.filter(p=>p.st==='down');
+  const g={}; downs.forEach(p=>{const k=p.roomName+' '+p.rack+'랙 '+p.fl+'층';(g[k]=g[k]||[]).push(p)});
+  const hub=Object.entries(g).filter(e=>e[1].length>=2);
+  return {downs,hub,fix:PCS.filter(p=>p.st==='fix'),d1:ORDERS.filter(o=>o.left<=1)};
+}
+function vToday(){
+  const {downs,hub,fix,d1}=todayCounts();
+  const rentFirst=downs.slice().sort((a,b)=>((b.order?1:0)-(a.order?1:0)));
+  const hubKeys=new Set(hub.flatMap(e=>e[1].map(p=>p.pn)));
+  return `
+  <div class="top"><h1>오늘 할 일</h1>
+    <span class="live">현장에서 처리할 순서대로 — 고객 영향이 큰 것부터</span></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+    <div class="card">
+      <div class="sec-h"><h3>🔌 랙 장애 의심 — 허브·회선 먼저 확인</h3><span class="cnt">${hub.length}</span></div>
+      <div class="sec-b">${hub.length? hub.map(([k,l])=>`
+        <div style="padding:12px 18px;border-bottom:1px solid var(--line2)">
+          <b style="color:var(--red)">${k}</b> — 같은 층에서 <b>${l.length}대</b> 동시 무신호
+          <div class="dim" style="font-size:12.5px">개별 고장이 아니라 층 랜허브·회선 문제일 가능성이 높습니다.
+          포함: ${l.map(p=>p.pn).join(' · ')}</div>
+        </div>`).join('')
+        : '<div class="empty2"><b>층 단위 장애 없음</b></div>'}</div>
+    </div>
+    <div class="card">
+      <div class="sec-h"><h3>⏰ 내일까지 만료 — 연장 확인 전화</h3><span class="cnt">${d1.length}</span></div>
+      <div class="sec-b"><table class="tbl"><tbody>${d1.slice(0,8).map(o=>`
+        <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        <td class="dim num">${o.ph}</td><td><b style="color:var(--red)">D-${o.left}</b></td></tr>`).join('')
+        ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="sec-h"><h3>⚡ 전원 부팅 필요 (다운)</h3><span class="cnt">${downs.length}</span>
+      <div class="r"><span class="dim" style="font-size:12px">임대중 우선 · 위치 들고 현장으로</span></div></div>
+    <div class="sec-b"><table class="tbl">
+      <thead><tr><th>위치</th><th>품번</th><th>구분</th><th>고객</th><th>비고</th></tr></thead>
+      <tbody>${rentFirst.map(p=>`
+      <tr data-pc="${p.pn}"><td class="pn">${locStr(p)}</td><td>${p.pn}</td>
+      <td>${p.order?'<span class="warnbadge">임대중 ⚡</span>':'<span class="dim">재고</span>'}</td>
+      <td>${p.order? p.order.nm+' <span class="dim">'+p.order.ph+'</span>':'—'}</td>
+      <td class="dim">${hubKeys.has(p.pn)?'랙 장애 의심에 포함':''}</td></tr>`).join('')
+      ||'<tr><td class="dim" style="padding:20px">다운된 PC가 없습니다</td></tr>'}</tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="sec-h"><h3>🔧 점검중 — 처리 후 판매 전환</h3><span class="cnt">${fix.length}</span></div>
+    <div class="sec-b"><table class="tbl"><tbody>${fix.slice(0,10).map(p=>`
+      <tr data-pc="${p.pn}"><td class="pn">${locStr(p)}</td><td>${p.pn}</td>
+      <td class="dim">${p.spec.n}</td><td>${p.memo||'<span class="dim">메모 없음</span>'}</td></tr>`).join('')
+      ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
   </div>`;
 }
 
@@ -703,7 +760,8 @@ function vOrders(){
   for(let i=Math.max(1,OF.pg-3);i<=Math.min(last,OF.pg+3);i++)
     pgs+=`<button data-opg="${i}" class="${i===OF.pg?'on':''}">${i}</button>`;
   return `
-  <div class="top"><h1>주문 · 고객</h1><span class="live">이용중 <b class="num">${ORDERS.length}</b>건 · 명의 다름 <b class="num">${ORDERS.filter(o=>o.mis).length}</b>건</span></div>
+  <div class="top"><h1>주문 · 고객</h1><span class="live">이용중 <b class="num">${ORDERS.length}</b>건 · 명의 다름 <b class="num">${ORDERS.filter(o=>o.mis).length}</b>건</span>
+    <div class="sp"><button class="btn btn-r btn-sm" data-manual>＋ 수동 주문 등록 (스마트스토어)</button></div></div>
   <div class="card">
     <div class="fbar"><input class="grow" data-of="q" value="${OF.q}"
       placeholder="이름 · 전화 · 주문번호 · 품번 · 입금자명 어느 것으로든 검색"></div>
@@ -746,7 +804,7 @@ function vNoti(){
         <td class="dim">알림톡 → 문자 전환</td>
         <td>${st==='ok'?'<span class="noti-st n-ok">✓ 알림톡 발송됨</span>'
              :st==='sms'?'<span class="noti-st n-sms">→ 문자 전환됨</span>'
-             :'<span class="noti-st n-wait">대기</span>'}</td></tr>`}).join('')}
+             :'<button class="btn btn-b btn-sm" data-noti1>발송</button>'}</td></tr>`}).join('')}
       </tbody></table></div>
   </div>
   <div class="card" style="margin-top:14px"><div class="sec-b pad" style="font-size:13px;color:var(--ink3);line-height:1.85">
@@ -916,18 +974,74 @@ function openOrd(no){
         <div class="cr"><span>이용 기간</span><b class="num">${fmtD(o.start)} ~ ${fmtD(o.end)}</b></div>
       </div>
     </div>
+    <div class="blockttl">환불 계산 (확정 규정 자동 적용)</div>
+    ${(()=>{const used=o.days-o.left;
+      if(used>7) return `<div class="mismatch" style="background:#F2F4F8;border-color:var(--line);color:var(--ink3)">
+        사용 ${used}일 — <b style="color:var(--ink)">7일 경과로 환불 불가</b> 규정입니다. (개별 협의는 별도)</div>`;
+      const refund=Math.max(0,Math.round(o.amt/o.days*o.left)-SET.setup);
+      return `<div class="credbox"><div class="cb">
+        <div class="cr"><span>사용 ${used}일 / 결제 ${o.days}일 · 남은 ${o.left}일</span><b></b></div>
+        <div class="cr"><span>일할 잔액 (${w(o.amt)} ÷ ${o.days} × ${o.left})</span><b class="num">${w(Math.round(o.amt/o.days*o.left))}원</b></div>
+        <div class="cr"><span>초기 세팅비 차감</span><b class="num" style="color:var(--red)">−${w(SET.setup)}원</b></div>
+        <div class="cr" style="border-top:1px solid var(--line);padding-top:8px;margin-top:2px">
+          <span><b>환불 예정액</b></span><b class="num" style="font-size:16px;color:var(--red)">${w(refund)}원</b></div>
+      </div></div>`})()}
   </div>
   <div class="dracts">
-    <button class="btn btn-b" data-resend="${o.no}">접속 정보 문자 재발송</button>
-    <button class="btn btn-o" data-extend="${o.no}">30일 연장 처리</button>
+    <button class="btn btn-b" data-copycust="${o.no}">📋 고객 전달용 복사 (위치 제외)</button>
+    <button class="btn btn-o" data-resend="${o.no}">문자 재발송</button>
+    <button class="btn btn-o" data-extend="${o.no}">30일 연장</button>
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
 }
 function closeDrawer(){$('drawer').classList.remove('on');$('overlay').classList.remove('on')}
 
+/* ═══════════════ 드로어: 수동 주문 등록 (스마트스토어 병행) ═══════════════ */
+function openManual(){
+  const avail=PCS.filter(p=>p.st==='ok').slice(0,120);
+  $('drawer').innerHTML=`
+  <div class="hd"><b>수동 주문 등록</b><span class="tag t-fix"><i></i>스마트스토어 · 전화 주문</span>
+    <button class="x" data-close>✕</button></div>
+  <div class="bd">
+    <p class="dim" style="font-size:13px;margin-bottom:14px">
+      스마트스토어·전화로 들어온 주문을 한 번만 등록하면, 이후 만료 알림·연장·검색이 전부 자동으로 걸립니다.</p>
+    <div class="kv">
+      <span class="k">PC 선택</span><span class="v">
+        <select id="m-pc" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px">
+          ${avail.map(p=>`<option value="${p.pn}">${p.pn} — ${p.spec.n} (${w(p.spec.p)}원/30일)</option>`).join('')}
+        </select></span>
+      <span class="k">고객명</span><span class="v">
+        <input id="m-nm" placeholder="주문자 성함" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px"></span>
+      <span class="k">연락처</span><span class="v">
+        <input id="m-ph" placeholder="010-0000-0000" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px"></span>
+      <span class="k">기간</span><span class="v">
+        <select id="m-days" style="height:38px;border:1px solid var(--line);border-radius:8px">
+          <option value="30">30일</option><option value="60">60일 (−${SET.off60}%)</option><option value="90">90일 (−${SET.off90}%)</option>
+        </select></span>
+      <span class="k">경로</span><span class="v">
+        <select id="m-pm" style="height:38px;border:1px solid var(--line);border-radius:8px">
+          <option>스마트스토어</option><option>가상계좌</option><option>신용카드</option><option>전화 주문</option>
+        </select></span>
+      <span class="k">이용자</span><span class="v">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13.5px;cursor:pointer">
+          <input type="checkbox" id="m-mis" style="width:16px;height:16px"> 결제자와 다른 사람이 사용</label>
+        <div id="m-misbox" hidden style="margin-top:7px;display:flex;gap:6px">
+          <input id="m-unm" placeholder="이용자 성함" style="flex:1;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px">
+          <input id="m-uph" placeholder="이용자 연락처" style="flex:1.3;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px">
+        </div></span>
+    </div>
+    <div id="m-msg" style="font-size:12.5px;color:var(--red);font-weight:700;min-height:18px"></div>
+  </div>
+  <div class="dracts">
+    <button class="btn btn-r" data-mansave>등록하고 임대중으로 전환</button>
+    <button class="btn btn-o" data-close>취소</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+}
+
 /* ═══════════════ 라우터 ═══════════════ */
-const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,rack:vRack,pcs:vPcs,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
+const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
 function route(){
   const v=(location.hash||'#dash').slice(1);
   const fn=VIEWS[v]||vDash;
@@ -1072,6 +1186,51 @@ document.addEventListener('click',e=>{
     $('dr-pw').textContent=p.pw; $('dr-pw').classList.remove('mask');
     logView(p.pn||p.ad); t.remove(); return;
   }
+
+  /* 수동 주문 등록 */
+  if(t.closest('[data-manual]')){openManual();return}
+  if(t.id==='m-mis'){$('m-misbox').hidden=!t.checked;return}
+  if(t.closest('[data-mansave]')){
+    const msg=s=>{$('m-msg').textContent=s};
+    const p=PCS.find(x=>x.pn===$('m-pc').value);
+    const nm=$('m-nm').value.trim(), ph=$('m-ph').value.trim();
+    const days=+$('m-days').value, pm=$('m-pm').value;
+    const mis=$('m-mis').checked, unm=$('m-unm')?$('m-unm').value.trim():'', uph=$('m-uph')?$('m-uph').value.trim():'';
+    if(!p){msg('PC를 선택해 주세요');return}
+    if(p.st!=='ok'){msg(p.pn+' 은 방금 다른 상태로 바뀌었습니다');return}
+    if(nm.length<2){msg('고객명을 입력해 주세요');return}
+    if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){msg('연락처 형식을 확인해 주세요 (010-0000-0000)');return}
+    if(mis&&unm.length<2){msg('이용자 성함을 입력해 주세요');return}
+    const off=days===60?SET.off60:days===90?SET.off90:0;
+    const amt=Math.round(p.spec.p*days/30*(100-off)/100);
+    const start=new Date(TODAY), end=new Date(TODAY); end.setDate(end.getDate()+days);
+    const o={no:'2608-'+(ono++), pc:p, nm, ph, via:'manual', payer:nm,
+      userNm:mis?unm:nm, userPh:mis?uph:null, mis, pm,
+      card:null, depositor:pm==='가상계좌'?nm:null, days, amt, start, end, left:days};
+    ORDERS.push(o); ORDERS.sort((a,b)=>a.left-b.left);
+    p.st='rent'; p.order=o;
+    logView(p.pn,'수동 주문 등록 — '+nm+' ('+pm+')');
+    closeDrawer(); route(); openOrd(o.no); return;
+  }
+  /* 고객 전달용 복사 — 위치는 절대 포함하지 않는다 */
+  const cp2=t.closest('[data-copycust]');
+  if(cp2){
+    const o=ORDERS.find(x=>x.no===cp2.dataset.copycust); if(!o)return;
+    const p=o.pc;
+    const txt='[한국 가상컴] '+o.nm+'님의 가상컴 안내\n'
+      +'문의번호: '+p.pn+'\n'
+      +'접속 주소: '+p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')+'\n'
+      +'비밀번호: '+p.pw+'\n'
+      +'이용 기간: '+fmtD(o.start)+' ~ '+fmtD(o.end)+'\n'
+      +'문의: 카카오톡 채널 「한국 가상컴」 또는 010-2323-4060';
+    (navigator.clipboard? navigator.clipboard.writeText(txt):Promise.reject())
+      .then(()=>{cp2.textContent='✓ 복사됨 (위치 미포함)';setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},1600)})
+      .catch(()=>{prompt('아래 내용을 복사하세요 (위치 미포함)',txt)});
+    logView(p.pn,'고객 전달용 정보 복사'); return;
+  }
+  /* 알림 개별 발송 */
+  const n1=t.closest('[data-noti1]');
+  if(n1){n1.outerHTML='<span class="noti-st n-ok">✓ 발송 요청됨</span>';return}
 
   if(t.closest('[data-resend]')){alert('실서비스에서는 접속 정보 문자가 재발송됩니다.');return}
   const ex=t.closest('[data-extend]');
