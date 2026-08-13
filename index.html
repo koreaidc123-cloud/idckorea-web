@@ -107,7 +107,8 @@ section.cta .btn-w{color:var(--red)}
 .hd .r{display:flex;align-items:center;gap:7px}
 
 /* ══ 히어로 슬라이더 ══ */
-.hero{position:relative;height:min(78vh,660px);min-height:480px;overflow:hidden;background:#050912}
+.hero{position:relative;height:min(78vh,660px);min-height:480px;overflow:hidden;background:#050912;
+  isolation:isolate;contain:paint}
 .sl{position:absolute;inset:0;opacity:0;transition:opacity 1.1s ease}
 .sl.on{opacity:1}
 .sl img{width:100%;height:100%;object-fit:cover}
@@ -161,7 +162,8 @@ section.cta .btn-w{color:var(--red)}
 @media(prefers-reduced-motion:reduce){.mq{animation:none}}
 
 /* ══ 회사소개 띠 ══ */
-.ab-band{position:relative;overflow:hidden;background:#050912;color:#fff;text-align:center}
+.ab-band{position:relative;overflow:hidden;background:#050912;color:#fff;text-align:center;
+  isolation:isolate;contain:paint}
 .ab-bg{position:absolute;inset:0}
 .ab-bg img{width:100%;height:100%;object-fit:cover}
 .ab-bg::after{content:'';position:absolute;inset:0;background:rgba(4,7,16,.82)}
@@ -451,8 +453,8 @@ section.cta .btn-w{color:var(--red)}
 .pc:hover .pc-img img{transform:scale(1.08)}
 .pc-b .btn{transition:.18s}
 .pc:hover .pc-b .btn{box-shadow:0 10px 24px rgba(226,35,60,.3)}
-.cnt.pop{animation:cntPop .5s cubic-bezier(.2,.9,.3,1)}
-@keyframes cntPop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+.cnt.pop{animation:cntPop .6s ease-out}
+@keyframes cntPop{0%{color:var(--gold)}100%{color:inherit}}
 .js .pt div{opacity:0;transition:opacity .5s cubic-bezier(.2,.7,.3,1)}
 .js .pt.in div{opacity:1}
 /* 로고 — 원본 태극(홍 왼쪽위 · 청 오른쪽아래) + 두꺼운 국문 워드마크 */
@@ -854,24 +856,39 @@ if(!SAFE)document.documentElement.classList.add('js');
   }),{threshold:.12,rootMargin:'0px 0px -8% 0px'});
   document.querySelectorAll('.rv').forEach(el=>io.observe(el));
 
-  /* 6년 · 3곳 · 1,200+ · 24시간 처럼 단위가 붙어도 숫자만 올린다 */
-  const cio=new IntersectionObserver(es=>es.forEach(e=>{
-    if(!e.isIntersecting)return;
-    const el=e.target, m=el.textContent.trim().match(/^([^\d]*)([\d,]+)(.*)$/);
-    cio.unobserve(el);
-    if(!m)return;
-    const pre=m[1], suf=m[3], target=parseInt(m[2].replace(/,/g,''),10);
-    if(!target)return;
-    const dur=1100, t0=performance.now();
-    el.classList.add('cnt');
-    const tick=now=>{
-      const p=Math.min(1,(now-t0)/dur), e2=1-Math.pow(1-p,3);
-      el.textContent=pre+Math.round(target*e2).toLocaleString('ko-KR')+suf;
-      if(p<1)requestAnimationFrame(tick); else el.classList.add('pop');
-    };
-    requestAnimationFrame(tick);
-  }),{threshold:.5});
-  document.querySelectorAll('.ab-n b').forEach(el=>cio.observe(el));
+  /* 6년 · 3곳 · 1,200+ · 24시간 처럼 단위가 붙어도 숫자만 올린다.
+     감시 대상은 숫자가 아니라 섹션 자체 — 숫자는 content-visibility 로
+     렌더링이 건너뛰어지는 영역 안에 있어 개별 감시가 동작하지 않는다.
+     끝날 때 transform 을 쓰지 않는다: 어두운 오버레이를 가진 섹션 안에서
+     transform 은 새 합성 레이어를 만들어 오버레이가 화면 전체를 덮는다. */
+  function runCount(root){
+    root.querySelectorAll('.ab-n b').forEach(el=>{
+      if(el.dataset.counted)return;
+      const m=el.textContent.trim().match(/^([^\d]*)([\d,]+)(.*)$/);
+      if(!m)return;
+      const pre=m[1], suf=m[3], target=parseInt(m[2].replace(/,/g,''),10);
+      if(!target)return;
+      el.dataset.counted='1';
+      const dur=1100, t0=performance.now();
+      el.classList.add('cnt');
+      const tick=now=>{
+        const p=Math.min(1,(now-t0)/dur), e2=1-Math.pow(1-p,3);
+        el.textContent=pre+Math.round(target*e2).toLocaleString('ko-KR')+suf;
+        if(p<1)requestAnimationFrame(tick); else el.classList.add('pop');
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+  const band=document.querySelector('.ab-band');
+  if(band){
+    if('IntersectionObserver' in window){
+      const cio=new IntersectionObserver(es=>es.forEach(e=>{
+        if(!e.isIntersecting)return;
+        cio.unobserve(e.target); runCount(e.target);
+      }),{threshold:.25});
+      cio.observe(band);
+    } else runCount(band);
+  }
 })();
 
 /* 흐르는 띠 - transform 대신 네이티브 스크롤로 흘린다.
