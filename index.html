@@ -145,12 +145,7 @@ section.cta .btn-w{color:var(--red)}
   border-bottom:1px solid rgba(255,255,255,.08)}
 /* 흐르는 사양 띠 — 오른쪽에서 왼쪽으로 끊김 없이 */
 .live{overflow:hidden;padding:16px 0}
-.live::before,.live::after{content:'';position:absolute;top:0;bottom:0;width:90px;z-index:2;pointer-events:none}
-.live::before{left:0;background:linear-gradient(90deg,#0A1030,rgba(10,16,48,0))}
-.live::after{right:0;background:linear-gradient(270deg,#0A1030,rgba(10,16,48,0))}
-.mq{display:flex;width:max-content;animation:mq 42s linear infinite}
-.live:hover .mq{animation-play-state:paused}
-@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.mq{display:flex;width:max-content}
 .mq-in{display:flex;align-items:center;gap:14px;padding-right:14px;flex:none}
 .mq-in .it{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:99px;
@@ -857,14 +852,26 @@ document.documentElement.classList.add('js');
   document.querySelectorAll('.ab-n b').forEach(el=>cio.observe(el));
 })();
 
-/* 흐르는 띠 - 화면 밖이나 백그라운드 탭에서는 정지시켜 GPU 를 아낀다 */
+/* 흐르는 띠 - transform 대신 네이티브 스크롤로 흘린다.
+   transform 애니메이션은 띠 전체(6,300px+)를 GPU 텍스처 한 장으로 만들어
+   구형 그래픽(최대 4096px)에서 화면 전체가 검게 깨지는 원인이 됐다.
+   스크롤은 브라우저가 타일로 쪼개 그리므로 어떤 GPU 에서도 안전하다. */
 (function(){
-  const mq=document.querySelector('.mq'), band=document.querySelector('.live');
-  if(!mq||!band)return;
-  const set=on=>{mq.style.animationPlayState=on?'running':'paused'};
-  if('IntersectionObserver' in window)
-    new IntersectionObserver(es=>es.forEach(e=>set(e.isIntersecting&&!document.hidden))).observe(band);
-  document.addEventListener('visibilitychange',()=>set(!document.hidden));
+  const band=document.querySelector('.live'), mq=document.querySelector('.mq');
+  if(!band||!mq)return;
+  let run=true;
+  band.addEventListener('mouseenter',()=>{run=false});
+  band.addEventListener('mouseleave',()=>{run=true});
+  document.addEventListener('visibilitychange',()=>{run=!document.hidden});
+  function step(){
+    const half=mq.scrollWidth/2;
+    if(run&&half>0){
+      band.scrollLeft+=1.1;
+      if(band.scrollLeft>=half)band.scrollLeft-=half;
+    }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 })();
 
 /* kvc-console-notice */
