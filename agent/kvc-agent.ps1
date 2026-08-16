@@ -194,19 +194,14 @@ if ($Setup) {
     icacls $CfgFile /inheritance:r /grant:r "SYSTEM:(R)" "Administrators:(F)" 2>&1 | Out-Null
   } catch {}
 
-  # 부팅할 때 + 그 뒤로 2분마다 실행되도록 작업 스케줄러에 등록
-  $me  = $MyInvocation.MyCommand.Path
-  $act = New-ScheduledTaskAction -Execute 'powershell.exe' `
-         -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$me`""
-  $trg = New-ScheduledTaskTrigger -AtStartup
-  $trg.Delay = 'PT40S'
-  $rep = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-         -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration ([TimeSpan]::MaxValue)
-  $prn = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
-  $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-         -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
-  Register-ScheduledTask -TaskName 'KVC-Agent' -Action $act -Trigger @($trg, $rep) `
-    -Principal $prn -Settings $set -Force | Out-Null
+  # 2분마다 실행되도록 등록합니다.
+  # ※ New-ScheduledTaskTrigger 의 "무기한 반복"은 쓰지 않습니다 —
+  #    일부 윈도우10 버전에서 P99999999DT23H59M59S 라는 값을 만들어 내고
+  #    그 버전의 작업 스케줄러가 "범위를 벗어난 값"이라며 거부합니다.
+  Copy-Item $MyInvocation.MyCommand.Path (Join-Path $CfgDir 'kvc-agent.ps1') -Force -ErrorAction SilentlyContinue
+  $cmd = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\KVC\kvc-agent.ps1'
+  $out = & schtasks.exe /Create /TN 'KVC-Agent' /TR $cmd /SC MINUTE /MO 2 /RU SYSTEM /RL HIGHEST /F 2>&1
+  if ($LASTEXITCODE -ne 0) { Write-Host ('작업 등록 실패 : ' + (($out | Out-String).Trim())) -ForegroundColor Red; exit 1 }
 
   Write-Host "  등록 완료 - $($r.pn)$(if($r.renewed){' (기존 PC 재등록)'})" -ForegroundColor Green
   if ($r.pwSaved) { Write-Host '  애니데스크 비밀번호도 함께 등록되었습니다.' -ForegroundColor Green }

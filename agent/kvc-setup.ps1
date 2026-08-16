@@ -72,7 +72,7 @@ $cInk   = [Drawing.Color]::FromArgb(20, 24, 32)
 # ── 창 ────────────────────────────────────────────────────────────
 $f = New-Object Windows.Forms.Form
 $f.Text = '한국 가상컴 - PC 등록'
-$f.Size = New-Object Drawing.Size(760, 720)
+$f.Size = New-Object Drawing.Size(760, 800)
 $f.StartPosition = 'CenterScreen'
 $f.BackColor = [Drawing.Color]::White
 $f.FormBorderStyle = 'FixedSingle'
@@ -133,23 +133,47 @@ foreach ($b in $roomBtns) {
   })
 }
 
-# ── 2단계 : 애니데스크 비밀번호 ───────────────────────────────────
-New-Label '2. 애니데스크 비밀번호를 적어 주세요' $fBig $cInk 40 302 620 34 | Out-Null
-New-Label '조금 전 이 컴퓨터 애니데스크에 설정하신 그 비밀번호입니다.' $fSmall $cGray 40 342 620 26 | Out-Null
+# ── 2단계 : 애니데스크 비밀번호 (오타 방지를 위해 두 번 받습니다) ──
+New-Label '2. 애니데스크 비밀번호를 적어 주세요' $fBig $cInk 40 300 620 34 | Out-Null
+New-Label '조금 전 이 컴퓨터 애니데스크에 설정하신 그 비밀번호입니다.' $fSmall $cGray 40 338 620 26 | Out-Null
 
-$pwBox = New-Object Windows.Forms.TextBox
-$pwBox.Font = New-Object Drawing.Font('맑은 고딕', 22)
-$pwBox.Location = New-Object Drawing.Point(40, 376)
-$pwBox.Size = New-Object Drawing.Size(662, 52)
-$pwBox.BorderStyle = 'FixedSingle'
-$f.Controls.Add($pwBox)
+function New-PwBox($y) {
+  $t = New-Object Windows.Forms.TextBox
+  $t.Font = New-Object Drawing.Font('맑은 고딕', 20)
+  $t.Location = New-Object Drawing.Point(40, $y)
+  $t.Size = New-Object Drawing.Size(662, 48)
+  $t.BorderStyle = 'FixedSingle'
+  $f.Controls.Add($t); return $t
+}
+$pwBox  = New-PwBox 368
+$lbl2   = New-Label '한 번 더 적어 주세요 (오타 확인)' $fSmall $cGray 40 428 400 26
+$match  = New-Label '' $fSmall $cGray 440 428 262 26
+$match.TextAlign = 'TopRight'
+$pw2Box = New-PwBox 458
+
+# 두 칸이 같은지 실시간으로 알려줍니다
+$checkMatch = {
+  $a = $pwBox.Text; $b = $pw2Box.Text
+  if (-not $a -or -not $b) { $match.Text = ''; $pw2Box.BackColor = [Drawing.Color]::White; return }
+  if ($a -ceq $b) {
+    $match.Text = '✓ 같습니다'
+    $match.ForeColor = [Drawing.Color]::FromArgb(22,150,88)
+    $pw2Box.BackColor = [Drawing.Color]::FromArgb(240,251,245)
+  } else {
+    $match.Text = '✕ 다릅니다'
+    $match.ForeColor = $cRed
+    $pw2Box.BackColor = [Drawing.Color]::FromArgb(255,244,246)
+  }
+}
+$pwBox.Add_TextChanged($checkMatch)
+$pw2Box.Add_TextChanged($checkMatch)
 
 # ── 등록 버튼 ─────────────────────────────────────────────────────
 $go = New-Object Windows.Forms.Button
 $go.Text = '등록하기'
 $go.Font = New-Object Drawing.Font('맑은 고딕', 22, [Drawing.FontStyle]::Bold)
-$go.Size = New-Object Drawing.Size(662, 84)
-$go.Location = New-Object Drawing.Point(40, 456)
+$go.Size = New-Object Drawing.Size(662, 80)
+$go.Location = New-Object Drawing.Point(40, 528)
 $go.FlatStyle = 'Flat'
 $go.FlatAppearance.BorderSize = 0
 $go.BackColor = $cRed
@@ -157,8 +181,22 @@ $go.ForeColor = [Drawing.Color]::White
 $go.Cursor = 'Hand'
 $f.Controls.Add($go)
 
-$msg = New-Label '' $fMid $cGray 40 552 662 100
+$msg = New-Label '' $fMid $cGray 40 620 662 110
 $msg.TextAlign = 'TopLeft'
+
+# ── 2분마다 돌도록 등록 ───────────────────────────────────────────
+#    ※ New-ScheduledTaskTrigger 의 "무기한 반복"은 쓰지 않습니다.
+#       일부 윈도우10 버전에서 P99999999DT23H59M59S 라는 값을 만들어 내는데
+#       그 버전의 작업 스케줄러가 "범위를 벗어난 값"이라며 거부합니다.
+#       (실제로 겪었습니다 — 현장 나가기 전에 잡았습니다)
+#       schtasks 는 어느 윈도우에서나 같은 방식으로 동작합니다.
+function Register-BeatTask {
+  $cmd = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\KVC\kvc-agent.ps1'
+  $out = & schtasks.exe /Create /TN 'KVC-Agent' /TR $cmd /SC MINUTE /MO 2 /RU SYSTEM /RL HIGHEST /F 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw ('작업 등록 실패 : ' + (($out | Out-String).Trim()))
+  }
+}
 
 # ── 이 컴퓨터 정보 읽기 ───────────────────────────────────────────
 function Get-Spec {
@@ -201,6 +239,13 @@ $go.Add_Click({
     $msg.Text = "애니데스크 비밀번호를 적어 주세요."
     $pwBox.Focus(); return
   }
+  # 두 칸이 다르면 오타입니다. 잘못된 비밀번호가 등록되면
+  # 고객이 접속을 못 하고, 현장에 다시 가야 합니다.
+  if ($pwBox.Text -cne $pw2Box.Text) {
+    $msg.ForeColor = $cRed
+    $msg.Text = "두 칸의 비밀번호가 다릅니다.`n아래 칸에 다시 한 번 정확히 적어 주세요."
+    $pw2Box.Focus(); $pw2Box.SelectAll(); return
+  }
 
   $go.Enabled = $false
   $go.Text = '등록하는 중...'
@@ -230,7 +275,7 @@ $go.Add_Click({
           -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 40
 
     # 비밀번호는 보냈으니 화면과 메모리에서 바로 지웁니다
-    $pwBox.Text = ''
+    $pwBox.Text = ''; $pw2Box.Text = ''
     $body = $null
 
     if (-not (Test-Path $CfgDir)) { New-Item -ItemType Directory -Path $CfgDir -Force | Out-Null }
@@ -240,18 +285,10 @@ $go.Add_Click({
 
     # 하트비트 프로그램을 이 컴퓨터에 복사하고 2분마다 돌게 등록합니다
     Copy-Item (Join-Path $here 'kvc-agent.ps1') (Join-Path $CfgDir 'kvc-agent.ps1') -Force
-    $act = New-ScheduledTaskAction -Execute 'powershell.exe' `
-           -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$CfgDir\kvc-agent.ps1`""
-    $t1 = New-ScheduledTaskTrigger -AtStartup; $t1.Delay = 'PT40S'
-    $t2 = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-          -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration ([TimeSpan]::MaxValue)
-    $prn = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
-    $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
-    Register-ScheduledTask -TaskName 'KVC-Agent' -Action $act -Trigger @($t1,$t2) `
-      -Principal $prn -Settings $set -Force | Out-Null
+    Register-BeatTask
 
     # ── 결과 화면 ──
-    foreach ($c in @($go, $pwBox)) { $c.Visible = $false }
+    foreach ($c in @($go, $pwBox, $pw2Box)) { $c.Visible = $false }
     foreach ($b in $roomBtns) { $b.Visible = $false }
     foreach ($c in $f.Controls) { if ($c -is [Windows.Forms.Label]) { $c.Visible = $false } }
 
@@ -289,5 +326,7 @@ $go.Add_Click({
   }
 })
 
-$pwBox.Add_KeyDown({ if ($_.KeyCode -eq 'Enter') { $go.PerformClick() } })
+# 첫 칸에서 Enter 를 치면 확인 칸으로, 확인 칸에서 Enter 를 치면 등록합니다
+$pwBox.Add_KeyDown({ if ($_.KeyCode -eq 'Enter') { $pw2Box.Focus() } })
+$pw2Box.Add_KeyDown({ if ($_.KeyCode -eq 'Enter') { $go.PerformClick() } })
 [void]$f.ShowDialog()
