@@ -36,9 +36,36 @@ $CfgDir  = 'C:\KVC'
 $CfgFile = Join-Path $CfgDir 'pc.json'
 $LogFile = Join-Path $CfgDir 'agent.log'
 
-# ── 마지막으로 사람이 마우스·키보드를 만진 지 몇 초 됐는지 ──────────
-#    원격으로 접속해서 쓰고 있으면 이 값이 계속 0 에 가깝습니다.
-#    이걸로 "지금 사용중인가"를 판단합니다.
+# ── 지금 누가 쓰고 있는지 ─────────────────────────────────────────
+#    ★ 예약 작업은 SYSTEM 계정으로 돕니다. SYSTEM 은 화면이 없는 별도 공간에서
+#      실행되기 때문에, 마지막 키보드·마우스 입력을 묻는 방식으로는
+#      실제 사용자의 조작이 보이지 않습니다 (항상 "사용중 아님"으로 나옵니다).
+#      그래서 quser(로그온한 사용자 목록)로 판단합니다. 이건 SYSTEM 에서도 보입니다.
+#      (실제로 겪었습니다 — 쓰고 있는데 사용중=아니오 로 올라갔습니다)
+function Get-IdleMinutes {
+  try {
+    $lines = & quser 2>$null
+    if (-not $lines) { return $null }        # 아무도 로그온하지 않음
+    $best = $null
+    foreach ($l in $lines) {
+      # 줄 모양 : 사용자  세션이름  ID  상태  유휴시간  로그온시간
+      # 화면 글자는 윈도우 언어에 따라 다르므로, 숫자 ID 를 기준으로 잘라냅니다.
+      $m = [regex]::Match($l, '\s(\d+)\s+(\S+)\s+(\S+)\s')
+      if (-not $m.Success) { continue }      # 머리글 줄
+      $idle = $m.Groups[3].Value
+      $min =
+        if ($idle -match '^(none|\.|없음|-)$') { 0 }
+        elseif ($idle -match '^(\d+)\+(\d+):(\d+)$') { [int]$Matches[1]*1440 + [int]$Matches[2]*60 + [int]$Matches[3] }
+        elseif ($idle -match '^(\d+):(\d+)$')        { [int]$Matches[1]*60 + [int]$Matches[2] }
+        elseif ($idle -match '^\d+$')                { [int]$idle }
+        else { continue }
+      if ($null -eq $best -or $min -lt $best) { $best = $min }
+    }
+    return $best
+  } catch { return $null }
+}
+
+# 예비 수단 — quser 를 못 쓰는 환경에서만 씁니다 (화면이 있는 계정으로 돌 때)
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -219,13 +246,22 @@ if (-not (Test-Path $CfgFile)) {
 }
 $cfg  = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json
 $spec = Get-Spec
-$idle = try { [int][KvcIdle]::Seconds() } catch { 99999 }
+
+# 누가 쓰고 있나 — quser 를 먼저 보고, 못 쓰면 마지막 입력 시각으로 갈음합니다
+$idleMin = Get-IdleMinutes
+if ($null -ne $idleMin) {
+  $inUse = ($idleMin -lt 5)                 # 5분 안에 조작이 있었으면 사용중
+  $idle  = $idleMin * 60
+} else {
+  $idle  = try { [int][KvcIdle]::Seconds() } catch { 99999 }
+  $inUse = ($idle -lt 300)
+}
 
 $payload = @{
   p_pn      = $cfg.pn
   p_token   = $cfg.token
   p_online  = $true
-  p_in_use  = ($idle -lt 300)      # 5분 안에 마우스·키보드를 만졌으면 사용중
+  p_in_use  = $inUse
   p_ip      = $spec.ip
   p_cpu     = $spec.cpu
   p_core    = $spec.core
@@ -243,7 +279,7 @@ try {
         -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 25
 
   if ("$r" -eq 'OK') {
-    if ($Once) { Write-Host "보냈습니다 - $($cfg.pn) (사용중: $(if($idle -lt 300){'예'}else{'아니오'}))" -ForegroundColor Green }
+    if ($Once) { Write-Host "보냈습니다 - $($cfg.pn) (사용중: $(if($inUse){'예'}else{'아니오'}) / 유휴 $([int]($idle/60))분)" -ForegroundColor Green }
   } else {
     Log "거절됨 ($r) - 품번이나 토큰이 맞지 않습니다. -Setup 으로 다시 등록하세요."
     if ($Once) { Write-Host "거절됨 : $r  →  -Setup 으로 다시 등록해 주세요" -ForegroundColor Red }
