@@ -780,7 +780,10 @@ function vPcs(){
 }
 
 /* ═══════════════ 회원 — 주문을 사람 단위로 묶는다 ═══════════════ */
-const MEMBERS=(()=>{
+/* 회원 목록은 주문에서 그때그때 만들어 냅니다.
+   전에는 화면을 열 때 딱 한 번만 계산해서, 서버 주문을 받아온 뒤에도
+   예전 값이 그대로 남아 있었습니다. */
+function membersOf(){
   const map=new Map();
   ORDERS.forEach(o=>{
     const key=o.ph;
@@ -791,12 +794,13 @@ const MEMBERS=(()=>{
     if(o.mis) m.mis=true;
   });
   return [...map.values()].sort((a,b)=>b.amt-a.amt);
-})();
+}
 const viaLabel=v=>v==='kakao'?'카카오':v==='google'?'구글':'수동등록';
 const canAlim=m=>m.via!=='manual';
 
 function vMembers(){
   const q=(MF.q||'').trim();
+  const MEMBERS=membersOf();
   let L=MEMBERS.filter(m=>!q||m.nm.includes(q)||m.ph.replace(/-/g,'').includes(q.replace(/-/g,''))
     ||m.pcs.some(p=>p.pn.toLowerCase().includes(q.toLowerCase())));
   if(MF.via) L=L.filter(m=>m.via===MF.via);
@@ -849,7 +853,7 @@ function vMembers(){
 
 /* 회원 상세 */
 function openMem(ph){
-  const m=MEMBERS.find(x=>x.ph===ph); if(!m)return;
+  const m=membersOf().find(x=>x.ph===ph); if(!m)return;
   $('drawer').innerHTML=`
   <div class="hd"><b>${m.nm}</b><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span>
     <button class="x" data-close>✕</button></div>
@@ -1307,7 +1311,7 @@ document.addEventListener('click',async e=>{
   if(t.closest('[data-mrisk]')){MF.risk=!MF.risk;MF.pg=1;route();return}
   const dosend=t.closest('[data-dosend]');
   if(dosend){
-    const m=MEMBERS.find(x=>x.ph===dosend.dataset.dosend);
+    const m=membersOf().find(x=>x.ph===dosend.dataset.dosend);
     const msg=$('al-msg').value.trim();
     if(!msg){alert('보낼 내용을 입력해 주세요.');return}
     logView(m.pcs[0].pn,'알림 발송 — '+m.nm+' ('+m.ph+')');
@@ -1546,7 +1550,6 @@ function applyLive(d){
       spec:{n:u.cpu||'사양 미확인',core:u.core||'',ram:u.ram_gb||0,ssd:u.ssd_gb||0,gpu:u.gpu||'',p:0},
       ad:u.anydesk||'', pw:'', ip:u.ip||'', beat:0, live:true});
   }
-  /* 주문은 결제 연동이 끝나면 서버에서 함께 내려옵니다 (지금은 비웁니다) */
   ORDERS.length=0;
   LIVE=true; LIVE_AT=new Date();
   /* 랙 구조를 실제 위치에서 다시 만듭니다 — 현장 입력과 어긋날 수 없습니다 */
@@ -1590,13 +1593,45 @@ async function pcSave(key, patch){
   }catch(e){ return {ok:false,error:'서버에 연결하지 못했습니다'}; }
 }
 
+/* 서버에서 받은 주문을 화면이 쓰는 모양으로 바꿔 넣습니다 */
+function applyOrders(d){
+  ORDERS.length=0;
+  const byPn={}; for(const p of PCS) if(p.pn) byPn[p.pn]=p;
+  for(const o of (d.orders||[])){
+    const pc=byPn[o.pn]||null;
+    const ord={
+      no:o.no, pc, pn:o.pn, nm:o.nm, ph:o.ph, via:o.via, email:o.email,
+      payer:o.payer, userNm:o.userNm, userPh:o.userPh, mis:o.mis,
+      pm:o.pm, card:null, depositor:o.pm==='가상계좌'?o.payer:null,
+      days:o.days, amt:o.amt, st:o.st,
+      start:o.start?new Date(o.start):null,
+      end:o.end?new Date(o.end):null,
+      left:o.left==null?999:o.left,
+      taxInvoice:o.taxInvoice, bizNo:o.bizNo,
+      refundAmt:o.refundAmt, refundWhy:o.refundWhy,
+    };
+    ORDERS.push(ord);
+    if(pc) pc.order=ord;      // 랙맵·PC 상세에서 "누가 쓰고 있나"를 보여줍니다
+  }
+  ORDERS.sort((a,b)=>a.left-b.left);
+  SRV_MEMBERS = d.members||[];
+  SRV_COUNTS  = d.counts||{};
+}
+let SRV_MEMBERS=[], SRV_COUNTS={};
+
 async function syncLive(){
   if(sessionStorage.getItem('kvc-adm')!=='1') return;
   try{
     const r=await fetch('/api/pcs',{credentials:'same-origin',cache:'no-store'});
     if(!r.ok) return;                       // 401(미로그인)·503(DB 없음) → 목업 유지
     const d=await r.json();
-    if(d && Array.isArray(d.pcs) && d.pcs.length) applyLive(d);
+    if(!(d && Array.isArray(d.pcs) && d.pcs.length)) return;
+    applyLive(d);
+    /* 주문·회원도 이어서 받아옵니다 */
+    try{
+      const r2=await fetch('/api/orders',{credentials:'same-origin',cache:'no-store'});
+      if(r2.ok){ applyOrders(await r2.json()); route(); }
+    }catch(e){}
   }catch(e){}                               // 서버 함수가 없는 환경 → 목업 유지
 }
 syncLive();
