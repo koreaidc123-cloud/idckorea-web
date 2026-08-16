@@ -26,6 +26,7 @@ const HANDLERS = {
   'orders':       require('./_admin-orders'),
   'order-manual': require('./_admin-order-manual'),
   'order-action': require('./_admin-order-action'),
+  'settings':     require('./_admin-settings'),
 };
 
 module.exports = async (req, res) => {

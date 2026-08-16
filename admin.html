@@ -1462,15 +1462,45 @@ document.addEventListener('click',async e=>{
   if(n1){n1.outerHTML='<span class="noti-st n-ok">✓ 발송 요청됨</span>';return}
 
   if(t.closest('[data-resend]')){alert('실서비스에서는 접속 정보 문자가 재발송됩니다.');return}
+  /* 기간 연장 — 서버에 저장해야 실제로 늘어납니다 */
   const ex=t.closest('[data-extend]');
-  if(ex){const o=ORDERS.find(x=>x.no===ex.dataset.extend);
-    if(o){o.left+=30;o.end.setDate(o.end.getDate()+30);ORDERS.sort((a,b)=>a.left-b.left);closeDrawer();route()}return}
+  if(ex){
+    const o=ORDERS.find(x=>x.no===ex.dataset.extend); if(!o)return;
+    const amt=prompt(o.nm+'님 '+o.pn+' 을 30일 연장합니다.\n받으신 금액을 적어 주세요 (원)', String(o.amt||''));
+    if(amt===null)return;
+    ex.disabled=true;
+    if(LIVE){
+      try{
+        const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({no:o.no, act:'extend', days:30, amount:+amt||0})});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok){ ex.disabled=false; alert(d.error||'연장하지 못했습니다'); return; }
+      }catch(e){ ex.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    }
+    o.left+=30; if(o.end) o.end.setDate(o.end.getDate()+30);
+    o.days+=30; o.amt+=(+amt||0);
+    ORDERS.sort((a,b)=>a.left-b.left); closeDrawer(); route(); return;
+  }
   if(t.id==='noti-all'){alert('실서비스에서는 대상 전원에게 알림톡이 발송되고,\n실패 건은 문자로 자동 전환됩니다.');return}
 
   if(t.id==='findgo'){FQ=$('findq').value;route();return}
 
   if(t.id==='set-save'){
-    document.querySelectorAll('[data-set]').forEach(i=>{SET[i.dataset.set]=+i.value||DEFSET[i.dataset.set]});
+    const next={};
+    document.querySelectorAll('[data-set]').forEach(i=>{next[i.dataset.set]=+i.value||DEFSET[i.dataset.set]});
+    /* 서버에 저장해야 다른 PC 에서 열어도 같고, 서버의 다운 판정과도 어긋나지 않습니다 */
+    if(LIVE){
+      t.disabled=true; $('set-msg').textContent='저장하는 중…';
+      try{
+        const r=await fetch('/api/admin?do=settings',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify(next)});
+        const d=await r.json().catch(()=>({}));
+        t.disabled=false;
+        if(!r.ok){ $('set-msg').textContent=d.error||'저장하지 못했습니다'; return; }
+      }catch(e){ t.disabled=false; $('set-msg').textContent='서버에 연결하지 못했습니다'; return; }
+    }
+    Object.assign(SET,next);
     localStorage.setItem('kvc-set',JSON.stringify(SET));
     $('set-msg').textContent='✓ 저장되었습니다'; setTimeout(()=>{const m=$('set-msg');if(m)m.textContent=''},1800);
     badges(); return;
@@ -1554,6 +1584,14 @@ function applyLive(d){
   LIVE=true; LIVE_AT=new Date();
   /* 랙 구조를 실제 위치에서 다시 만듭니다 — 현장 입력과 어긋날 수 없습니다 */
   RACKS=racksFromPCS();
+  /* 운영 설정도 서버 값을 씁니다. 화면과 서버가 다른 값을 보면
+     "관리자에는 정상인데 고객 화면에는 다운" 같은 어긋남이 생깁니다. */
+  const s=d.settings||{};
+  if(s.setup_fee) SET.setup   = Number(s.setup_fee);
+  if(s.down_sec)  SET.downSec = Number(s.down_sec);
+  if(s.noti_day)  SET.notiDay = Number(s.noti_day);
+  if(s.off60)     SET.off60   = Number(s.off60);
+  if(s.off90)     SET.off90   = Number(s.off90);
   const ft=document.querySelector('.ft');
   if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
     +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';
