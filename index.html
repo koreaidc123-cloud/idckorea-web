@@ -839,6 +839,28 @@ function live(){
   document.querySelectorAll('.mq-in').forEach(el=>el.innerHTML=items+'<span class="sep">◆</span>');
   const s=P.reduce((a,x)=>a+x.k,0); const n=$('stkn'); if(n) n.textContent=s;
 }
+
+/* ═══ 지금 임대 가능한 대수 — 서버에서 실제 값을 받아옵니다 ═══
+   전에는 상품표에 적힌 고정 숫자를 더해서 보여줬습니다.
+   서버가 아직 준비 전이면 원래 숫자를 그대로 두어 화면이 비지 않게 합니다. */
+(async function liveStock(){
+  async function pull(){
+    try{
+      const r=await fetch('/api/live-pcs',{cache:'no-store'});
+      if(!r.ok)return;
+      const d=await r.json();
+      if(!d.ready)return;
+      const n=$('stkn'); if(n) n.textContent=(d.available||0).toLocaleString('ko-KR');
+      /* 상품 카드의 재고도 실제 값으로 맞춥니다 */
+      for(const s of (d.specs||[])){
+        const card=document.querySelector('[data-spec="'+s.specId+'"] .pc-k');
+        if(card) card.textContent=s.available+'대 임대 가능';
+      }
+    }catch(e){}
+  }
+  await pull();
+  setInterval(pull, 30000);
+})();
 /* 히어로 슬라이더 */
 let si=0;
 const sl=document.querySelectorAll('.sl');

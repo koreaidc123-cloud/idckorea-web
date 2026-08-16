@@ -258,19 +258,21 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 </div></div>
 
 <script>
-/* ═══ 실제 판매 상품 7종 ═══ */
+/* ═══ 실제 판매 상품 5종 ═══
+   상품 번호는 서버(api/_price.js)와 반드시 같아야 합니다.
+   여기가 어긋나면 고객이 고른 상품과 배정되는 PC 가 달라집니다. */
 const G=[
  {g:1,n:'인텔I5 4690',    cpu:'Intel Core i5-4690',    core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX 750~750TI',        gk:'NVIDIA',list:90000, p:40000},
  {g:2,n:'라이젠 2200G~2400G',cpu:'AMD Ryzen 2200G~2400G',core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',   gk:'내장',  list:90000, p:40000},
- {g:4,n:'라이젠 5600G~5700G',cpu:'AMD Ryzen 5600G~5700G',core:'6~8코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
- {g:5,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:140000,p:60000},
- {g:7,n:'라이젠 3700X',   cpu:'AMD Ryzen 7 3700X',     core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:160000,p:65000},
+ {g:3,n:'라이젠 5600G~5700G',cpu:'AMD Ryzen 5600G~5700G',core:'6~8코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
+ {g:4,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:140000,p:60000},
+ {g:5,n:'라이젠 3700X',   cpu:'AMD Ryzen 7 3700X',     core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:160000,p:65000},
 ];
 const USE=[
- ['game','고사양게임',[5,7]],['mobile','모바일게임 다중구동',[4,5,7]],
- ['work','개인 재택 업무',[1,2]],['mkt','각종 마케팅 프로그램',[2,4]],
- ['office','가상 공유오피스',[1,2,4]],['store','N스토어 운영',[2,4]],
- ['webtoon','웹툰 · 콘텐츠',[5,7]],['dev','개발 · 연구',[4,5,7]],
+ ['game','고사양게임',[4,5]],['mobile','모바일게임 다중구동',[3,4,5]],
+ ['work','개인 재택 업무',[1,2]],['mkt','각종 마케팅 프로그램',[2,3]],
+ ['office','가상 공유오피스',[1,2,3]],['store','N스토어 운영',[2,3]],
+ ['webtoon','웹툰 · 콘텐츠',[4,5]],['dev','개발 · 연구',[3,4,5]],
 ];
 const RENT=[['4','4만원대',[40000]],['5','5만원대',[55000]],['6','6만원대',[60000,65000]]];
 const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
@@ -281,27 +283,39 @@ const TM=[{d:30,n:'30일',o:0},{d:60,n:'60일',o:3},{d:90,n:'90일',o:5}];
 const ROOM=[{k:'K',cust:'K 서버실'},{k:'Y',cust:'Y 서버실'},{k:'D',cust:'D 서버실'}];
 const pad=n=>String(n).padStart(3,'0');
 
-/* 보유 PC 전량을 등록한다. 임대중인 PC도 목록에 남는다 —
-   관리자 화면과 같은 대장을 보고 있어야 재고·장애가 어긋나지 않는다. */
-let seed=20260811; const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
-const CNT={1:168,2:340,4:250,5:156,7:86};   // 합계 1,000대
-const PCS=[]; const seq={K:0,Y:0,D:0};
-for(const g of G) for(let i=0;i<CNT[g.g];i++){
-  const r=rnd();
-  const st = r<.70 ? 'busy' : r<.98 ? 'free' : 'fix';   // 임대중 70% · 임대가능 28% · 점검 2%
-  const room = 1+Math.floor(rnd()*3);
-  const rk = ROOM[room-1].k;
-  PCS.push({
-    id:`${rk}-${pad(++seq[rk])}`,
-    g:g.g, st, up: st==='fix'?0:Math.floor(rnd()*1900)+21,
-    ssd: g.g===5 ? (rnd()<.5?240:480) : g.ssd,
-    room,
-    left: st==='busy' ? 1+Math.floor(rnd()*30) : 0,
-    ip:`${[59,121,175,211,220][Math.floor(rnd()*5)]}.${10+Math.floor(rnd()*80)}.*.**`,
-  });
+/* ═══ PC 목록은 서버에서 받아옵니다 ═══
+   전에는 여기서 난수로 1,000대를 지어냈습니다. 그래서 화면에 보이는 재고와
+   실제 재고가 아무 관계가 없었습니다.
+   이제 관리자 화면과 **같은 대장**을 봅니다. 서버실에서 PC 를 등록하면
+   이 화면에 바로 나타나고, 결제되면 바로 임대중으로 바뀝니다. */
+const PCS=[];
+let LOADED=false, LOAD_ERR='';
+
+async function loadPCS(){
+  try{
+    const r=await fetch('/api/live-pcs',{cache:'no-store'});
+    if(!r.ok) throw new Error(r.status);
+    const d=await r.json();
+    PCS.length=0;
+    for(const p of (d.pcs||[])){
+      /* 사양은 상품표를 먼저 쓰고, 상품이 안 정해진 PC 는 실제로 읽어온 값을 씁니다 */
+      PCS.push({
+        id:p.id, g:p.g, st:p.st,
+        room:{K:1,Y:2,D:3}[p.room]||1,
+        ssd:p.ssd || (G.find(x=>x.g===p.g)||{}).ssd || 0,
+        cpu:p.cpu, core:p.core, ram:p.ram, gpu:p.gpu,
+      });
+    }
+    LOADED=!!d.ready; LOAD_ERR = d.ready? '' : '준비중';
+  }catch(e){ LOADED=false; LOAD_ERR='서버에 연결하지 못했습니다'; }
 }
 const ST={free:['임대 가능','#0FA45E'],busy:['임대중','#9AA2AE'],fix:['점검중','#E2233C']};
-const gOf=x=>G.find(y=>y.g===x.g);
+/* 상품표에서 사양을 찾습니다. 아직 상품이 정해지지 않은 PC 는
+   등록할 때 실제로 읽어온 하드웨어 값을 그대로 씁니다. */
+const gOf=x=>G.find(y=>y.g===x.g) || {
+  g:0, n:x.cpu||'사양 확인중', cpu:x.cpu||'', core:x.core||'', ct:0,
+  ram:x.ram||0, ssd:x.ssd||0, gpu:x.gpu||'', gk:'', list:0, p:0
+};
 const w=n=>n.toLocaleString('ko-KR');
 const $=i=>document.getElementById(i);
 
@@ -378,7 +392,10 @@ function draw(){
   pager(L.length);
   const V=L.slice((page-1)*PER, page*PER);
   $('list').innerHTML = !V.length
-   ? `<div class="empty"><b>조건에 맞는 PC가 없습니다</b>필터를 조금 풀어 보세요.</div>`
+   ? (!PCS.length
+      ? `<div class="empty"><b>${LOADED?'등록된 PC가 아직 없습니다':(LOAD_ERR||'불러오는 중입니다')}</b>
+         ${LOADED?'서버실에서 PC를 등록하면 이 자리에 바로 나타납니다.':'잠시 후 다시 시도해 주세요.'}</div>`
+      : `<div class="empty"><b>조건에 맞는 PC가 없습니다</b>필터를 조금 풀어 보세요.</div>`)
    : `<div class="tr h"><div>품번</div><div>CPU · 사양</div><div>메모리</div><div>저장장치</div>
       <div>그래픽</div><div>임대 상태</div><div style="text-align:right">30일 요금</div><div></div></div>`
    + V.map(x=>{const g=gOf(x), ok=x.st==='free';
@@ -426,16 +443,15 @@ document.addEventListener('click',e=>{
   if(pg&&!pg.disabled){page=+pg.dataset.pg;draw();
     document.querySelector('.tool').scrollIntoView({behavior:'smooth',block:'start'})}
 });
-/* 실시간 반영 — 임대 종료로 풀리거나 새로 임대되는 흐름 */
-setInterval(()=>{
-  for(let n=0;n<3;n++){
-    const x=PCS[Math.floor(Math.random()*PCS.length)];
-    if(x.st==='fix')continue;
-    x.st = Math.random()<.5 ? 'free' : 'busy';
-  }
-  filters();draw();
-},5000);
-filters();chips();draw();
+/* ═══ 실시간 반영 ═══
+   전에는 5초마다 무작위로 상태를 바꿔 "실시간처럼" 보이게 했습니다.
+   지금은 서버에서 실제 상태를 다시 받아옵니다.
+   서버실에서 PC 를 등록하거나 고객이 결제하면 20초 안에 여기 반영됩니다. */
+setInterval(async()=>{ await loadPCS(); filters(); draw(); }, 20000);
+
+/* 첫 화면 — 서버에서 받아온 뒤 그립니다 */
+filters(); chips(); draw();
+loadPCS().then(()=>{ filters(); chips(); draw(); });
 </script>
 <div class="kvc-float">
   <a class="kf-call" href="tel:01023234060" aria-label="전화연결">

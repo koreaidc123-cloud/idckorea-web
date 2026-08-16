@@ -15,6 +15,7 @@
 const crypto = require('crypto');
 const { ready, sb, authed, baseUrl } = require('./_supa');
 const kv = require('./_crypto');
+const { guessSpec } = require('./_spec');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : null) || null;
@@ -93,6 +94,10 @@ module.exports = async (req, res) => {
     last_beat: now,
     updated_at: now,
   };
+  /* 어느 판매 상품인지 자동으로 붙입니다.
+     이게 없으면 고객이 결제해도 배정할 PC 를 못 찾습니다. */
+  const guessed = guessSpec(row.cpu, row.ram_gb, row.ssd_gb, row.gpu);
+  if (guessed) row.spec_id = guessed;
   if (pwSealed) row.pw_enc = pwSealed;   // 비밀번호를 안 보내면 기존 값을 그대로 둡니다
 
   /* 같은 기계를 다시 세팅한 경우, 새 번호를 또 뽑지 않고 원래 품번을 씁니다.
