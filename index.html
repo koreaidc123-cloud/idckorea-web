@@ -266,12 +266,12 @@ section.cta .btn-w{color:var(--red)}
 .pc-badge{position:absolute;right:12px;top:12px;background:var(--gold);color:#231B00;
   font-size:11px;font-weight:800;padding:5px 11px;border-radius:99px;letter-spacing:-.03em;
   box-shadow:0 6px 16px rgba(0,0,0,.3)}
-/* CPU 제조사 배지 — 라이젠은 검정+주황, 인텔은 인텔 블루 */
+/* CPU 제조사 배지 — 어느 회사 CPU 인지 알리는 표기입니다.
+   각 사 브랜드 색을 쓰면 로고처럼 보여 제휴로 오인될 수 있어
+   두 배지 모두 같은 중립 색으로 둡니다. */
 .pb{position:absolute;right:12px;bottom:12px;padding:5px 11px;border-radius:6px;
-  font-size:11.5px;line-height:1;box-shadow:0 4px 12px rgba(0,0,0,.35)}
-.pb-ryzen{background:#111;color:#F0700A;font-weight:900;letter-spacing:.06em}
-.pb-intel{background:#0068B5;color:#fff;font-weight:400;font-size:14px;letter-spacing:-.07em;
-  padding:4px 12px 5px}
+  font-size:11.5px;line-height:1;box-shadow:0 4px 12px rgba(0,0,0,.35);
+  background:rgba(12,16,24,.82);color:#fff;font-weight:700;letter-spacing:-.01em}
 .pc-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:9px;flex:1}
 .pc-b .pu{align-self:flex-start;font-size:11.5px;font-weight:800;padding:3px 10px;
   border-radius:99px;letter-spacing:-.03em}
@@ -344,39 +344,21 @@ section.cta .btn-w{color:var(--red)}
 .talk .btn:hover{background:#231212}
 
 /* ══ 파트너 ══ */
+/* ══ 사용 부품·프로그램 표기 ══
+   ★ 각 사 로고를 흉내내지 않습니다.
+     전에는 kt 의 빨간 kt, 인텔 파랑, 마이크로소프트 네모 4개처럼
+     공식 로고를 CSS 로 재현하고 있었습니다. 상표를 그대로 베낀 셈이라
+     제휴로 오인될 소지가 있어 전부 걷어냈습니다.
+     지금은 "무엇을 쓰는지" 알리는 글자 표기만 남깁니다. */
 .pt{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.pt div{background:#fff;height:112px;display:grid;place-items:center;transition:.16s}
+.pt div{background:#fff;height:96px;display:grid;place-items:center;transition:.16s;padding:0 10px}
 .pt div:hover{background:var(--bg2)}
-.pl{display:inline-flex;align-items:center;gap:7px;font-size:20px;font-weight:800;
-  letter-spacing:-.04em;filter:grayscale(1);opacity:.62;transition:.2s}
-.pt div:hover .pl{filter:none;opacity:1}
-.pl i{font-style:normal;display:inline-block}
-.pl.kt{color:#111}.pl.kt i{color:#E4002B;font-weight:900;margin-right:1px}
-.pl.intel{color:#0068B5;font-weight:400;font-size:26px;letter-spacing:-.06em;
-  font-family:Pretendard,sans-serif}
-.pl.ryzen{color:#F0700A;font-weight:900;letter-spacing:.02em;font-size:19px}
-.pl.ms{color:#5E5E5E;font-weight:600;font-size:19px}
-.pl.ms .sq{display:grid;grid-template-columns:1fr 1fr;gap:1.5px;width:19px;height:19px}
-.pl.ms .sq b{display:block;border-radius:1px}
-.pl.ms .sq b:nth-child(1){background:#F25022}.pl.ms .sq b:nth-child(2){background:#7FBA00}
-.pl.ms .sq b:nth-child(3){background:#00A4EF}.pl.ms .sq b:nth-child(4){background:#FFB900}
-.pl.nv{color:#76B900;font-weight:800;font-size:19px}
-.pl.nv .eye{width:20px;height:13px;border-radius:50%;border:3px solid #76B900;
-  border-left-color:transparent;transform:rotate(-20deg)}
-.pl.ad{color:#EF443B;font-weight:800;font-size:19px}
-.pl.ad .ar{width:19px;height:19px;border-radius:5px;background:#EF443B;position:relative}
-.pl.ad .ar::after{content:'';position:absolute;left:5px;top:5px;width:0;height:0;
-  border-left:8px solid #fff;border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
-.pl.tv{color:#0E8EE9;font-weight:800;font-size:18px}
-.pl.tv .ci{width:19px;height:19px;border-radius:50%;border:3.5px solid #0E8EE9;
-  border-right-color:transparent}
-.pl.ibm{color:#0530AD;font-weight:900;font-size:26px;letter-spacing:.02em}
-.pl.ss{color:#1428A0;font-weight:800;font-size:16px;letter-spacing:-.03em}
-.pl.ss em{font-style:normal;background:#1428A0;color:#fff;font-size:11px;padding:2px 6px;
-  border-radius:3px;margin-left:5px}
-.pl.amd{color:#111;font-weight:900;font-size:21px;letter-spacing:-.02em}
-.pl.amd .tri{width:0;height:0;border-left:11px solid #111;border-bottom:11px solid transparent}
+.pl{font-size:16.5px;font-weight:700;letter-spacing:-.03em;color:var(--ink3);
+  text-align:center;line-height:1.4;transition:.16s}
+.pt div:hover .pl{color:var(--ink)}
+.pl em{font-style:normal;display:block;font-size:12px;font-weight:600;color:var(--ink4);margin-top:3px}
+.ptnote{margin-top:12px;font-size:12.5px;color:var(--ink4);line-height:1.7;text-align:center}
 
 /* ══ Q&A ══ */
 .qa{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
@@ -638,19 +620,21 @@ section.cta .btn-w{color:var(--red)}
 <!-- ═══ 파트너 ═══ -->
 <section class="sec sec-g">
   <div class="shell">
-    <div class="sh"><h2>Verified Affiliate Company <em>partner</em></h2></div>
+    <div class="sh"><h2>이런 <em>부품과 프로그램</em>으로 만듭니다</h2></div>
     <div class="pt">
-      <div><span class="pl kt"><i>kt</i>cloud</span></div>
-      <div><span class="pl intel">intel</span></div>
-      <div><span class="pl ryzen">RYZEN</span></div>
-      <div><span class="pl ms"><i class="sq"><b></b><b></b><b></b><b></b></i>Microsoft</span></div>
-      <div><span class="pl nv"><i class="eye"></i>NVIDIA</span></div>
-      <div><span class="pl ad"><i class="ar"></i>AnyDesk</span></div>
-      <div><span class="pl tv"><i class="ci"></i>TeamViewer</span></div>
-      <div><span class="pl ibm">IBM</span></div>
-      <div><span class="pl ss">SAMSUNG<em>SSD</em></span></div>
-      <div><span class="pl amd">AMD<i class="tri"></i></span></div>
+      <div><span class="pl">인텔<em>Core i5</em></span></div>
+      <div><span class="pl">AMD<em>라이젠</em></span></div>
+      <div><span class="pl">NVIDIA<em>지포스 그래픽</em></span></div>
+      <div><span class="pl">삼성<em>SSD</em></span></div>
+      <div><span class="pl">마이크로소프트<em>윈도우</em></span></div>
+      <div><span class="pl">애니데스크<em>원격 접속</em></span></div>
+      <div><span class="pl">기업용 전용회선<em>개별 공인IP</em></span></div>
+      <div><span class="pl">자체 서버실<em>3곳 직접 운영</em></span></div>
+      <div><span class="pl">무정전 전원<em>UPS</em></span></div>
+      <div><span class="pl">24시간 상주<em>서버관리자</em></span></div>
     </div>
+    <p class="ptnote">위 상표는 각 상표권자의 자산이며, 한국 가상컴이 임대 PC 구성에 사용하는
+      부품·프로그램을 알려드리기 위한 표기입니다. 각 사와의 제휴·후원 관계를 뜻하지 않습니다.</p>
   </div>
 </section>
 
@@ -811,7 +795,7 @@ function prods(){
           <div class="cc">${x.c} · 램 ${x.ram}GB</div>
           <ul><li>${x.ssd}</li><li>${x.gpu}</li></ul>
         </div>
-        <span class="pb pb-${x.br}">${x.br==='intel'?'intel':'RYZEN'}</span>
+        <span class="pb">${x.br==='intel'?'인텔 CPU':'AMD 라이젠'}</span>
         ${x.tag?`<div class="pc-badge">${x.tag}</div>`:''}
       </a>
       <div class="pc-b">
