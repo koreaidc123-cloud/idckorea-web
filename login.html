@@ -285,8 +285,29 @@ function newUser(via,name,phone,extra){
 /* 가입한 회원 명부 — 서버 DB 자리. 같은 계정으로 다시 오면 약관 단계를 건너뛴다 */
 function members(){try{return JSON.parse(localStorage.getItem('kvc-members')||'{}')}catch(e){return{}}}
 function memberKey(u){return u.via+':'+(u.kakaoId||u.googleId||u.email||u.name)}
-/* 소셜 인증이 끝난 뒤: 기존 회원이면 바로 로그인, 신규면 약관 동의 단계 */
-function afterAuth(u){
+/* 소셜 인증이 끝난 뒤: 서버에 진짜 그 사람인지 확인받습니다.
+
+   ★ 전에는 카카오·구글이 준 이름·전화번호를 브라우저에 저장하고 그걸 그대로
+     믿었습니다. 그러면 브라우저 저장소를 고쳐 남의 계정인 척할 수 있었습니다.
+     이제 서버가 카카오·구글에 직접 물어보고 출입증을 발급합니다. */
+async function afterAuth(u, token){
+  if(token){
+    try{
+      const r=await fetch('/api/customer?do=login',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({via:u.via, token})});
+      if(r.ok){
+        const d=await r.json();
+        u.name=d.user.name||u.name;
+        u.phone=d.user.phone||u.phone;
+        u.server=true;                       // 서버가 확인해 준 세션입니다
+        if(!d.needPhone){ saveSession(u); return; }
+        gotoJoinStep(u); return;             // 전화번호가 없으면 한 번만 더 받습니다
+      }
+      if(r.status===401){ alert('로그인 확인에 실패했습니다. 다시 시도해 주세요.'); return; }
+    }catch(e){ /* 서버 함수가 없는 환경 → 아래 예전 방식으로 */ }
+  }
+  /* 서버가 없을 때(로컬에서 파일로 열기 등)는 예전처럼 브라우저에만 저장합니다 */
   const db=members(), k=memberKey(u), old=db[k];
   if(old){ old.name=u.name; if(u.email)old.email=u.email; saveSession(old); return; }
   gotoJoinStep(u);
@@ -338,7 +359,9 @@ function kakaoLogin(){
         /* 카카오가 검증한 번호를 그대로 받는다 (+82 10-… → 010-…) */
         let phone=(acc.phone_number||'').replace('+82 ','0').replace(/-/g,'');
         if(phone) phone=phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/,'$1-$2-$3');
-        afterAuth(newUser('kakao',name,phone||'',{kakaoId:String(res.id),email:acc.email||''}));
+        /* 서버가 카카오에 직접 확인할 수 있게 접근 토큰을 같이 넘깁니다 */
+        const at=(window.Kakao&&Kakao.Auth.getAccessToken&&Kakao.Auth.getAccessToken())||'';
+        afterAuth(newUser('kakao',name,phone||'',{kakaoId:String(res.id),email:acc.email||''}), at);
       }).catch(()=>alert('카카오 정보를 가져오지 못했습니다.'));
     },
     fail(err){ if(err&&err.error!=='access_denied') alert('카카오 로그인에 실패했습니다.'); }
@@ -357,7 +380,8 @@ function googleLogin(){
         try{
           const p=JSON.parse(decodeURIComponent(escape(atob(res.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));
           /* 구글은 전화번호를 주지 않는다 → 가입 단계에서 문자 인증 1회 */
-          afterAuth(newUser('google',p.name||'회원','',{googleId:p.sub,email:p.email||''}));
+          /* 서버가 구글에 직접 확인할 수 있게 ID 토큰을 같이 넘깁니다 */
+          afterAuth(newUser('google',p.name||'회원','',{googleId:p.sub,email:p.email||''}), res.credential);
         }catch(e){ alert('구글 정보를 확인하지 못했습니다.'); }
       }
     });

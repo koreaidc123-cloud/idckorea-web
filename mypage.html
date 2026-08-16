@@ -185,20 +185,48 @@ const $=i=>document.getElementById(i);
 const w=n=>Number(n).toLocaleString('ko-KR');
 const fmt=d=>{const x=new Date(d);return x.getFullYear()+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+String(x.getDate()).padStart(2,'0')};
 
-/* 로그인 상태 — 실서비스에서는 서버 세션. 지금은 로그인 페이지가 심는 값을 읽는다. */
-let U=null;
+/* ═══ 로그인 상태 ═══
+   서버가 발급한 출입증(httpOnly 쿠키)으로 내 정보를 받아옵니다.
+   전에는 브라우저 저장소에 든 값을 그대로 믿어서, 저장소를 고치면
+   남의 계정인 척할 수 있었습니다.
+   서버 함수가 없는 환경에서는 예전처럼 저장소를 씁니다. */
+let U=null, SERVER=false;
 try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
-if(!U){ $('gate').classList.remove('off'); }
-else{
+
+function paintUser(){
   $('gate').classList.add('off');
-  $('uname').textContent=U.name+'님';
-  $('uphone').textContent=U.phone;
-  $('av').textContent=U.name.charAt(0);
-  $('uvia').textContent=U.via==='kakao'?'카카오 로그인':'구글 로그인';
+  $('uname').textContent=(U.name||'회원')+'님';
+  $('uphone').textContent=U.phone||'';
+  $('av').textContent=(U.name||'회').charAt(0);
+  $('uvia').textContent=U.via==='kakao'?'카카오 로그인':U.via==='google'?'구글 로그인':'회원';
   $('uvia').className='badge '+(U.via==='kakao'?'b-kk':'b-gg');
   render();
 }
-$('logout').onclick=()=>{localStorage.removeItem('kvc-user');location.href='index.html'};
+
+(async function boot(){
+  try{
+    const r=await fetch('/api/customer?do=me',{credentials:'same-origin',cache:'no-store'});
+    if(r.ok){
+      const d=await r.json();
+      U={name:d.user.name, phone:d.user.phone, via:d.user.via, email:d.user.email,
+         pcs:d.pcs, orders:d.orders};
+      SERVER=true;
+      localStorage.setItem('kvc-user',JSON.stringify(U));   // 화면 표시용
+      paintUser(); return;
+    }
+    if(r.status===401){                                     // 서버가 모르는 사람
+      localStorage.removeItem('kvc-user');
+      $('gate').classList.remove('off'); return;
+    }
+  }catch(e){ /* 서버 함수 없음 → 아래 예전 방식 */ }
+  if(!U){ $('gate').classList.remove('off'); } else { paintUser(); }
+})();
+
+$('logout').onclick=async()=>{
+  try{ await fetch('/api/customer?do=logout',{method:'POST',credentials:'same-origin'}); }catch(e){}
+  localStorage.removeItem('kvc-user');
+  location.href='index.html';
+};
 
 function render(){
   const list=U.pcs||[];
@@ -243,13 +271,31 @@ function render(){
       : `<div class="tr"><div style="grid-column:1/-1;color:var(--ink4);padding:20px 0;text-align:center">결제 내역이 없습니다</div></div>`);
 }
 
-document.addEventListener('click',e=>{
+document.addEventListener('click',async e=>{
   const c=e.target.closest('[data-c]');
   if(c){navigator.clipboard&&navigator.clipboard.writeText(c.dataset.c);
     c.textContent='✓';setTimeout(()=>c.textContent='복사',1200);return}
+  /* 비밀번호는 미리 받아두지 않습니다. 누르는 순간 서버에 물어봅니다.
+     서버는 "정말 이 고객의 PC 인지" 확인한 뒤에만 알려주고 기록을 남깁니다. */
   const pw=e.target.closest('[data-pw]');
-  if(pw){const i=pw.dataset.pw, el=$('pw'+i);
-    el.textContent=(U.pcs[i].pw||'••••••'); el.classList.remove('mask'); pw.remove(); return}
+  if(pw){
+    const i=pw.dataset.pw, el=$('pw'+i), p=U.pcs[i];
+    if(SERVER){
+      pw.textContent='…'; pw.disabled=true;
+      try{
+        const r=await fetch('/api/customer?do=secret&pn='+encodeURIComponent(p.pn),
+          {credentials:'same-origin',cache:'no-store'});
+        if(!r.ok){ pw.textContent='실패'; pw.disabled=false;
+          setTimeout(()=>{pw.textContent='보기'},1600); return; }
+        const d=await r.json();
+        el.textContent=d.pw||'아직 등록 안 됨';
+      }catch(err){ pw.textContent='실패'; pw.disabled=false;
+        setTimeout(()=>{pw.textContent='보기'},1600); return; }
+    }else{
+      el.textContent=(p.pw||'••••••');
+    }
+    el.classList.remove('mask'); pw.remove(); return;
+  }
   const rb=e.target.closest('[data-reboot]');
   if(rb){if(confirm(rb.dataset.reboot+' 을 재부팅할까요?\n작업 중인 내용은 저장 후 진행해 주세요.'))
     alert('재부팅 요청이 접수되었습니다.\n1~2분 뒤 다시 접속해 주세요.');return}
