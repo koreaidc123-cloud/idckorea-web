@@ -15,14 +15,23 @@ const KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
 const ready = () => !!(URL && KEY);
 
+/* Supabase 키는 두 가지 형식이 있습니다.
+     새 형식  sb_secret_...   ← 2026년부터 새로 만든 프로젝트
+     옛 형식  eyJhbGci...     ← service_role (JWT 라는 긴 문자열)
+
+   새 형식은 JWT 가 아니라서 Authorization 헤더에 넣으면
+   Supabase 가 JWT 로 해석하려다 실패합니다. apikey 헤더에만 넣어야 합니다.
+   어느 쪽 키를 넣으셔도 알아서 맞춰 보내도록 아래처럼 나눕니다. */
+const IS_NEW_KEY = /^sb_/.test(KEY);
+
 /* Supabase REST 호출. 패키지 설치 없이 fetch 만 씁니다. */
 async function sb(table, { method = 'GET', query = '', body, prefer } = {}) {
   if (!ready()) throw new Error('DB_NOT_READY');
   const headers = {
     apikey: KEY,
-    Authorization: 'Bearer ' + KEY,
     'Content-Type': 'application/json',
   };
+  if (!IS_NEW_KEY) headers.Authorization = 'Bearer ' + KEY;
   if (prefer) headers.Prefer = prefer;
 
   const r = await fetch(`${URL}/rest/v1/${table}${query}`, {
