@@ -108,6 +108,15 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .tool .s button{border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:13px;
   font-weight:600;color:var(--ink3);background:#fff}
 .tool .s button.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:700}
+/* 메인에서 상품을 눌러 들어왔을 때 뜨는 안내 띠 */
+.fromtag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--blue-l);border:1px solid #C9D4FD;border-radius:12px;
+  padding:13px 16px;margin-bottom:14px;font-size:14.5px;color:var(--blue);font-weight:700}
+.fromtag em{font-style:normal;color:var(--ink2);font-weight:600}
+.fromtag a{margin-left:auto;font-size:13.5px;font-weight:700;color:var(--ink3);
+  text-decoration:underline;text-underline-offset:3px}
+.fromtag a:hover{color:var(--blue)}
+@media(max-width:640px){.fromtag a{margin-left:0}}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 .chip{display:inline-flex;align-items:center;gap:7px;background:var(--blue-l);color:var(--blue);
   border-radius:99px;padding:5px 11px;font-size:13px;font-weight:700}
@@ -223,6 +232,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 <div class="shell">
   <div class="ft" id="filters"></div>
 
+  <!-- 메인에서 상품을 눌러 들어오면 무엇을 보고 있는지 알려줍니다 -->
+  <div class="fromtag" id="fromtag" hidden></div>
+
   <div class="tool">
     <div class="c">총 <b class="num" id="cnt">—</b>대</div>
     <div class="s">
@@ -320,6 +332,28 @@ const w=n=>n.toLocaleString('ko-KR');
 const $=i=>document.getElementById(i);
 
 let F={st:new Set(['free']),g:new Set(),core:new Set(),ram:new Set(),ssd:new Set(),gpu:new Set(),use:new Set(),rent:new Set(),room:new Set()};
+
+/* ═══ 메인에서 상품을 누르고 오면 그 사양만 걸러서 보여줍니다 ═══
+   live.html?g=5   라이젠 3700X 만
+   live.html?use=game  고사양게임 용도만
+   (이게 없으면 상품을 눌러도 전체 목록이 그대로 나와 무엇을 고른 건지 알 수 없습니다) */
+let CAME_FROM=null, CAME_KIND='';
+(function readURL(){
+  const q=new URLSearchParams(location.search);
+  const g=q.get('g');
+  if(g && G.some(x=>String(x.g)===g)){
+    F.g.add(g);
+    F.st=new Set();                       // 임대중인 것도 함께 보여줍니다 (재고 감각)
+    CAME_FROM=(G.find(x=>String(x.g)===g)||{}).n;
+    CAME_KIND='사양';
+  }
+  const use=q.get('use');
+  if(use && USE.some(u=>u[0]===use)){
+    F.use.add(use);
+    CAME_FROM=(USE.find(u=>u[0]===use)||[])[1];
+    CAME_KIND='용도';
+  }
+})();
 let sort='p',page=1,sel=null,term=30;
 const PER=20;
 
@@ -343,9 +377,11 @@ const count=(key,val)=>{
 };
 function row(label,key,items,acc){
   return `<div class="fr${acc?' acc':''}"><div class="k">${label}</div><div class="v">`+
-    items.map(([v,l])=>{const n=count(key,v);
-      return `<button class="fv ${F[key].has(v)?'on':''} ${n?'':'zero'}" data-k="${key}" data-v="${v}"
-        ${n?'':'disabled'}>${l}<b class="num">${n}</b></button>`}).join('')+`</div></div>`;
+    items.map(([v,l])=>{const n=count(key,v), sel=F[key].has(v);
+      /* 이미 고른 필터는 결과가 0이라도 눌러서 해제할 수 있어야 합니다.
+         (막아두면 0건 화면에서 빠져나올 방법이 없습니다) */
+      return `<button class="fv ${sel?'on':''} ${n||sel?'':'zero'}" data-k="${key}" data-v="${v}"
+        ${(n||sel)?'':'disabled'}>${l}<b class="num">${n}</b></button>`}).join('')+`</div></div>`;
 }
 function filters(){
   $('filters').innerHTML=
@@ -448,6 +484,15 @@ document.addEventListener('click',e=>{
    지금은 서버에서 실제 상태를 다시 받아옵니다.
    서버실에서 PC 를 등록하거나 고객이 결제하면 20초 안에 여기 반영됩니다. */
 setInterval(async()=>{ await loadPCS(); filters(); draw(); }, 20000);
+
+/* 메인에서 상품을 눌러 왔으면 무엇을 보고 있는지 띠로 알려줍니다 */
+if(CAME_FROM){
+  const ft=$('fromtag');
+  ft.hidden=false;
+  ft.innerHTML=`<span>${CAME_FROM}</span>`
+    +`<em>${CAME_KIND==='용도'?'에 맞는 PC 만 보고 계십니다':' 사양만 보고 계십니다'}</em>`
+    +`<a href="live.html">전체 보기 →</a>`;
+}
 
 /* 첫 화면 — 서버에서 받아온 뒤 그립니다 */
 filters(); chips(); draw();
