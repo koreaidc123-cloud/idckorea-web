@@ -16,10 +16,12 @@
     관리자 권한 PowerShell 에서
       powershell -ExecutionPolicy Bypass -File kvc-agent.ps1 -Setup
 
-    묻는 것은 두 가지뿐입니다 — 품번, 현장 등록 암호.
+    묻는 것은 세 가지뿐입니다 — 품번, 현장 등록 암호, 애니데스크 비밀번호.
+    사양과 애니데스크 번호는 알아서 읽어옵니다.
 
-  ※ 애니데스크 비밀번호는 이 프로그램이 다루지 않습니다.
-     비밀번호는 관리자 화면에서만 등록합니다.
+  ※ 애니데스크 비밀번호는 이 PC 에 저장하지 않습니다.
+     입력받은 즉시 서버로 보내고 메모리에서 지웁니다.
+     서버는 자물쇠를 채워서 보관하며, 관리자가 열람할 때마다 기록이 남습니다.
 ═══════════════════════════════════════════════════════════════
 #>
 param(
@@ -127,6 +129,16 @@ if ($Setup) {
   $key = ''
   while (-not $key) { $key = (Read-Host '  현장 등록 암호').Trim() }
 
+  # 애니데스크에서 설정하신 그 비밀번호를 여기서 같이 등록합니다.
+  # 화면에 찍히지 않게 가려서 받고, 서버에서 자물쇠를 채워 보관합니다.
+  # 이 PC 안에는 남기지 않습니다.
+  Write-Host ''
+  Write-Host '  애니데스크에서 설정하신 비밀번호를 입력하세요.' -ForegroundColor DarkGray
+  Write-Host '  (지금 건너뛰고 나중에 관리자 화면에서 넣으셔도 됩니다 - 그냥 Enter)' -ForegroundColor DarkGray
+  $adPwSec = Read-Host '  애니데스크 비밀번호' -AsSecureString
+  $adPw = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($adPwSec))
+
   Write-Host ''
   Write-Host '  사양을 읽는 중...' -ForegroundColor DarkGray
   $spec = Get-Spec
@@ -141,7 +153,7 @@ if ($Setup) {
   $body = @{
     pn = $pn; hwId = $spec.hwId; cpu = $spec.cpu; core = $spec.core
     ramGb = $spec.ramGb; ssdGb = $spec.ssdGb; gpu = $spec.gpu
-    ip = $spec.ip; anydesk = $ad
+    ip = $spec.ip; anydesk = $ad; adPw = $adPw
   } | ConvertTo-Json -Compress
 
   try {
@@ -163,6 +175,10 @@ if ($Setup) {
     Write-Host '    · 이 PC 가 인터넷에 연결돼 있는지'
     exit 1
   }
+
+  # 비밀번호는 서버로 보냈으니 이 PC 메모리에서 즉시 지웁니다
+  $adPw = $null; $adPwSec = $null; $body = $null
+  [GC]::Collect()
 
   if (-not (Test-Path $CfgDir)) { New-Item -ItemType Directory -Path $CfgDir -Force | Out-Null }
   [pscustomobject]@{
@@ -193,6 +209,8 @@ if ($Setup) {
     -Principal $prn -Settings $set -Force | Out-Null
 
   Write-Host "  등록 완료 - $($r.pn)$(if($r.renewed){' (기존 PC 재등록)'})" -ForegroundColor Green
+  if ($r.pwSaved) { Write-Host '  애니데스크 비밀번호도 함께 등록되었습니다.' -ForegroundColor Green }
+  else            { Write-Host '  비밀번호는 건너뛰었습니다 - 관리자 화면에서 넣어 주세요.' -ForegroundColor Yellow }
   Write-Host '  잠시 뒤 관리자 화면 [미등록 PC] 에 이 컴퓨터가 나타납니다.' -ForegroundColor DarkGray
   Write-Host ''
   Log "등록 완료 $($r.pn)"

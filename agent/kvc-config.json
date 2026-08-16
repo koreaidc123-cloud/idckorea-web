@@ -1,0 +1,6 @@
+{
+  "_안내": "이 파일은 대표님이 한 번만 채워서 USB에 넣어 두시면 됩니다. 현장에서 세팅하시는 분은 건드리지 않습니다.",
+  "_setupKey": "Vercel 환경변수 KVC_SETUP_KEY 에 넣으신 값과 똑같이 적어 주세요.",
+  "server": "https://idckorea-dusky.vercel.app",
+  "setupKey": ""
+}

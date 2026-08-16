@@ -23,7 +23,13 @@
      · 처음 오신 분  → 연락처 확인 + 약관 동의 → 가입 완료
      · 다시 오신 분  → 약관 단계 없이 바로 내 가상컴으로
    ═══════════════════════════════════════════════════════════════ */
-window.KVC_AUTH = {
-  KAKAO_JS_KEY   : '',   // 예: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
-  GOOGLE_CLIENT_ID: '',  // 예: '1234567890-abcdefg.apps.googleusercontent.com'
-};
+/* ★ 이 파일은 예비용입니다.
+   실제로는 서버(/api/auth-config)가 Vercel 환경변수에서 키를 내려줍니다.
+   서버가 이미 키를 채워줬으면 여기서는 아무것도 하지 않습니다.
+   (로컬에서 파일을 직접 열어보실 때만 아래 값이 쓰입니다) */
+if (!window.KVC_AUTH || (!window.KVC_AUTH.KAKAO_JS_KEY && !window.KVC_AUTH.GOOGLE_CLIENT_ID)) {
+  window.KVC_AUTH = {
+    KAKAO_JS_KEY   : '',   // 예: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
+    GOOGLE_CLIENT_ID: '',  // 예: '1234567890-abcdefg.apps.googleusercontent.com'
+  };
+}

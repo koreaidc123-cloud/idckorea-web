@@ -112,8 +112,12 @@ api/
   toss-webhook.js  가상계좌 입금 자동 감지
 
 agent/
-  kvc-agent.ps1    랙PC용 (2분마다 DB로 직접 전송)
-  설치안내.md       현장 세팅하는 분이 보는 문서
+  PC등록.bat        ★ 현장에서 두 번 눌러 실행 (USB에 담아 나감)
+  kvc-setup.ps1     큰 글씨 등록 화면 (WinForms)
+  kvc-agent.ps1     랙PC용 하트비트 (2분마다 DB로 직접 전송)
+  kvc-config.json   서버주소·등록암호 (대표님이 채워 USB에 넣음)
+  현장-작업순서.md   세팅하시는 분께 인쇄해 드리는 3단계 안내
+  설치안내.md       대표님용 (USB 준비 + 기술 설명)
 
 db/schema.sql       Supabase 에 붙여넣고 실행할 설계
 db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
@@ -170,10 +174,16 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 | `SUPABASE_URL` | Supabase 프로젝트 주소 |
 | `SUPABASE_SERVICE_KEY` | `sb_secret_…` (절대 공개 금지) |
 | `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (랙PC 에 배포되는 공개키) |
-| `KVC_SETUP_KEY` | 현장에서 랙PC 등록할 때 칠 암호 |
+| `KVC_SETUP_KEY` | 현장 USB 의 kvc-config.json 에 넣는 등록 암호 |
 | `KVC_ADMIN_PW` | 관리자 로그인 비밀번호 |
-| `KVC_ADMIN_SECRET` | 관리자 쿠키 서명용 (아무 문자열이나 길게) |
+| `KVC_SECRET` | 관리자 쿠키 서명 + 애니데스크 비밀번호 암호화 (하나로 둘 다) |
+| `KAKAO_JS_KEY` | 카카오 JavaScript 키 (넣으면 로그인이 바로 켜집니다) |
+| `GOOGLE_CLIENT_ID` | 구글 OAuth 클라이언트 ID |
 | `TOSS_SECRET_KEY` | 토스 시크릿 키 (심사 통과 후) |
+
+> 카카오·구글 키는 **코드에 넣지 않습니다.** `/api/auth-config` 가 환경변수에서
+> 읽어 내려주므로, 대표님이 Vercel 에 넣으시면 배포 없이 바로 켜집니다.
+> `KVC_ADMIN_SECRET` 이라는 옛 이름으로 넣으셨어도 그대로 동작합니다.
 
 > Supabase 키는 2026년부터 형식이 바뀌었습니다 (`service_role` JWT → `sb_secret_`).
 > 새 키는 JWT 가 아니라서 `Authorization: Bearer` 로 보내면 실패합니다.

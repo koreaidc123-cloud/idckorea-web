@@ -143,6 +143,10 @@ input{font:inherit;color:inherit;letter-spacing:inherit}
 .lg{align-items:center}
 .lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
 .lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
+<!-- 로그인 키는 서버(Vercel 환경변수)에서 받아옵니다.
+     대표님이 KAKAO_JS_KEY · GOOGLE_CLIENT_ID 를 넣으시면 바로 켜집니다.
+     서버 함수가 없는 환경(로컬에서 파일로 열기)에서는 아래 파일로 넘어갑니다. -->
+<script src="/api/auth-config" onerror="this.remove()"></script>
 <script src="auth-config.js"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" crossorigin="anonymous"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script></head>

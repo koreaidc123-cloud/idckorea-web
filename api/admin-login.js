@@ -14,24 +14,25 @@
    ═══════════════════════════════════════════════════════════════ */
 const crypto = require('crypto');
 
+const kv = require('./_crypto');
+
 const HOURS = 8;
-const secret = () => process.env.KVC_ADMIN_SECRET || '';
 
 /* 출입증 만들기: "만료시각.서명" */
 function sign(expMs) {
-  const h = crypto.createHmac('sha256', secret()).update(String(expMs)).digest('hex');
+  const h = crypto.createHmac('sha256', kv.signKey()).update(String(expMs)).digest('hex');
   return expMs + '.' + h;
 }
 /* 출입증 확인 — 서버 어디서든 이 함수로 검사합니다 */
 function verify(req) {
-  if (!secret()) return false;
+  if (!kv.ready()) return false;
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim())
     .find(s => s.startsWith('kvc_adm='));
   if (!raw) return false;
   const [exp, sig] = decodeURIComponent(raw.slice(8)).split('.');
   if (!exp || !sig) return false;
   if (Number(exp) < Date.now()) return false;
-  const want = crypto.createHmac('sha256', secret()).update(exp).digest('hex');
+  const want = crypto.createHmac('sha256', kv.signKey()).update(exp).digest('hex');
   return want.length === sig.length && crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig));
 }
 
@@ -39,8 +40,8 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const pw = process.env.KVC_ADMIN_PW || '';
-  if (!pw || !secret()) {
-    return res.status(503).json({ error: '미설정', hint: 'KVC_ADMIN_PW / KVC_ADMIN_SECRET 을 Vercel 환경변수에 넣어 주세요' });
+  if (!pw || !kv.ready()) {
+    return res.status(503).json({ error: '미설정', hint: 'KVC_ADMIN_PW / KVC_SECRET 을 Vercel 환경변수에 넣어 주세요' });
   }
 
   const got = String((req.body || {}).pw || '');
