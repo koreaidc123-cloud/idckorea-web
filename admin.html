@@ -1420,7 +1420,7 @@ document.addEventListener('click',async e=>{
       btn.disabled=true; msg('등록하는 중…');
       let r;
       try{
-        const rs=await fetch('/api/order-manual',{method:'POST',credentials:'same-origin',
+        const rs=await fetch('/api/admin?do=order-manual',{method:'POST',credentials:'same-origin',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({pn:p.pn, specId:p.spec.id, days, name:nm, phone:ph,
             payMethod:pm, amount:amt,
@@ -1569,7 +1569,7 @@ async function getPw(p){
   if(p._pw!==undefined) return p._pw;   // 이 화면에서 이미 열어본 것
   if(!p.pn) return '';
   try{
-    const r=await fetch('/api/pc-secret?pn='+encodeURIComponent(p.pn),
+    const r=await fetch('/api/admin?do=pc-secret&pn='+encodeURIComponent(p.pn),
       {credentials:'same-origin',cache:'no-store'});
     if(!r.ok) return null;
     const d=await r.json();
@@ -1584,7 +1584,7 @@ async function getPw(p){
 async function pcSave(key, patch){
   if(!LIVE) return {ok:true};           // 목업 모드에서는 화면만 바꿉니다
   try{
-    const r=await fetch('/api/pc-update',{method:'POST',credentials:'same-origin',
+    const r=await fetch('/api/admin?do=pc-update',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({key},patch))});
     const d=await r.json().catch(()=>({}));
@@ -1622,14 +1622,14 @@ let SRV_MEMBERS=[], SRV_COUNTS={};
 async function syncLive(){
   if(sessionStorage.getItem('kvc-adm')!=='1') return;
   try{
-    const r=await fetch('/api/pcs',{credentials:'same-origin',cache:'no-store'});
+    const r=await fetch('/api/admin?do=pcs',{credentials:'same-origin',cache:'no-store'});
     if(!r.ok) return;                       // 401(미로그인)·503(DB 없음) → 목업 유지
     const d=await r.json();
     if(!(d && Array.isArray(d.pcs) && d.pcs.length)) return;
     applyLive(d);
     /* 주문·회원도 이어서 받아옵니다 */
     try{
-      const r2=await fetch('/api/orders',{credentials:'same-origin',cache:'no-store'});
+      const r2=await fetch('/api/admin?do=orders',{credentials:'same-origin',cache:'no-store'});
       if(r2.ok){ applyOrders(await r2.json()); route(); }
     }catch(e){}
   }catch(e){}                               // 서버 함수가 없는 환경 → 목업 유지
