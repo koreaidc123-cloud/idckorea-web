@@ -73,10 +73,12 @@ module.exports = async (req, res) => {
     const now = new Date();
     const ends = new Date(now); ends.setDate(ends.getDate() + Number(order.days));
 
-    /* 같은 사양 중 임대 가능하고 살아있는 PC 한 대를 배정합니다 */
+    /* 같은 사양 중 임대 가능하고 살아있는 PC 한 대를 배정합니다.
+       online 칸만 보면 신호가 끊긴 PC 도 잡힙니다 — 마지막 신호 시각까지 봅니다. */
+    const fresh = new Date(now.getTime() - Number(process.env.KVC_ASSIGN_FRESH_SEC || 420) * 1000).toISOString();
     const cand = await sb('pcs', {
-      query: `?select=pn,anydesk&status=eq.ok&online=is.true&spec_id=eq.${Number(order.spec_id)}` +
-             `&order=updated_at.asc&limit=1`,
+      query: `?select=pn,anydesk&status=eq.ok&online=is.true&last_beat=gte.${fresh}` +
+             `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=1`,
     });
     const pc = cand && cand[0];
 

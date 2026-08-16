@@ -17,6 +17,10 @@ const { ready, sb } = require('./_supa');
 const SECRET = process.env.TOSS_SECRET_KEY || 'test_sk_zXLkKEypNArWmo50nX3lmeaxYG5R';
 const LIVE_KEY = /^live_sk_/.test(SECRET);
 
+/* 이 시간(초) 안에 신호가 온 PC 만 배정 대상으로 봅니다.
+   여유를 조금 둡니다 — 하트비트가 2분 주기라 딱 맞추면 잠깐 끊긴 것도 제외됩니다. */
+const beatCutoffSec = () => Number(process.env.KVC_ASSIGN_FRESH_SEC || 420);
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
@@ -101,9 +105,14 @@ module.exports = async (req, res) => {
 
   try {
     /* 같은 사양 중에서 임대 가능하고 지금 살아있는 PC 를 한 대 고릅니다.
-       오래 쉬고 있던 자리부터 씁니다 (한 대에 몰리지 않게). */
+       오래 쉬고 있던 자리부터 씁니다 (한 대에 몰리지 않게).
+
+       ★ online 칸만 보면 안 됩니다. 그 칸은 신호가 끊겨도 true 로 남습니다.
+         마지막 신호 시각까지 함께 봐야 꺼진 PC 를 고객에게 배정하지 않습니다. */
+    const fresh = new Date(now.getTime() - beatCutoffSec() * 1000).toISOString();
     const cand = await sb('pcs', {
       query: `?select=pn,anydesk,room,rack,fl,slot&status=eq.ok&online=is.true` +
+             `&last_beat=gte.${fresh}` +
              `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=1`,
     });
     assigned = cand && cand[0] ? cand[0] : null;
