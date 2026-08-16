@@ -1412,17 +1412,80 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape')closeDrawer();
 });
 
-/* ═══════════════ 게이트 ═══════════════ */
-function tryGate(){
-  if($('gate-pw').value==='4060'){sessionStorage.setItem('kvc-adm','1');$('gate').classList.add('off')}
-  else{$('gate-err').textContent='코드가 올바르지 않습니다';$('gate-pw').value='';$('gate-pw').focus()}
+/* ═══════════════ 게이트 ═══════════════
+   서버에 관리자 비밀번호(KVC_ADMIN_PW)가 등록돼 있으면 그쪽으로 로그인합니다.
+   로그인에 성공하면 서버가 8시간짜리 출입증 쿠키를 내려주고,
+   그 쿠키가 있어야만 /api/pcs 가 실제 PC 정보를 내줍니다.
+   아직 등록 전이면 예전처럼 화면 코드(4060)로 열리고 목업으로 돕니다. */
+async function tryGate(){
+  const pw=$('gate-pw').value.trim();
+  $('gate-err').textContent='확인 중…';
+  try{
+    const r=await fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pw})});
+    if(r.ok){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; syncLive(); return; }
+    if(r.status===401){ $('gate-err').textContent='비밀번호가 맞지 않습니다'; $('gate-pw').value=''; $('gate-pw').focus(); return; }
+  }catch(e){ /* 서버 함수가 아직 없거나 로컬에서 연 경우 → 아래 목업 코드로 */ }
+  if(pw==='4060'){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; }
+  else{ $('gate-err').textContent='코드가 올바르지 않습니다'; $('gate-pw').value=''; $('gate-pw').focus(); }
 }
 if(sessionStorage.getItem('kvc-adm')==='1')$('gate').classList.add('off');
 else setTimeout(()=>$('gate-pw').focus(),100);
 
+/* ═══════════════ 실서버 연동 ═══════════════
+   서버실 중계기 → /api/heartbeat → DB → 여기(/api/pcs) 로 이어집니다.
+   DB 가 아직 없으면 조용히 목업으로 계속 돕니다 — 화면이 비지 않습니다. */
+let LIVE=false, LIVE_AT=null;
+const rooms=Object.fromEntries(ROOMS.map(r=>[r.k,r.name]));
+
+function applyLive(d){
+  PCS.length=0;
+  for(const p of d.pcs){
+    PCS.push({
+      room:p.room, roomName:rooms[p.room]||p.room, rack:p.rack, fl:p.fl, slot:p.slot,
+      pn:p.pn, st:p.status,
+      /* 판매 상품과 이어지면 그 사양을, 아니면 실제로 읽어온 하드웨어를 씁니다 */
+      spec: SPECS.find(s=>s.id===p.spec_id) ||
+            {n:p.cpu||'사양 미확인', core:p.core||'', ram:p.ram_gb||0, ssd:p.ssd_gb||0, gpu:p.gpu||'', p:0},
+      ad:p.anydesk||'', pw:'', ip:p.ip||'',
+      beat:p.beatAge, live:p.live, inUse:p.in_use,
+    });
+  }
+  /* 미등록 PC — 품번이 아직 안 붙어 신호만 오는 것들 */
+  for(const u of (d.unregistered||[])){
+    PCS.push({room:u.room||'K', roomName:rooms[u.room]||'', rack:0, fl:0, slot:0,
+      pn:null, hwId:u.hw_id, st:'new',
+      spec:{n:u.cpu||'사양 미확인',core:u.core||'',ram:u.ram_gb||0,ssd:u.ssd_gb||0,gpu:u.gpu||'',p:0},
+      ad:u.anydesk||'', pw:'', ip:u.ip||'', beat:0, live:true});
+  }
+  /* 주문은 결제 연동이 끝나면 서버에서 함께 내려옵니다 (지금은 비웁니다) */
+  ORDERS.length=0;
+  LIVE=true; LIVE_AT=new Date();
+  const ft=document.querySelector('.ft');
+  if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
+    +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';
+  route();
+}
+
+async function syncLive(){
+  if(sessionStorage.getItem('kvc-adm')!=='1') return;
+  try{
+    const r=await fetch('/api/pcs',{credentials:'same-origin',cache:'no-store'});
+    if(!r.ok) return;                       // 401(미로그인)·503(DB 없음) → 목업 유지
+    const d=await r.json();
+    if(d && Array.isArray(d.pcs) && d.pcs.length) applyLive(d);
+  }catch(e){}                               // 서버 함수가 없는 환경 → 목업 유지
+}
+syncLive();
+setInterval(syncLive, 30000);               // 30초마다 새로 받아옵니다
+
 /* 하트비트 표시 — 값만 갱신, 화면 재렌더 없음 */
 let tickN=0;
-setInterval(()=>{tickN=(tickN+5)%30;const el=$('tick');if(el)el.textContent=tickN===0?'방금':tickN+'초 전'},5000);
+setInterval(()=>{
+  const el=$('tick'); if(!el)return;
+  if(LIVE){ const s=Math.round((Date.now()-LIVE_AT)/1000); el.textContent=s<5?'방금':s+'초 전'; }
+  else { tickN=(tickN+5)%30; el.textContent=tickN===0?'방금':tickN+'초 전'; }
+},5000);
 
 route();
 </script>

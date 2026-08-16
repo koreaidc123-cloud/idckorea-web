@@ -396,6 +396,8 @@ const IMGS=['pc-black','pc-cpu','idc-rack','idc-hall'];
 /* 토스페이먼츠 — 공식 문서 공개 샌드박스 키 (실결제 불가).
    실서비스 전환 시: 클라이언트 키만 교체 + Vercel 환경변수에 시크릿 키 등록 */
 const TOSS_CK='test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
+/* 이 페이지가 파는 상품 번호 — api/_price.js 의 번호와 같아야 합니다 (5 = 라이젠 3700X) */
+const SPEC_ID=5;
 let _pay=null;
 function tossPay(){
   if(!_pay)_pay=TossPayments(TOSS_CK).payment({customerKey:'GUEST-'+Math.random().toString(36).slice(2,12)});
@@ -407,12 +409,25 @@ async function startPay(){
   if(!U){ if(confirm('결제하시려면 로그인이 필요합니다.\\n카카오·구글로 3초면 됩니다.\\n\\n지금 로그인하시겠습니까?')) location.href='login.html?next=product.html'; return; }
   const m=TM.find(t=>t.d===S.d);
   const base=Math.round(BASE*S.d/30), tot=base-Math.round(base*m.o/100);
-  const orderId='KVC'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*900+100);
+
+  /* ★ 결제창을 열기 전에 서버에 주문을 먼저 적어둡니다.
+     주문번호와 금액을 서버가 정해야 금액을 고쳐서 결제하는 것을 막을 수 있습니다.
+     서버 함수가 아직 없으면 예전처럼 화면에서 만든 번호로 진행합니다(테스트 결제). */
+  let orderId='KVC'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*900+100);
+  let orderName='라이젠 3700X 가상컴 '+m.n, amt=tot;
+  try{
+    const r=await fetch('/api/order-create',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({specId:SPEC_ID, days:S.d, name:U.name, phone:U.phone,
+                           via:U.via, socialId:U.kakaoId||U.googleId||'', email:U.email||''})});
+    if(r.ok){ const d=await r.json(); orderId=d.orderId; orderName=d.orderName; amt=d.amount; }
+    else if(r.status===400){ alert((await r.json()).error||'주문을 만들지 못했습니다.'); return; }
+  }catch(e){}
+
   sessionStorage.setItem('kvc-last-order',JSON.stringify(
-    {orderId,pn:'Y-042',name:'라이젠 3700X 8코어',days:S.d,amt:tot,pm:S.p}));
+    {orderId,name:'라이젠 3700X 8코어',days:S.d,amt,pm:S.p}));
   const common={
-    amount:{currency:'KRW',value:tot},
-    orderId, orderName:'라이젠 3700X 가상컴 '+m.n,
+    amount:{currency:'KRW',value:amt},
+    orderId, orderName,
     successUrl:location.origin+'/success.html',
     failUrl:location.origin+'/fail.html',
   };

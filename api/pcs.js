@@ -1,0 +1,61 @@
+/* ═══════════════════════════════════════════════════════════════
+   PC 목록 조회 — 관리자 화면(랙맵·PC관리·대시보드)이 읽는 곳
+
+   GET  /api/pcs            전체
+   GET  /api/pcs?room=Y     서버실별
+
+   · 관리자 출입증(쿠키)이 없으면 아무것도 안 줍니다.
+   · 애니데스크 비밀번호는 이 길로 절대 나가지 않습니다.
+     비밀번호는 /api/pc-secret 에서 한 대씩, 열람 기록을 남기고 꺼냅니다.
+   · "다운" 판정은 서버가 합니다 — 마지막 신호가 down_sec 보다 오래됐으면 다운.
+   ═══════════════════════════════════════════════════════════════ */
+const { ready, sb } = require('./_supa');
+const { verify } = require('./admin-login');
+
+module.exports = async (req, res) => {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+  if (!verify(req)) return res.status(401).json({ error: '관리자 로그인이 필요합니다' });
+  if (!ready()) return res.status(503).json({ error: 'DB 미연결' });
+
+  const room = String(req.query.room || '').toUpperCase();
+  const where = ['K', 'Y', 'D'].includes(room) ? `&room=eq.${room}` : '';
+
+  try {
+    /* 비밀번호(pw_enc)는 select 목록에서 아예 빼둡니다 — 실수로 새어나갈 길을 막습니다 */
+    const cols = 'pn,room,rack,fl,slot,cpu,core,ram_gb,ssd_gb,gpu,spec_id,' +
+                 'anydesk,ip,status,online,in_use,up_sec,last_beat,note';
+
+    const [rows, setRows, unreg] = await Promise.all([
+      sb('pcs', { query: `?select=${cols}${where}&order=room.asc,rack.asc,fl.asc,slot.asc&limit=5000` }),
+      sb('settings', { query: '?select=k,v' }),
+      sb('pcs_unregistered', { query: '?select=*&order=last_beat.desc&limit=200' }),
+    ]);
+
+    const set = Object.fromEntries((setRows || []).map(r => [r.k, r.v]));
+    const downSec = Number(set.down_sec || 180);
+    const now = Date.now();
+
+    const pcs = (rows || []).map(p => {
+      const age = p.last_beat ? Math.round((now - Date.parse(p.last_beat)) / 1000) : null;
+      // 신호가 끊긴 지 오래면 상태와 무관하게 다운으로 봅니다
+      const dead = age === null || age > downSec;
+      return Object.assign({}, p, {
+        beatAge: age,
+        live: !dead && p.online,
+        status: dead && p.status !== 'new' ? 'down' : p.status,
+      });
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json({
+      ok: true,
+      at: new Date().toISOString(),
+      settings: set,
+      counts: pcs.reduce((o, p) => (o[p.status] = (o[p.status] || 0) + 1, o), {}),
+      unregistered: unreg || [],
+      pcs,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e).slice(0, 300) });
+  }
+};
