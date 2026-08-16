@@ -1424,7 +1424,14 @@ async function tryGate(){
     const r=await fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pw})});
     if(r.ok){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; syncLive(); return; }
-    if(r.status===401){ $('gate-err').textContent='비밀번호가 맞지 않습니다'; $('gate-pw').value=''; $('gate-pw').focus(); return; }
+    /* 429 = 너무 여러 번 틀림 (자동 대입 방지). 서버가 알려주는 문구를 그대로 보여줍니다 */
+    if(r.status===401||r.status===429){
+      let m='비밀번호가 맞지 않습니다';
+      try{ const d=await r.json(); if(d&&d.error) m=d.error; }catch(e){}
+      $('gate-err').textContent=m; $('gate-pw').value='';
+      if(r.status!==429) $('gate-pw').focus();
+      return;
+    }
   }catch(e){ /* 서버 함수가 아직 없거나 로컬에서 연 경우 → 아래 목업 코드로 */ }
   if(pw==='4060'){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; }
   else{ $('gate-err').textContent='코드가 올바르지 않습니다'; $('gate-pw').value=''; $('gate-pw').focus(); }

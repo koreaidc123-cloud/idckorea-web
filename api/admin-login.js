@@ -15,6 +15,7 @@
 const crypto = require('crypto');
 
 const kv = require('./_crypto');
+const supa = require('./_supa');
 
 const HOURS = 8;
 
@@ -36,6 +37,23 @@ function verify(req) {
   return want.length === sig.length && crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig));
 }
 
+/* ── 자동 대입 막기 ────────────────────────────────────────────
+   짧은 비밀번호(예: 네 자리)는 프로그램으로 1만 번 시도하면 뚫립니다.
+   그래서 같은 곳에서 15분 안에 10번 틀리면 잠급니다.
+   사람이 오타로 10번 틀릴 일은 없고, 자동 시도는 사실상 불가능해집니다.
+   (15분에 10번 = 하루 960번 = 1만 번 채우는 데 열흘 넘게 걸립니다)
+
+   기록은 이미 있는 view_log 표를 씁니다. IP 는 그대로 남기지 않고
+   섞어서(해시) 남기므로, 누가 접속했는지 추적하는 용도로는 쓰이지 않습니다. */
+const WINDOW_MIN = 15;
+const MAX_FAIL = 10;
+
+function whoHash(req) {
+  const ip = String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '')
+    .split(',')[0].trim() || 'unknown';
+  return 'ip:' + crypto.createHmac('sha256', kv.signKey()).update(ip).digest('hex').slice(0, 16);
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
@@ -44,12 +62,39 @@ module.exports = async (req, res) => {
     return res.status(503).json({ error: '미설정', hint: 'KVC_ADMIN_PW / KVC_SECRET 을 Vercel 환경변수에 넣어 주세요' });
   }
 
+  const who = whoHash(req);
+  const since = new Date(Date.now() - WINDOW_MIN * 60 * 1000).toISOString();
+
+  /* 이미 너무 많이 틀렸으면 비밀번호를 확인하지도 않고 돌려보냅니다 */
+  if (supa.ready()) {
+    try {
+      const rows = await supa.sb('view_log', {
+        query: `?select=at&act=eq.${encodeURIComponent('관리자 로그인 실패')}` +
+               `&who=eq.${encodeURIComponent(who)}&at=gte.${since}&order=at.asc&limit=${MAX_FAIL}`,
+      });
+      if (rows && rows.length >= MAX_FAIL) {
+        const wait = Math.ceil((Date.parse(rows[0].at) + WINDOW_MIN * 60 * 1000 - Date.now()) / 60000);
+        return res.status(429).json({
+          error: `비밀번호를 여러 번 틀리셨습니다. ${Math.max(1, wait)}분 뒤에 다시 시도해 주세요.`,
+        });
+      }
+    } catch (e) { /* 기록을 못 읽어도 로그인 자체는 막지 않습니다 */ }
+  }
+
   const got = String((req.body || {}).pw || '');
   const ok = got.length === pw.length &&
     crypto.timingSafeEqual(Buffer.from(got.padEnd(pw.length)), Buffer.from(pw));
 
   /* 비밀번호가 틀리면 왜 틀렸는지 알려주지 않습니다 (자동 대입 공격 대비) */
   if (!ok) {
+    if (supa.ready()) {
+      try {
+        await supa.sb('view_log', {
+          method: 'POST', prefer: 'return=minimal',
+          body: [{ pn: null, act: '관리자 로그인 실패', who }],
+        });
+      } catch (e) {}
+    }
     await new Promise(r => setTimeout(r, 700));      // 연속 시도를 느리게
     return res.status(401).json({ error: '비밀번호가 맞지 않습니다' });
   }

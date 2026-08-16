@@ -13,7 +13,7 @@
       고객 정보도, 주문도, 다른 PC 도 건드릴 수 없습니다.
    ═══════════════════════════════════════════════════════════════ */
 const crypto = require('crypto');
-const { ready, sb, authed } = require('./_supa');
+const { ready, sb, authed, baseUrl } = require('./_supa');
 const kv = require('./_crypto');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
@@ -152,7 +152,11 @@ module.exports = async (req, res) => {
       ok: true,
       pn: finalPn,
       token,
-      supabaseUrl: (process.env.SUPABASE_URL || '').replace(/\/$/, ''),
+      /* ★ 반드시 baseUrl() 을 씁니다.
+         환경변수를 그대로 쓰면 주소 끝에 /rest/v1 이 붙어 있을 수 있어,
+         랙PC 가 .../rest/v1/rest/v1/rpc/beat 를 부르며 전부 404 가 납니다.
+         (실제로 겪었습니다 — 현장 나가기 전에 잡았습니다) */
+      supabaseUrl: baseUrl(),
       publicKey: pubKey,
       beatSec: Number(process.env.KVC_BEAT_SEC || 120),   // 몇 초마다 보낼지
       renewed: !!exists,

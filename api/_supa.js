@@ -73,4 +73,8 @@ function authed(req, envName) {
   return diff === 0;
 }
 
-module.exports = { ready, sb, upsert, authed };
+/* 정리된 주소 — 랙PC 에게 알려줄 때도 반드시 이 값을 씁니다.
+   각자 process.env.SUPABASE_URL 을 직접 쓰면 /rest/v1 이 두 번 붙습니다. */
+const baseUrl = () => URL;
+
+module.exports = { ready, sb, upsert, authed, baseUrl };
