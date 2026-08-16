@@ -215,9 +215,11 @@ section.cta .btn-w{color:var(--red)}
 /* ══ 회사소개 띠 ══ */
 .ab-band{position:relative;overflow:hidden;background:#050912;color:#fff;text-align:center;
   isolation:isolate}
-.ab-bg{position:absolute;inset:0}
-.ab-bg img{width:100%;height:100%;object-fit:cover}
-.ab-bg::after{content:'';position:absolute;inset:0;background:rgba(4,7,16,.82)}
+/* 어둡게 덮는 층(::after)을 없앴습니다. 덮개를 따로 두는 대신
+   바탕을 어둡게 깔고 사진을 흐리게 얹습니다 — 겹치는 층이 하나 줄어
+   덮개가 밖으로 새어나갈 여지 자체가 없어집니다. */
+.ab-bg{position:absolute;inset:0;background:#040710}
+.ab-bg img{width:100%;height:100%;object-fit:cover;opacity:.18}
 .ab-in{position:relative;z-index:2}
 .ab-in .lb{font-size:13px;font-weight:800;color:#8CA6FF;margin-bottom:14px}
 .ab-in h2{font-size:clamp(26px,3.2vw,38px);line-height:1.38;letter-spacing:-.05em;font-weight:800}
@@ -225,6 +227,10 @@ section.cta .btn-w{color:var(--red)}
 .ab-in p{margin-top:16px;font-size:16.5px;line-height:1.8;color:rgba(255,255,255,.72)}
 .ab-n{display:flex;justify-content:center;gap:52px;margin-top:34px;padding-top:28px;
   border-top:1px solid rgba(255,255,255,.16);flex-wrap:wrap}
+/* 이 섹션 안의 버튼은 마우스를 올려도 움직이지 않습니다.
+   transform 이 걸리는 순간 또 같은 문제가 재발합니다. 밝기만 살짝 바뀝니다. */
+.ab-band .btn-w{transition:filter .18s}
+.ab-band .btn-w:hover{transform:none;box-shadow:none;filter:brightness(.92)}
 .ab-n b{display:block;font-size:28px;font-weight:800;letter-spacing:-.05em}
 .ab-n span{font-size:13.5px;color:rgba(255,255,255,.56)}
 
@@ -504,8 +510,11 @@ section.cta .btn-w{color:var(--red)}
 .pc:hover .pc-img img{transform:scale(1.08)}
 .pc-b .btn{transition:.18s}
 .pc:hover .pc-b .btn{box-shadow:0 10px 24px rgba(226,35,60,.3)}
-.cnt.pop{animation:cntPop .6s ease-out}
-@keyframes cntPop{0%{color:var(--gold)}100%{color:inherit}}
+/* 회사소개 띠(.ab-band)의 숫자 카운트업 애니메이션은 완전히 제거했습니다.
+   이 섹션은 어두운 오버레이 위에 글자가 올라간 구조라, 안에서 무엇이든
+   애니메이션이 돌면 일부 그래픽카드에서 합성 레이어가 어긋나
+   오버레이가 화면을 덮어버리는 문제가 반복됐습니다.
+   숫자는 처음부터 최종값으로 그냥 보여줍니다. */
 .js .pt div{opacity:0;transition:opacity .5s cubic-bezier(.2,.7,.3,1)}
 .js .pt.in div{opacity:1}
 /* 로고 — 원본 태극(홍 왼쪽위 · 청 오른쪽아래) + 두꺼운 국문 워드마크 */
@@ -604,7 +613,9 @@ section.cta .btn-w{color:var(--red)}
 
 <!-- ═══ 회사소개 요약 (자세한 내용은 서브페이지) ═══ -->
 <section class="sec ab-band">
-  <div class="ab-bg"><img loading="lazy" decoding="async" src="img/idc-wide.jpg" alt="24시간 Full가동되는 자체 서버실"></div>
+  <!-- 이 사진만 미리 불러옵니다. 스크롤로 들어오는 순간 사진을 읽어들이면
+       그 시점에 화면을 다시 그리게 되어 깨짐이 겹칠 수 있습니다. -->
+  <div class="ab-bg"><img decoding="async" src="img/idc-wide.jpg" alt="24시간 Full가동되는 자체 서버실"></div>
   <div class="shell ab-in">
     <div class="lb">회사소개</div>
     <h2>가동을 시작한 이후 <em>6년</em>,<br>단 한 번도 멈추지 않았습니다</h2>
@@ -891,7 +902,10 @@ prods();live();paint();
 /* ══ 스크롤 등장 · 숫자 카운트업 ══════════════════════════ */
 if(!SAFE)document.documentElement.classList.add('js');
 (function(){
-  document.querySelectorAll('.sh, .prods > *, .uses > *, .vids > *, .pt, .qa > *, .ab-in, .pnote')
+  /* .ab-in(회사소개 띠 내용)은 일부러 뺐습니다.
+     어두운 오버레이를 가진 섹션 안에서는 등장 효과조차 합성 레이어를 만들어
+     오버레이가 화면을 덮는 사고가 반복됐습니다. 이 섹션은 처음부터 그냥 보입니다. */
+  document.querySelectorAll('.sh, .prods > *, .uses > *, .vids > *, .pt, .qa > *, .pnote')
     .forEach(el=>{
       el.classList.add('rv');
       const p=el.parentElement;
@@ -907,39 +921,14 @@ if(!SAFE)document.documentElement.classList.add('js');
   }),{threshold:.12,rootMargin:'0px 0px -8% 0px'});
   document.querySelectorAll('.rv').forEach(el=>io.observe(el));
 
-  /* 6년 · 3곳 · 1,200+ · 24시간 처럼 단위가 붙어도 숫자만 올린다.
-     감시 대상은 숫자가 아니라 섹션 자체 — 숫자는 content-visibility 로
-     렌더링이 건너뛰어지는 영역 안에 있어 개별 감시가 동작하지 않는다.
-     끝날 때 transform 을 쓰지 않는다: 어두운 오버레이를 가진 섹션 안에서
-     transform 은 새 합성 레이어를 만들어 오버레이가 화면 전체를 덮는다. */
-  function runCount(root){
-    root.querySelectorAll('.ab-n b').forEach(el=>{
-      if(el.dataset.counted)return;
-      const m=el.textContent.trim().match(/^([^\d]*)([\d,]+)(.*)$/);
-      if(!m)return;
-      const pre=m[1], suf=m[3], target=parseInt(m[2].replace(/,/g,''),10);
-      if(!target)return;
-      el.dataset.counted='1';
-      const dur=1100, t0=performance.now();
-      el.classList.add('cnt');
-      const tick=now=>{
-        const p=Math.min(1,(now-t0)/dur), e2=1-Math.pow(1-p,3);
-        el.textContent=pre+Math.round(target*e2).toLocaleString('ko-KR')+suf;
-        if(p<1)requestAnimationFrame(tick); else el.classList.add('pop');
-      };
-      requestAnimationFrame(tick);
-    });
-  }
-  const band=document.querySelector('.ab-band');
-  if(band){
-    if('IntersectionObserver' in window){
-      const cio=new IntersectionObserver(es=>es.forEach(e=>{
-        if(!e.isIntersecting)return;
-        cio.unobserve(e.target); runCount(e.target);
-      }),{threshold:.25});
-      cio.observe(band);
-    } else runCount(band);
-  }
+  /* ★ 숫자 카운트업(6년 · 3곳 · 1,200+ · 24시간)은 완전히 삭제했습니다.
+     여러 번 고쳐도 이 섹션에서만 화면이 검게 덮이거나 잘리는 문제가 재발했습니다.
+     원인은 하나입니다 — 어두운 오버레이 위에 글자가 올라간 구조에서
+     숫자가 매 프레임 바뀌면 브라우저가 그 부분을 별도 합성 레이어로 올리고,
+     일부 그래픽카드에서 그 레이어와 오버레이의 순서가 어긋납니다.
+     애니메이션을 없애면 레이어가 생기지 않아 원인 자체가 사라집니다.
+     숫자는 HTML 에 적힌 최종값 그대로 처음부터 보입니다.
+     ※ 이 섹션 안에는 앞으로도 어떤 애니메이션도 넣지 않습니다. */
 })();
 
 /* 흐르는 띠 - transform 대신 네이티브 스크롤로 흘린다.
