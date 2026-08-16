@@ -1451,7 +1451,7 @@ document.addEventListener('click',async e=>{
       +'접속 주소: '+p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')+'\n'
       +'비밀번호: '+(pw||'미등록')+'\n'
       +'이용 기간: '+fmtD(o.start)+' ~ '+fmtD(o.end)+'\n'
-      +'문의: 카카오톡 채널 「한국 가상컴」 또는 010-2323-4060';
+      +'문의: 카카오톡 채널 「한국 가상컴」 또는 010-8446-8710';
     (navigator.clipboard? navigator.clipboard.writeText(txt):Promise.reject())
       .then(()=>{cp2.textContent='✓ 복사됨 (위치 미포함)';setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},1600)})
       .catch(()=>{prompt('아래 내용을 복사하세요 (위치 미포함)',txt)});
