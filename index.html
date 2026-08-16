@@ -344,21 +344,27 @@ section.cta .btn-w{color:var(--red)}
 .talk .btn:hover{background:#231212}
 
 /* ══ 파트너 ══ */
-/* ══ 사용 부품·프로그램 표기 ══
-   ★ 각 사 로고를 흉내내지 않습니다.
-     전에는 kt 의 빨간 kt, 인텔 파랑, 마이크로소프트 네모 4개처럼
-     공식 로고를 CSS 로 재현하고 있었습니다. 상표를 그대로 베낀 셈이라
-     제휴로 오인될 소지가 있어 전부 걷어냈습니다.
-     지금은 "무엇을 쓰는지" 알리는 글자 표기만 남깁니다. */
+/* ══ 사용 부품·프로그램 ══
+   원래의 "로고 벽" 느낌은 그대로 두되, 상표를 베끼지 않습니다.
+   · 각 사 공식 색·로고 도형(kt 빨강, 인텔 파랑, MS 네모 4개 등)은 쓰지 않고
+   · 한 가지 회색 글자로만 표기합니다 (마우스를 올리면 진해집니다)
+   브랜드 이름을 그대로 부르는 것은 "무엇을 쓰는지" 알리는 표기라 문제없습니다. */
 .pt{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.pt div{background:#fff;height:96px;display:grid;place-items:center;transition:.16s;padding:0 10px}
+.pt div{background:#fff;height:112px;display:grid;place-items:center;transition:.16s}
 .pt div:hover{background:var(--bg2)}
-.pl{font-size:16.5px;font-weight:700;letter-spacing:-.03em;color:var(--ink3);
-  text-align:center;line-height:1.4;transition:.16s}
+.pl{display:flex;flex-direction:column;align-items:center;gap:5px;
+  color:#8E96A4;transition:.2s;text-align:center;padding:0 8px}
 .pt div:hover .pl{color:var(--ink)}
-.pl em{font-style:normal;display:block;font-size:12px;font-weight:600;color:var(--ink4);margin-top:3px}
-.ptnote{margin-top:12px;font-size:12.5px;color:var(--ink4);line-height:1.7;text-align:center}
+.pl b{font-size:21px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.pl em{font-style:normal;font-size:12px;font-weight:600;letter-spacing:-.03em;opacity:.8}
+.ptnote{margin-top:14px;font-size:12.5px;color:var(--ink4);line-height:1.7;text-align:center}
+@media(max-width:900px){
+  .pt{grid-template-columns:repeat(3,1fr)}
+  .pt div{height:96px}
+  .pl b{font-size:18px}
+}
+@media(max-width:560px){.pt{grid-template-columns:repeat(2,1fr)}}
 
 /* ══ Q&A ══ */
 .qa{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
@@ -620,18 +626,18 @@ section.cta .btn-w{color:var(--red)}
 <!-- ═══ 파트너 ═══ -->
 <section class="sec sec-g">
   <div class="shell">
-    <div class="sh"><h2>이런 <em>부품과 프로그램</em>으로 만듭니다</h2></div>
+    <div class="sh"><h2>이런 부품으로 만듭니다 <em>components</em></h2></div>
     <div class="pt">
-      <div><span class="pl">인텔<em>Core i5</em></span></div>
-      <div><span class="pl">AMD<em>라이젠</em></span></div>
-      <div><span class="pl">NVIDIA<em>지포스 그래픽</em></span></div>
-      <div><span class="pl">삼성<em>SSD</em></span></div>
-      <div><span class="pl">마이크로소프트<em>윈도우</em></span></div>
-      <div><span class="pl">애니데스크<em>원격 접속</em></span></div>
-      <div><span class="pl">KT 인터넷<em>기업용 회선</em></span></div>
-      <div><span class="pl">개별 공인IP<em>PC마다 따로 부여</em></span></div>
-      <div><span class="pl">자체 서버실<em>3곳 직접 운영</em></span></div>
-      <div><span class="pl">24시간 상주<em>서버관리자</em></span></div>
+      <div><span class="pl"><b>Intel</b><em>Core i5</em></span></div>
+      <div><span class="pl"><b>AMD</b><em>라이젠</em></span></div>
+      <div><span class="pl"><b>NVIDIA</b><em>지포스 그래픽</em></span></div>
+      <div><span class="pl"><b>SAMSUNG</b><em>SSD</em></span></div>
+      <div><span class="pl"><b>Microsoft</b><em>윈도우</em></span></div>
+      <div><span class="pl"><b>AnyDesk</b><em>원격 접속</em></span></div>
+      <div><span class="pl"><b>KT</b><em>기업용 인터넷 회선</em></span></div>
+      <div><span class="pl"><b>개별 공인IP</b><em>PC마다 따로 부여</em></span></div>
+      <div><span class="pl"><b>자체 서버실</b><em>3곳 직접 운영</em></span></div>
+      <div><span class="pl"><b>24시간 상주</b><em>서버관리자</em></span></div>
     </div>
     <p class="ptnote">위 상표는 각 상표권자의 자산이며, 한국 가상컴이 임대 PC 구성에 사용하는
       부품·프로그램을 알려드리기 위한 표기입니다. 각 사와의 제휴·후원 관계를 뜻하지 않습니다.</p>
