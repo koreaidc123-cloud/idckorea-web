@@ -1,0 +1,39 @@
+# 한국 가상컴 — 검색엔진 안내
+# 고객이 보는 페이지만 열고, 관리자·개인 페이지는 막습니다.
+
+User-agent: *
+Allow: /
+
+# 관리자 — 검색에 절대 노출되면 안 됩니다
+Disallow: /admin.html
+
+# 개인 페이지 · 결제 결과 — 노출될 이유가 없습니다
+Disallow: /mypage.html
+Disallow: /success.html
+Disallow: /fail.html
+Disallow: /diag.html
+
+# 서버 함수
+Disallow: /api/
+
+# 네이버
+User-agent: Yeti
+Allow: /
+Disallow: /admin.html
+Disallow: /mypage.html
+Disallow: /success.html
+Disallow: /fail.html
+Disallow: /diag.html
+Disallow: /api/
+
+# 다음
+User-agent: Daum
+Allow: /
+Disallow: /admin.html
+Disallow: /mypage.html
+Disallow: /success.html
+Disallow: /fail.html
+Disallow: /diag.html
+Disallow: /api/
+
+Sitemap: https://idckorea-dusky.vercel.app/sitemap.xml

@@ -27,7 +27,28 @@
 <meta property="og:image" content="https://idckorea-dusky.vercel.app/img/hero3.jpg">
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="naver-site-verification" content=""><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<meta name="naver-site-verification" content="">
+<!-- 상품 구조화 데이터 — 검색결과에 가격이 함께 표시됩니다.
+     가격을 바꾸면 여기와 api/_price.js 를 함께 고쳐야 합니다. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "라이젠 3700X 8코어 원격PC 임대",
+  "description": "라이젠 3700X 8코어 · 램 32GB · SSD 480GB · GTX 1050TI 4G~1060 · 개별 공인IP. 결제 확인 즉시 자동 개통됩니다.",
+  "brand": { "@type": "Brand", "name": "한국 가상컴" },
+  "category": "컴퓨터 임대",
+  "offers": {
+    "@type": "Offer",
+    "url": "https://idckorea-dusky.vercel.app/product.html",
+    "priceCurrency": "KRW",
+    "price": "65000",
+    "availability": "https://schema.org/InStock",
+    "seller": { "@type": "Organization", "name": "한국 가상컴" }
+  }
+}
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 /* ═══════════════════════════════════════════════════════════════
    상품 상세 + 결제 — 컴뷰어스 대응 개선판
