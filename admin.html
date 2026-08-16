@@ -438,6 +438,34 @@ function defRacks(){const o={};for(const r of ROOMS){o[r.k]=Array.from({length:r
 let RACKS=defRacks();
 try{const s=JSON.parse(localStorage.getItem('kvc-racks')||'null');if(s&&s.K&&s.Y&&s.D)RACKS=s}catch(e){}
 const saveRacks=()=>localStorage.setItem('kvc-racks',JSON.stringify(RACKS));
+
+/* ═══ 랙 구조를 실제 PC 위치에서 만들어 냅니다 ═══
+   전에는 랙 수·층수·자리수를 브라우저에 따로 저장했습니다. 그래서
+     · 다른 PC 에서 관리자를 열면 구조가 달랐고
+     · 현장에서 적어 온 자리가 그 구조를 벗어나면 랙맵에 안 보였습니다.
+   이제는 등록된 PC 들이 실제로 꽂힌 자리를 보고 격자를 그립니다.
+   구조를 따로 관리할 필요가 없고, 현장 입력과 절대 어긋나지 않습니다.
+   (여유분으로 랙·층·자리를 하나씩 더 그려 빈자리가 보이게 합니다) */
+function racksFromPCS(){
+  const o={};
+  for(const r of ROOMS){
+    const mine=PCS.filter(p=>p.room===r.k && p.rack>0 && p.fl>0 && p.slot>0);
+    const maxRack=mine.reduce((m,p)=>Math.max(m,p.rack),0);
+    const racks=[];
+    for(let rk=1; rk<=Math.max(maxRack+1,1); rk++){
+      const inRack=mine.filter(p=>p.rack===rk);
+      const maxFl=inRack.reduce((m,p)=>Math.max(m,p.fl),0);
+      const fls=[];
+      for(let fl=1; fl<=Math.max(maxFl+1,1); fl++){
+        const maxSlot=inRack.filter(p=>p.fl===fl).reduce((m,p)=>Math.max(m,p.slot),0);
+        fls.push(Math.max(maxSlot+1,1));
+      }
+      racks.push(fls);
+    }
+    o[r.k]=racks;
+  }
+  return o;
+}
 const rackOcc=(room,rack)=>PCS.filter(p=>p.room===room&&p.rack===rack);
 const floorMaxSlot=(room,rack,fl)=>rackOcc(room,rack).filter(p=>p.fl===fl).reduce((m,p)=>Math.max(m,p.slot),0);
 
@@ -1500,6 +1528,8 @@ function applyLive(d){
   /* 주문은 결제 연동이 끝나면 서버에서 함께 내려옵니다 (지금은 비웁니다) */
   ORDERS.length=0;
   LIVE=true; LIVE_AT=new Date();
+  /* 랙 구조를 실제 위치에서 다시 만듭니다 — 현장 입력과 어긋날 수 없습니다 */
+  RACKS=racksFromPCS();
   const ft=document.querySelector('.ft');
   if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
     +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';

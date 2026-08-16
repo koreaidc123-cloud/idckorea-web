@@ -72,7 +72,7 @@ $cInk   = [Drawing.Color]::FromArgb(20, 24, 32)
 # ── 창 ────────────────────────────────────────────────────────────
 $f = New-Object Windows.Forms.Form
 $f.Text = '한국 가상컴 - PC 등록'
-$f.Size = New-Object Drawing.Size(760, 800)
+$f.Size = New-Object Drawing.Size(760, 916)
 $f.StartPosition = 'CenterScreen'
 $f.BackColor = [Drawing.Color]::White
 $f.FormBorderStyle = 'FixedSingle'
@@ -133,9 +133,41 @@ foreach ($b in $roomBtns) {
   })
 }
 
-# ── 2단계 : 애니데스크 비밀번호 (오타 방지를 위해 두 번 받습니다) ──
-New-Label '2. 애니데스크 비밀번호를 적어 주세요' $fBig $cInk 40 300 620 34 | Out-Null
-New-Label '조금 전 이 컴퓨터 애니데스크에 설정하신 그 비밀번호입니다.' $fSmall $cGray 40 338 620 26 | Out-Null
+# ── 2단계 : 랙 위치 ───────────────────────────────────────────────
+#    이걸 안 적으면 관리자 랙맵에 이 컴퓨터가 나타나지 않습니다.
+New-Label '2. 이 컴퓨터가 꽂힌 자리' $fBig $cInk 40 296 500 34 | Out-Null
+New-Label '자리 번호는 오른쪽 끝이 1번, 층은 맨 아래가 1층입니다.' $fSmall $cGray 40 334 620 26 | Out-Null
+
+function New-NumBox($x, $y) {
+  $t = New-Object Windows.Forms.TextBox
+  $t.Font = New-Object Drawing.Font('맑은 고딕', 20, [Drawing.FontStyle]::Bold)
+  $t.Location = New-Object Drawing.Point($x, $y)
+  $t.Size = New-Object Drawing.Size(96, 48)
+  $t.BorderStyle = 'FixedSingle'
+  $t.TextAlign = 'Center'
+  $t.MaxLength = 3
+  # 숫자만 받습니다
+  $t.Add_KeyPress({ if ($_.KeyChar -notmatch '[\d\b]') { $_.Handled = $true } })
+  $f.Controls.Add($t); return $t
+}
+$rackBox = New-NumBox 40  364
+New-Label '번 랙'   $fMid $cInk 142 376 80 30 | Out-Null
+$flBox   = New-NumBox 226 364
+New-Label '층'      $fMid $cInk 328 376 60 30 | Out-Null
+$slotBox = New-NumBox 392 364
+New-Label '번 자리' $fMid $cInk 494 376 100 30 | Out-Null
+$locEcho = New-Label '' $fMid $cGray 600 376 102 30
+$locEcho.TextAlign = 'TopRight'
+$echoLoc = {
+  $r = $rackBox.Text; $l = $flBox.Text; $s = $slotBox.Text
+  if ($r -and $l -and $s) { $locEcho.Text = "$r-$l-$s"; $locEcho.ForeColor = $cBlue }
+  else { $locEcho.Text = '' }
+}
+$rackBox.Add_TextChanged($echoLoc); $flBox.Add_TextChanged($echoLoc); $slotBox.Add_TextChanged($echoLoc)
+
+# ── 3단계 : 애니데스크 비밀번호 (오타 방지를 위해 두 번 받습니다) ──
+New-Label '3. 애니데스크 비밀번호를 적어 주세요' $fBig $cInk 40 434 620 34 | Out-Null
+New-Label '조금 전 이 컴퓨터 애니데스크에 설정하신 그 비밀번호입니다.' $fSmall $cGray 40 472 620 26 | Out-Null
 
 function New-PwBox($y) {
   $t = New-Object Windows.Forms.TextBox
@@ -145,11 +177,11 @@ function New-PwBox($y) {
   $t.BorderStyle = 'FixedSingle'
   $f.Controls.Add($t); return $t
 }
-$pwBox  = New-PwBox 368
-$lbl2   = New-Label '한 번 더 적어 주세요 (오타 확인)' $fSmall $cGray 40 428 400 26
-$match  = New-Label '' $fSmall $cGray 440 428 262 26
+$pwBox  = New-PwBox 502
+$lbl2   = New-Label '한 번 더 적어 주세요 (오타 확인)' $fSmall $cGray 40 562 400 26
+$match  = New-Label '' $fSmall $cGray 440 562 262 26
 $match.TextAlign = 'TopRight'
-$pw2Box = New-PwBox 458
+$pw2Box = New-PwBox 592
 
 # 두 칸이 같은지 실시간으로 알려줍니다
 $checkMatch = {
@@ -173,7 +205,7 @@ $go = New-Object Windows.Forms.Button
 $go.Text = '등록하기'
 $go.Font = New-Object Drawing.Font('맑은 고딕', 22, [Drawing.FontStyle]::Bold)
 $go.Size = New-Object Drawing.Size(662, 80)
-$go.Location = New-Object Drawing.Point(40, 528)
+$go.Location = New-Object Drawing.Point(40, 662)
 $go.FlatStyle = 'Flat'
 $go.FlatAppearance.BorderSize = 0
 $go.BackColor = $cRed
@@ -181,7 +213,7 @@ $go.ForeColor = [Drawing.Color]::White
 $go.Cursor = 'Hand'
 $f.Controls.Add($go)
 
-$msg = New-Label '' $fMid $cGray 40 620 662 110
+$msg = New-Label '' $fMid $cGray 40 754 662 96
 $msg.TextAlign = 'TopLeft'
 
 # ── 2분마다 돌도록 등록 ───────────────────────────────────────────
@@ -234,6 +266,19 @@ $go.Add_Click({
     $msg.Text = "먼저 서버실을 골라 주세요.`n위에 있는 큰 버튼 세 개 중 하나입니다."
     return
   }
+  # 자리를 안 적으면 관리자 랙맵에 이 컴퓨터가 나타나지 않습니다
+  if (-not $rackBox.Text.Trim() -or -not $flBox.Text.Trim() -or -not $slotBox.Text.Trim()) {
+    $msg.ForeColor = $cRed
+    $msg.Text = "자리를 적어 주세요.`n랙 번호 · 층 · 자리 번호 세 칸을 모두 채워 주셔야 합니다."
+    if (-not $rackBox.Text.Trim()) { $rackBox.Focus() }
+    elseif (-not $flBox.Text.Trim()) { $flBox.Focus() } else { $slotBox.Focus() }
+    return
+  }
+  if ([int]$rackBox.Text -lt 1 -or [int]$flBox.Text -lt 1 -or [int]$slotBox.Text -lt 1) {
+    $msg.ForeColor = $cRed
+    $msg.Text = "자리 번호는 1부터 시작합니다. 0 은 쓸 수 없습니다."
+    return
+  }
   if (-not $pwBox.Text.Trim()) {
     $msg.ForeColor = $cRed
     $msg.Text = "애니데스크 비밀번호를 적어 주세요."
@@ -267,6 +312,7 @@ $go.Add_Click({
       room = $script:room; hwId = $spec.hwId; cpu = $spec.cpu; core = $spec.core
       ramGb = $spec.ramGb; ssdGb = $spec.ssdGb; gpu = $spec.gpu
       ip = $spec.ip; anydesk = $ad; adPw = $pwBox.Text.Trim()
+      rack = [int]$rackBox.Text; fl = [int]$flBox.Text; slot = [int]$slotBox.Text
     } | ConvertTo-Json -Compress
 
     $r = Invoke-RestMethod -Uri "$($conf.server)/api/pc-register" -Method Post `
@@ -276,6 +322,7 @@ $go.Add_Click({
 
     # 비밀번호는 보냈으니 화면과 메모리에서 바로 지웁니다
     $pwBox.Text = ''; $pw2Box.Text = ''
+    $slotBox.Text = ''   # 자리 번호만 비웁니다 (랙·층은 대개 그대로 이어서 작업하십니다)
     $body = $null
 
     if (-not (Test-Path $CfgDir)) { New-Item -ItemType Directory -Path $CfgDir -Force | Out-Null }
@@ -288,7 +335,7 @@ $go.Add_Click({
     Register-BeatTask
 
     # ── 결과 화면 ──
-    foreach ($c in @($go, $pwBox, $pw2Box)) { $c.Visible = $false }
+    foreach ($c in @($go, $pwBox, $pw2Box, $rackBox, $flBox, $slotBox)) { $c.Visible = $false }
     foreach ($b in $roomBtns) { $b.Visible = $false }
     foreach ($c in $f.Controls) { if ($c -is [Windows.Forms.Label]) { $c.Visible = $false } }
 
@@ -299,7 +346,7 @@ $go.Add_Click({
     $big = New-Label $r.pn (New-Object Drawing.Font('맑은 고딕',72,[Drawing.FontStyle]::Bold)) $cInk 40 220 620 110
     $big.Visible = $true
 
-    $d = New-Label ("이 컴퓨터의 품번입니다.`n랙에 붙이는 이름표에 이대로 적어 주세요.`n`n애니데스크 번호 : $ad`n$($spec.cpu)`n램 $($spec.ramGb)GB · 저장장치 $($spec.ssdGb)GB") `
+    $d = New-Label ("이 컴퓨터의 품번입니다.`n랙에 붙이는 이름표에 이대로 적어 주세요.`n`n자리 : $($r.loc)  ($(($rooms | Where-Object { $_.k -eq $script:room }).name))`n애니데스크 번호 : $ad`n$($spec.cpu)`n램 $($spec.ramGb)GB · 저장장치 $($spec.ssdGb)GB") `
          $fMid $cGray 40 340 640 200
     $d.Visible = $true
 

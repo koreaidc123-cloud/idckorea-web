@@ -67,10 +67,19 @@ module.exports = async (req, res) => {
   const token = crypto.randomBytes(24).toString('base64url');
   const now = new Date().toISOString();
 
+  /* 랙 위치 — 현장에서 세팅하시는 분이 적어 주십니다 (예: 1-2-1)
+     세 값이 모두 있으면 그 자리로 등록하고, 없으면 0 으로 두어
+     관리자가 나중에 지정하게 합니다. */
+  const rack = num(b.rack, 1, 999);
+  const fl = num(b.fl, 1, 99);
+  const slot = num(b.slot, 1, 99);
+  const hasLoc = rack !== null && fl !== null && slot !== null;
+
   const row = {
     room,
-    /* 자리는 관리자가 정합니다. 등록 시점에는 0 으로 두고 "미등록"으로 올립니다. */
-    rack: 0, fl: 0, slot: 0,
+    rack: hasLoc ? rack : 0,
+    fl: hasLoc ? fl : 0,
+    slot: hasLoc ? slot : 0,
     hw_id: str(b.hwId, 64),
     cpu: str(b.cpu, 80),
     core: str(b.core, 20),
@@ -103,10 +112,23 @@ module.exports = async (req, res) => {
       exists = !!(found && found[0]);
     }
 
+    /* 그 자리에 이미 다른 PC 가 있으면 미리 알려줍니다.
+       (데이터베이스도 막아주지만, 현장에서 알아보기 쉬운 문구로 돌려줍니다) */
+    if (hasLoc) {
+      const taken = await sb('pcs', {
+        query: `?select=pn&room=eq.${room}&rack=eq.${rack}&fl=eq.${fl}&slot=eq.${slot}&limit=1`,
+      });
+      if (taken && taken[0] && taken[0].pn !== finalPn) {
+        return res.status(409).json({
+          error: `${room}실 ${rack}-${fl}-${slot} 자리에는 이미 ${taken[0].pn} 이 있습니다.\n자리 번호를 다시 확인해 주세요.`,
+        });
+      }
+    }
+
     if (exists) {
-      /* 이미 있는 품번이면 토큰만 새로 발급합니다.
-         자리·상태는 관리자가 정한 값을 그대로 둡니다. */
-      delete row.rack; delete row.fl; delete row.slot;
+      /* 이미 있는 품번이면 토큰을 새로 발급합니다.
+         위치를 적어 오셨으면 그 위치로 옮기고, 안 적으셨으면 원래 자리를 둡니다. */
+      if (!hasLoc) { delete row.rack; delete row.fl; delete row.slot; }
       await sb('pcs', {
         method: 'PATCH',
         query: `?pn=eq.${encodeURIComponent(finalPn)}`,
@@ -114,7 +136,9 @@ module.exports = async (req, res) => {
         prefer: 'return=minimal',
       });
     } else {
-      row.status = 'new';                       // 관리자 "미등록 PC" 화면으로 갑니다
+      /* 자리까지 적어 오셨으면 "검증 대기", 안 적으셨으면 "미등록" 으로 둡니다.
+         검증 대기 = 담당자가 실제 접속만 확인하면 판매 재고로 올라갑니다. */
+      row.status = hasLoc ? 'unv' : 'new';
 
       if (finalPn) {
         row.pn = finalPn;
@@ -139,8 +163,15 @@ module.exports = async (req, res) => {
             saved = true;
             break;
           } catch (e) {
+            const m = String(e.message || e);
+            // 자리가 겹치면 번호를 바꿔도 소용없습니다 — 바로 알려줍니다
+            if (/pcs_slot_unique/.test(m)) {
+              return res.status(409).json({
+                error: `${room}실 ${rack}-${fl}-${slot} 자리에는 이미 다른 PC 가 있습니다.\n자리 번호를 다시 확인해 주세요.`,
+              });
+            }
             // 23505 = 이미 그 품번이 있음 → 다음 번호로
-            if (!/23505|duplicate key/.test(String(e.message || e))) throw e;
+            if (!/23505|duplicate key/.test(m)) throw e;
           }
         }
         if (!saved) return res.status(409).json({ error: '남은 품번을 찾지 못했습니다. 관리자에게 문의해 주세요' });
@@ -161,6 +192,7 @@ module.exports = async (req, res) => {
       beatSec: Number(process.env.KVC_BEAT_SEC || 120),   // 몇 초마다 보낼지
       renewed: !!exists,
       pwSaved: !!pwSealed,
+      loc: hasLoc ? `${rack}-${fl}-${slot}` : null,
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e).slice(0, 300) });
