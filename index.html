@@ -108,7 +108,7 @@ section.cta .btn-w{color:var(--red)}
 
 /* ══ 히어로 슬라이더 ══ */
 .hero{position:relative;height:min(78vh,660px);min-height:480px;overflow:hidden;background:#050912;
-  isolation:isolate;contain:paint}
+  isolation:isolate}
 .sl{position:absolute;inset:0;opacity:0;transition:opacity 1.1s ease}
 .sl.on{opacity:1}
 .sl img{width:100%;height:100%;object-fit:cover}
@@ -163,7 +163,7 @@ section.cta .btn-w{color:var(--red)}
 
 /* ══ 회사소개 띠 ══ */
 .ab-band{position:relative;overflow:hidden;background:#050912;color:#fff;text-align:center;
-  isolation:isolate;contain:paint}
+  isolation:isolate}
 .ab-bg{position:absolute;inset:0}
 .ab-bg img{width:100%;height:100%;object-fit:cover}
 .ab-bg::after{content:'';position:absolute;inset:0;background:rgba(4,7,16,.82)}
@@ -465,8 +465,8 @@ section.cta .btn-w{color:var(--red)}
    화면 밖 섹션은 브라우저가 렌더링 자체를 건너뛰게 한다.
    이미지 31장을 한꺼번에 디코딩하면 80MB+ 라 내장그래픽 VRAM 을 넘겨
    화면이 검게 깨진다. 아래 두 줄이 그 근본 대책. */
-.sec:not(.ab-band){content-visibility:auto;contain-intrinsic-size:auto 640px}
-.hero{content-visibility:visible}
+/* content-visibility 는 카운트업·스크롤 중 섹션이 접히는 문제를 일으켜 제거.
+   GPU 메모리는 이미지 지연 로딩과 실해상도 축소로 충분히 해결됨. */
 </style>
 </head>
 <body>

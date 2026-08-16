@@ -143,7 +143,9 @@ input{font:inherit;color:inherit;letter-spacing:inherit}
 .lg{align-items:center}
 .lg .tx b,.lg>b{font-weight:900!important;letter-spacing:-.07em!important}
 .lg .tx span{font-weight:600;letter-spacing:-.03em}</style>
-</head>
+<script src="auth-config.js"></script>
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" crossorigin="anonymous"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script></head>
 <body>
 
 <div class="wrap">
@@ -208,7 +210,7 @@ input{font:inherit;color:inherit;letter-spacing:inherit}
       <div class="step" id="s-kakao">
         <div class="fl">
           <label>연락처 <em>*</em></label>
-          <input type="tel" value="010-2323-4060" readonly
+          <input type="tel" id="kph" readonly
                  style="background:var(--bg2);color:var(--ink3)">
           <div class="msg ok">✓ 카카오에서 확인된 번호입니다. 따로 인증하지 않으셔도 됩니다.</div>
         </div>
@@ -262,51 +264,150 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
   b.classList.add('on');
   document.querySelectorAll('.pane').forEach(p=>p.hidden = p.dataset.p!==b.dataset.t);
 }));
-/* ── 세션 ──
-   실서비스에서는 카카오/구글 OAuth 후 서버가 세션 쿠키를 내려준다.
-   지금은 그 자리에 같은 모양의 데이터를 만들어 로그인 이후 화면이 실제로 돌아가게 한다. */
+/* ══ 실제 소셜 로그인 ══
+   auth-config.js 에 앱 키를 넣으면 진짜 카카오·구글 창이 뜬다.
+   키가 없으면 무엇을 어디서 받아야 하는지 화면으로 안내한다. */
+const CFG=window.KVC_AUTH||{};
 const AFTER=new URLSearchParams(location.search).get('next')||'mypage.html';
-function signIn(via,name,phone){
-  const today=new Date();
-  const mk=(pn,spec,ad,pw,days,left)=>{
-    const end=new Date(today); end.setDate(end.getDate()+left);
-    const start=new Date(end); start.setDate(start.getDate()-days);
-    return {pn,spec,ad,pw,days,left,start:start.toISOString(),end:end.toISOString()};
-  };
-  const u={via,name,phone,
-    pcs:[ mk('Y-042','라이젠 3700X · 8코어 · 램 32GB','1 042 887 613','한국1212',30,4),
-          mk('K-118','라이젠 3200G · 4코어 · 램 8GB','1 771 204 559','경기3318',90,61) ],
-    orders:[
-      {no:'2608-2731',name:'라이젠 3700X 8코어',days:30,pm:'가상계좌',amt:65000},
-      {no:'2607-2519',name:'라이젠 3200G 4코어',days:90,pm:'신용카드',amt:114000},
-    ]};
+
+function saveSession(u){
   localStorage.setItem('kvc-user',JSON.stringify(u));
   location.href=AFTER;
 }
-const NAMES={kakao:'김정환',google:'이서연'};
+/* 신규 회원의 초기 상태 — 실서비스에서는 서버가 이 회원의 실제 PC·주문을 내려준다 */
+function newUser(via,name,phone,extra){
+  return Object.assign({via,name,phone,pcs:[],orders:[],joinedAt:new Date().toISOString()},extra||{});
+}
+/* 가입한 회원 명부 — 서버 DB 자리. 같은 계정으로 다시 오면 약관 단계를 건너뛴다 */
+function members(){try{return JSON.parse(localStorage.getItem('kvc-members')||'{}')}catch(e){return{}}}
+function memberKey(u){return u.via+':'+(u.kakaoId||u.googleId||u.email||u.name)}
+/* 소셜 인증이 끝난 뒤: 기존 회원이면 바로 로그인, 신규면 약관 동의 단계 */
+function afterAuth(u){
+  const db=members(), k=memberKey(u), old=db[k];
+  if(old){ old.name=u.name; if(u.email)old.email=u.email; saveSession(old); return; }
+  gotoJoinStep(u);
+}
+function needKey(which){
+  const box=document.createElement('div');
+  box.style.cssText='position:fixed;inset:0;z-index:999;background:rgba(8,11,18,.9);display:grid;place-items:center;padding:22px';
+  box.innerHTML=`<div style="width:min(520px,100%);background:#fff;border-radius:16px;padding:28px 26px;line-height:1.75">
+    <b style="font-size:18px;letter-spacing:-.04em">${which} 로그인 키가 아직 등록되지 않았습니다</b>
+    <p style="margin-top:10px;font-size:14px;color:#6B7381">
+      실제 로그인을 켜려면 <b style="color:#0B0E14">auth-config.js</b> 파일에 앱 키 한 줄만 넣으면 됩니다.<br>
+      ${which==='카카오'
+        ? 'developers.kakao.com → 내 애플리케이션 → 앱 만들기 → <b>JavaScript 키</b> 복사'
+        : 'console.cloud.google.com → 사용자 인증 정보 → OAuth 클라이언트 ID(웹) → <b>클라이언트 ID</b> 복사'}
+    </p>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button id="kx" style="flex:1;height:46px;border:0;border-radius:9px;background:#E2233C;color:#fff;font-weight:700;font-size:15px;cursor:pointer">확인</button>
+      <button id="kd" style="flex:1;height:46px;border:1px solid #E3E6EC;border-radius:9px;background:#fff;font-weight:700;font-size:15px;cursor:pointer">체험용으로 계속</button>
+    </div></div>`;
+  document.body.appendChild(box);
+  box.querySelector('#kx').onclick=()=>box.remove();
+  /* 키를 받기 전에도 결제·내 가상컴 화면을 점검할 수 있게 체험 세션을 준다 */
+  box.querySelector('#kd').onclick=()=>{
+    const d=new Date(), mk=(pn,spec,ad,pw,days,left)=>{
+      const end=new Date(d); end.setDate(end.getDate()+left);
+      const start=new Date(end); start.setDate(start.getDate()-days);
+      return {pn,spec,ad,pw,days,left,start:start.toISOString(),end:end.toISOString()};
+    };
+    saveSession(newUser(which==='카카오'?'kakao':'google','체험회원','010-2323-4060',{demo:true,
+      pcs:[ mk('Y-042','라이젠 3700X · 8코어 · 램 32GB','1 042 887 613','한국1212',30,4),
+            mk('K-118','라이젠 2200G · 4코어 · 램 8GB','1 771 204 559','경기3318',90,61) ],
+      orders:[
+        {no:'2608-2731',name:'라이젠 3700X 8코어',days:30,pm:'가상계좌',amt:65000},
+        {no:'2607-2519',name:'라이젠 2200G 4코어',days:90,pm:'신용카드',amt:114000} ]}));
+  };
+}
 
-/* 로그인 */
+/* ── 카카오 ── */
+function kakaoLogin(){
+  if(!CFG.KAKAO_JS_KEY){ needKey('카카오'); return; }
+  if(!window.Kakao){ alert('카카오 SDK를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
+  if(!Kakao.isInitialized()) Kakao.init(CFG.KAKAO_JS_KEY);
+  Kakao.Auth.login({
+    scope:'profile_nickname,account_email,phone_number',
+    success(){
+      Kakao.API.request({url:'/v2/user/me'}).then(res=>{
+        const acc=res.kakao_account||{};
+        const name=(acc.profile&&acc.profile.nickname)||'회원';
+        /* 카카오가 검증한 번호를 그대로 받는다 (+82 10-… → 010-…) */
+        let phone=(acc.phone_number||'').replace('+82 ','0').replace(/-/g,'');
+        if(phone) phone=phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/,'$1-$2-$3');
+        afterAuth(newUser('kakao',name,phone||'',{kakaoId:String(res.id),email:acc.email||''}));
+      }).catch(()=>alert('카카오 정보를 가져오지 못했습니다.'));
+    },
+    fail(err){ if(err&&err.error!=='access_denied') alert('카카오 로그인에 실패했습니다.'); }
+  });
+}
+
+/* ── 구글 ── */
+let _gInit=false;
+function googleLogin(){
+  if(!CFG.GOOGLE_CLIENT_ID){ needKey('구글'); return; }
+  if(!window.google||!google.accounts){ alert('구글 SDK를 불러오지 못했습니다.'); return; }
+  if(!_gInit){
+    google.accounts.id.initialize({
+      client_id:CFG.GOOGLE_CLIENT_ID,
+      callback:res=>{
+        try{
+          const p=JSON.parse(decodeURIComponent(escape(atob(res.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));
+          /* 구글은 전화번호를 주지 않는다 → 가입 단계에서 문자 인증 1회 */
+          afterAuth(newUser('google',p.name||'회원','',{googleId:p.sub,email:p.email||''}));
+        }catch(e){ alert('구글 정보를 확인하지 못했습니다.'); }
+      }
+    });
+    _gInit=true;
+  }
+  google.accounts.id.prompt(n=>{
+    if(n.isNotDisplayed&&n.isNotDisplayed()) alert('구글 로그인 창이 차단되었습니다.\n브라우저 팝업 차단을 해제해 주세요.');
+  });
+}
+/* 신규 회원 가입 단계 — 소셜 인증은 끝났고 연락처·약관만 남았다 */
+function gotoJoinStep(u){
+  window._pending=u;
+  document.querySelector('.tabs button[data-t="up"]').click();
+  /* 카카오가 검증된 번호를 줬으면 그대로 보여주고, 없으면 문자 인증 칸을 쓴다 */
+  const verified = u.via==='kakao' && !!u.phone;
+  $('s-kakao').classList.toggle('on', verified);
+  $('s-google').classList.toggle('on', !verified);
+  if(verified) $('kph').value=u.phone;
+  document.querySelectorAll('[data-up]').forEach(x=>x.style.opacity=x.dataset.up===u.via?'1':'.45');
+  const box = verified ? $('s-kakao') : $('s-google');
+  if(!box.querySelector('.gdone')){
+    const d=document.createElement('div');
+    d.className='msg ok gdone';
+    d.style.cssText='margin:0 0 12px;padding:11px 13px;background:#EAF7F0;border-radius:8px';
+    d.textContent='✓ '+(u.via==='kakao'?'카카오':'구글')+' 계정 확인 완료 ('+(u.email||u.name)+')'
+                 +(verified?' — 약관에 동의하시면 끝납니다':' — 연락처만 인증하면 끝납니다');
+    box.insertBefore(d,box.firstChild);
+  }
+  $('agree').hidden=false; $('join').hidden=false; check();
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+/* 로그인 버튼 */
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{
-  const via=b.dataset.go;
-  signIn(via,NAMES[via],via==='kakao'?'010-2323-4060':'010-8446-8710');
+  b.dataset.go==='kakao' ? kakaoLogin() : googleLogin();
 }));
 /* 가입 — 소셜 선택에 따라 다음 단계가 달라진다 */
 document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.up;
-  window._via=k;
-  $('s-kakao').classList.toggle('on', k==='kakao');
-  $('s-google').classList.toggle('on', k==='google');
-  $('agree').hidden=false; $('join').hidden=false;
-  document.querySelectorAll('[data-up]').forEach(x=>x.style.opacity=x===b?'1':'.45');
-  check();
+  /* 가입도 실제 소셜 인증을 먼저 거친다 */
+  if(k==='kakao'){ kakaoLogin(); return; }
+  if(k==='google'){ googleLogin(); return; }
 }));
-/* 문자 인증 */
+/* 문자 인증 — 구글 가입자만 필요 (카카오는 검증된 번호를 받음) */
 $('send').addEventListener('click',()=>{
-  if(!$('ph').value.trim()){alert('연락처를 입력해 주세요.');return}
+  const ph=$('ph').value.trim();
+  if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){alert('연락처를 정확히 입력해 주세요. (010-0000-0000)');return}
   $('codewrap').hidden=false; $('send').textContent='다시 받기';
-  alert('실제 서비스에서는 여기서 인증번호 문자가 발송됩니다.');
+  alert('실서비스에서는 여기서 인증번호 문자가 발송됩니다.\n(문자 발송 연동 후 실제 번호로 전송)');
 });
 $('ok').addEventListener('click',()=>{
+  if(!/^\d{6}$/.test($('code').value.trim())){
+    $('cmsg').textContent='6자리 숫자를 입력해 주세요.'; $('cmsg').classList.remove('ok'); return;
+  }
   $('cmsg').textContent='✓ 확인되었습니다.'; $('cmsg').classList.add('ok'); check();
 });
 /* 동의 */
@@ -319,13 +420,20 @@ function check(){
   $('join').disabled = !(need.length && need.every(x=>x.checked));
 }
 $('join').addEventListener('click',()=>{
-  const via=window._via||'kakao';
-  const phone = via==='kakao' ? '010-2323-4060' : ($('ph').value.trim()||'010-0000-0000');
-  if(via==='google' && $('cmsg') && !$('cmsg').classList.contains('ok')){
-    alert('연락처 인증을 완료해 주세요.\n접속 정보를 문자로 보내드리려면 번호 확인이 필요합니다.');
-    return;
+  const u=window._pending;
+  if(!u){ alert('먼저 카카오 또는 구글로 인증해 주세요.'); return; }
+  if(!u.phone){
+    if(!$('cmsg').classList.contains('ok')){
+      alert('연락처 인증을 완료해 주세요.\n접속 정보를 문자로 보내드리려면 번호 확인이 필요합니다.');
+      return;
+    }
+    u.phone=$('ph').value.trim();
   }
-  signIn(via,NAMES[via],phone);
+  u.marketing = !!document.querySelector('.agree input:not(.need):not(#all)').checked;
+  /* 회원 명부에 올린다 — 다음 로그인부터는 약관 단계 없이 바로 들어온다 */
+  const db=members(); db[memberKey(u)]=u;
+  localStorage.setItem('kvc-members',JSON.stringify(db));
+  saveSession(u);
 });
 </script>
 </body>
