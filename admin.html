@@ -1407,6 +1407,25 @@ document.addEventListener('click',async e=>{
     const off=days===60?SET.off60:days===90?SET.off90:0;
     const amt=Math.round(p.spec.p*days/30*(100-off)/100);
     const start=new Date(TODAY), end=new Date(TODAY); end.setDate(end.getDate()+days);
+
+    /* ★ 서버에 먼저 등록합니다.
+       스마트스토어·전화 주문이 여기로 들어옵니다. 서버에 남지 않으면
+       고객 화면에서는 그 PC 가 계속 "임대 가능"으로 보입니다. */
+    if(LIVE){
+      const btn=t.closest('[data-mansave]');
+      btn.disabled=true; msg('등록하는 중…');
+      let r;
+      try{
+        const rs=await fetch('/api/order-manual',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({pn:p.pn, specId:p.spec.id, days, name:nm, phone:ph,
+            payMethod:pm, amount:amt,
+            payerName:nm, userName:mis?unm:nm, userPhone:mis?uph:ph})});
+        r=await rs.json().catch(()=>({}));
+        if(!rs.ok){ btn.disabled=false; msg(r.error||('등록 실패 ('+rs.status+')')); return; }
+      }catch(e){ btn.disabled=false; msg('서버에 연결하지 못했습니다'); return; }
+      btn.disabled=false;
+    }
     const o={no:'2608-'+(ono++), pc:p, nm, ph, via:'manual', payer:nm,
       userNm:mis?unm:nm, userPh:mis?uph:null, mis, pm,
       card:null, depositor:pm==='가상계좌'?nm:null, days, amt, start, end, left:days};
@@ -1511,9 +1530,11 @@ function applyLive(d){
     PCS.push({
       room:p.room, roomName:rooms[p.room]||p.room, rack:p.rack, fl:p.fl, slot:p.slot,
       pn:p.pn, st:p.status,
-      /* 판매 상품과 이어지면 그 사양을, 아니면 실제로 읽어온 하드웨어를 씁니다 */
+      /* 판매 상품과 이어지면 그 사양을, 아니면 실제로 읽어온 하드웨어를 씁니다.
+         id 를 반드시 넣어야 합니다 — 수동 주문 등록이 이 값으로 상품을 지정합니다. */
       spec: SPECS.find(s=>s.id===p.spec_id) ||
-            {n:p.cpu||'사양 미확인', core:p.core||'', ram:p.ram_gb||0, ssd:p.ssd_gb||0, gpu:p.gpu||'', p:0},
+            {id:p.spec_id||null, n:p.cpu||'사양 미확인', core:p.core||'',
+             ram:p.ram_gb||0, ssd:p.ssd_gb||0, gpu:p.gpu||'', p:0},
       ad:p.anydesk||'', pw:'', ip:p.ip||'',
       beat:p.beatAge, live:p.live, inUse:p.in_use,
     });
