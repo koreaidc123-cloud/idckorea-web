@@ -23,6 +23,28 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 
+# ── 관리자 권한으로 스스로 다시 뜨기 ──────────────────────────────
+#    작업 스케줄러에 등록하려면 관리자 권한이 필요합니다.
+#    bat 파일에서 권한을 올리면 한글 경로에서 문제가 생겨 여기서 처리합니다.
+$me = $PSCommandPath
+$isAdmin = ([Security.Principal.WindowsPrincipal] `
+            [Security.Principal.WindowsIdentity]::GetCurrent()
+           ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+  try {
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$me`"")
+  } catch {
+    [Windows.Forms.MessageBox]::Show(
+      "관리자 권한이 필요합니다.`n`n다시 실행하시고 '이 앱이 변경할 수 있도록 허용하시겠어요?' 창에서 [예] 를 눌러 주세요.",
+      '한국 가상컴', 'OK', 'Warning') | Out-Null
+  }
+  exit 0
+}
+
+# 다른 컴퓨터에서 가져온 파일에 붙는 '차단' 딱지를 떼어냅니다
+try { Get-ChildItem -Path $PSScriptRoot -File | Unblock-File -ErrorAction SilentlyContinue } catch {}
+
 $here    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $CfgDir  = 'C:\KVC'
 $CfgFile = Join-Path $CfgDir 'pc.json'
