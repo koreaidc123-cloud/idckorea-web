@@ -85,6 +85,29 @@ Get-ChildItem .\api -Filter *.js | ForEach-Object { node --check $_.FullName }
 > **어두운 오버레이가 있는 섹션 안에서는 `transform` 애니메이션을 쓰지 않습니다.**
 > `contain` · `content-visibility` 도 이 프로젝트에서는 쓰지 않습니다.
 
+### ★★ Vercel 무료 요금제 — 서버 함수 12개 한도
+
+`api/` 안에서 **밑줄로 시작하지 않는 .js 파일 개수가 12를 넘으면 배포가 통째로 실패합니다.**
+하나만 넘쳐도 전부 안 올라가고, 사이트는 예전 버전을 계속 서빙합니다.
+"올렸는데 반영이 안 된다" 싶으면 **가장 먼저 이걸 의심하세요.**
+
+```powershell
+ls api\*.js | Where-Object { $_.Name -notlike "_*" } | Measure-Object   # 12 이하여야 함
+vercel ls --yes                                                        # Status 가 Error 인지
+```
+
+기능을 더 붙일 때는 새 파일을 만들지 말고 **`api/admin.js` 의 `do` 목록에 추가**하고
+실제 코드는 `_admin-이름.js` 로 두세요. 밑줄 파일은 함수로 세지 않습니다.
+
+### 현장 등록 프로그램에서 겪은 것들
+
+| 증상 | 원인 |
+|---|---|
+| bat 실행하면 깨진 글자와 오류가 쏟아짐 | .bat 에 한글이 있으면 cmd 가 CP949 로 읽어 깨짐. **PC등록.bat 은 순수 ASCII 로만** |
+| 작업 XML 범위 초과 오류 | `New-ScheduledTaskTrigger -RepetitionDuration ([TimeSpan]::MaxValue)` 가 일부 윈도우10에서 거부됨. `schtasks /SC MINUTE /MO 2` 로 |
+| 서버실 버튼 색은 바뀌는데 선택이 안 됨 | 이벤트에 `.GetNewClosure()` 를 붙이면 별도 영역이 생겨 `$script:` 값이 밖으로 안 나감 |
+| 쓰고 있는데 사용중=아니오 | 예약 작업은 SYSTEM(세션 0)으로 돌아 `GetLastInputInfo` 가 사용자 입력을 못 봄. `quser` 로 판단 |
+
 ---
 
 ## 지금 구조
@@ -101,12 +124,19 @@ admin.html      관리자 10화면
 success/fail    결제 결과
 auth-config.js  ★ 카카오·구글 앱 키를 넣는 곳 (지금 비어 있음)
 
-api/
+api/                      ★ 라우트는 12개까지만! (아래 주의사항 참고)
   _supa.js         Supabase 연결 (환경변수 없으면 자동 비활성)
   _price.js        ★ 서버가 가진 진짜 가격표
-  admin-login.js   관리자 로그인 (httpOnly 쿠키)
-  pcs.js           관리자용 PC 조회
-  heartbeat.js     서버실 중계기 → 서버
+  _spec.js         CPU 이름 → 판매 상품 번호 알아맞히기
+  _crypto.js       애니데스크 비밀번호 잠금 + 쿠키 서명
+  _admin-*.js      관리자 기능들 (밑줄로 시작 = 라우트로 안 셈)
+  admin.js         ★ 관리자 창구 하나 — do 값으로 위 파일에 넘김
+  admin-login.js   관리자 로그인 (httpOnly 쿠키 + 자동대입 잠금)
+  customer.js      고객 로그인·내 가상컴 (카카오·구글을 서버가 직접 검증)
+  auth-config.js   카카오·구글 공개키를 환경변수에서 내려줌
+  live-pcs.js      고객용 공개 PC 목록 (민감정보 미포함)
+  health.js        연결 진단
+  pc-register.js   현장 PC 등록 + 토큰 발급
   order-create.js  결제창 열기 전 주문·금액 확정
   toss-confirm.js  금액 대조 → 승인 → PC 자동 배정
   toss-webhook.js  가상계좌 입금 자동 감지
@@ -158,12 +188,16 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 | 화면 · 디자인 · 문구 | **진짜** |
 | 카카오·구글 로그인 | **코드는 진짜**, `auth-config.js` 에 키만 넣으면 동작 |
 | 토스 결제 | **코드는 진짜**, 테스트 키 상태 (실결제 불가) |
-| 관리자 PC 목록 · 랙맵 | Supabase 연결 전까지 **목업 1,136대**로 자동 폴백 |
-| 주문 · 회원 | 목업 |
+| 관리자 PC 목록 · 랙맵 | **진짜** (등록된 PC 가 없으면 목업으로 폴백) |
+| 관리자 주문 · 회원 | **진짜** (`/api/admin?do=orders`) |
+| 고객 실시간 PC임대 | **진짜** (`/api/live-pcs`, 20초마다 갱신) |
+| 내 가상컴 | **진짜** (서버가 카카오·구글을 직접 검증) |
+| 연장 · 해지환불 · PC이전 · 세금계산서 | **진짜** (`/api/admin?do=order-action`) |
+| 수동 주문 등록 (스마트스토어·전화) | **진짜** (`/api/admin?do=order-manual`) |
 | 알림톡 | 미연동 (솔라피 예정) |
+| 관리자 메뉴 재편 | 안 함 — 11개 메뉴에 겹치는 것이 있습니다 |
 
-> **Supabase 프로젝트 하나가 모든 것의 병목입니다.** URL + service_role 키를
-> Vercel 환경변수에 넣고 `db/schema.sql` 을 실행하면 관리자가 실데이터로 바뀝니다.
+> Supabase 는 2026-08-16 연결 완료. `/api/health` 로 상태를 확인합니다.
 
 ---
 
