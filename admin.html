@@ -1180,7 +1180,8 @@ function route(){
 addEventListener('hashchange',route);
 
 /* ═══════════════ 이벤트 (전부 위임 — 재렌더에도 안 죽는다) ═══════════════ */
-document.addEventListener('click',e=>{
+/* 서버에 저장·조회하는 동작이 있어 async 입니다 (await 를 쓸 수 있어야 합니다) */
+document.addEventListener('click',async e=>{
   const t=e.target;
   if(t.closest('[data-close]')||t.id==='overlay'){closeDrawer();return}
 
@@ -1244,18 +1245,29 @@ document.addEventListener('click',e=>{
     const val=(inp&&inp.value.trim().toUpperCase())||'';
     if(!/^[KYD]-\d{3}$/.test(val)){alert('품번 형식은 K-001 · Y-042 · D-113 입니다.');return}
     if(PCS.some(x=>x.pn===val)){alert(val+' 은 이미 사용 중인 품번입니다.');return}
+    asg.disabled=true;
+    const r=await pcSave(p.pn||'', {pn:val, room:val.charAt(0), status:'unv'});
+    asg.disabled=false;
+    if(!r.ok){alert(r.error);return}
     p.pn=val; p.st='unv'; seq[p.room]=Math.max(seq[p.room],parseInt(val.slice(2),10));
     route();return;
   }
-  /* 검증 확인 / 실패 */
-  const vo=t.closest('[data-verok]');
-  if(vo){const p=PCS.find(x=>x.pn===vo.dataset.verok);if(p){p.st='ok';closeDrawer();route()}return}
-  const vf=t.closest('[data-verfail]');
-  if(vf){const p=PCS.find(x=>x.pn===vf.dataset.verfail);if(p){p.st='fix';route()}return}
-  const tf=t.closest('[data-tofix]');
-  if(tf){const p=PCS.find(x=>x.pn===tf.dataset.tofix);if(p){p.st='fix';closeDrawer();route()}return}
-  const tk=t.closest('[data-took]');
-  if(tk){const p=PCS.find(x=>x.pn===tk.dataset.took);if(p){p.st='ok';closeDrawer();route()}return}
+  /* 검증 확인 / 실패 / 점검 전환 — 서버에 먼저 저장합니다 */
+  const stBtn = t.closest('[data-verok]')||t.closest('[data-verfail]')
+              ||t.closest('[data-tofix]')||t.closest('[data-took]');
+  if(stBtn){
+    const d=stBtn.dataset;
+    const pn=d.verok||d.verfail||d.tofix||d.took;
+    const to=(d.verok||d.took)?'ok':'fix';
+    const p=PCS.find(x=>x.pn===pn); if(!p)return;
+    stBtn.disabled=true;
+    const r=await pcSave(pn,{status:to});
+    stBtn.disabled=false;
+    if(!r.ok){alert(r.error);return}
+    p.st=to;
+    if(d.verok||d.tofix||d.took) closeDrawer();
+    route(); return;
+  }
 
   /* 회원 관리 */
   const mem=t.closest('[data-mem]');
@@ -1301,7 +1313,15 @@ document.addEventListener('click',e=>{
     if(slot<1||slot>cfg[fl-1]){msg(fl+'층은 '+cfg[fl-1]+'자리까지입니다');return}
     const taken=PCS.find(x=>x!==p&&x.room===room&&x.rack===rack&&x.fl===fl&&x.slot===slot);
     if(taken){msg('그 자리에는 이미 '+(taken.pn||'미등록 PC')+' 가 있습니다');return}
-    /* 검증 통과 — 적용 + 기록 */
+    /* ★ 서버에 먼저 저장합니다. 서버가 거절하면 화면도 바꾸지 않습니다.
+       (화면만 바꾸면 30초 뒤 서버 값으로 되돌아가 "저장이 안 된다"가 됩니다) */
+    sv.disabled=true; msg('저장하는 중…');
+    const st = (pn && p.st==='new') ? 'unv' : undefined;
+    const r = await pcSave(p.pn||'', {pn, room, rack, fl, slot, anydesk:ad, pw, status:st, note:memo});
+    sv.disabled=false;
+    if(!r.ok){ msg(r.error); return; }
+
+    /* 검증 통과 — 화면에도 적용 + 기록 */
     const before=locStr(p);
     if(pn && pn!==p.pn){
       logView(pn,'품번 변경 '+(p.pn||'미등록')+' → '+pn);
@@ -1309,7 +1329,7 @@ document.addEventListener('click',e=>{
       seq[room]=Math.max(seq[room],parseInt(pn.slice(2),10));
     }
     if(ad!==p.ad){logView(p.pn||ad,'애니데스크 번호 변경');p.ad=ad}
-    if(pw){p.pw=pw;logView(p.pn||p.ad,'애니데스크 비밀번호 변경')}
+    if(pw){p.pw=pw; delete p._pw; logView(p.pn||p.ad,'애니데스크 비밀번호 변경')}
     if(room!==p.room||rack!==p.rack||fl!==p.fl||slot!==p.slot){
       p.room=room; p.roomName=ROOMS.find(r=>r.k===room).name;
       p.rack=rack; p.fl=fl; p.slot=slot;
@@ -1319,17 +1339,26 @@ document.addEventListener('click',e=>{
     route(); openPc(p.pn||p.ad); return;
   }
 
-  /* 비번 열람 — 기록 남김 */
+  /* 비번 열람 — 누르는 순간 서버에 물어보고, 서버가 기록을 남깁니다 */
   const ps=t.closest('[data-pwshow]');
   if(ps){
     const p=PCS.find(x=>x.pn===ps.dataset.pwshow||x.ad===ps.dataset.pwshow); if(!p)return;
     const m=document.querySelector('[data-pwm="'+ps.dataset.pwshow+'"]');
-    if(m){m.textContent=p.pw;m.classList.remove('mask')}
+    ps.textContent='…'; ps.disabled=true;
+    const pw=await getPw(p);
+    if(pw===null){ ps.textContent='실패'; ps.disabled=false;
+      setTimeout(()=>{ps.textContent='보기'},1600); return; }
+    if(m){ m.textContent = pw || '아직 등록 안 됨'; m.classList.remove('mask'); }
     logView(p.pn||p.ad); ps.remove(); return;
   }
   if(t.id==='dr-pwbtn'){
     const p=PCS.find(x=>x.pn===t.dataset.pn||x.ad===t.dataset.pn); if(!p)return;
-    $('dr-pw').textContent=p.pw; $('dr-pw').classList.remove('mask');
+    t.textContent='…'; t.disabled=true;
+    const pw=await getPw(p);
+    if(pw===null){ t.textContent='실패'; t.disabled=false;
+      setTimeout(()=>{t.textContent='보기'},1600); return; }
+    $('dr-pw').textContent = pw || '아직 등록 안 됨';
+    $('dr-pw').classList.remove('mask');
     logView(p.pn||p.ad); t.remove(); return;
   }
 
@@ -1363,10 +1392,13 @@ document.addEventListener('click',e=>{
   if(cp2){
     const o=ORDERS.find(x=>x.no===cp2.dataset.copycust); if(!o)return;
     const p=o.pc;
+    const pw=await getPw(p);      // 서버에서 한 번 꺼내옵니다 (기록 남음)
+    if(pw===null){ cp2.textContent='비밀번호를 가져오지 못했습니다';
+      setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},2000); return; }
     const txt='[한국 가상컴] '+o.nm+'님의 가상컴 안내\n'
       +'문의번호: '+p.pn+'\n'
       +'접속 주소: '+p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')+'\n'
-      +'비밀번호: '+p.pw+'\n'
+      +'비밀번호: '+(pw||'미등록')+'\n'
       +'이용 기간: '+fmtD(o.start)+' ~ '+fmtD(o.end)+'\n'
       +'문의: 카카오톡 채널 「한국 가상컴」 또는 010-2323-4060';
     (navigator.clipboard? navigator.clipboard.writeText(txt):Promise.reject())
@@ -1472,6 +1504,39 @@ function applyLive(d){
   if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
     +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';
   route();
+}
+
+/* ── 애니데스크 비밀번호 꺼내기 ──────────────────────────────
+   비밀번호는 화면에 미리 내려받아 두지 않습니다.
+   [보기] 를 누른 그 순간에만 서버에 한 대씩 물어보고, 서버가 열람 기록을 남깁니다.
+   목록(/api/pcs)에는 비밀번호가 아예 실려 오지 않습니다. */
+async function getPw(p){
+  if(!LIVE) return p.pw||'';            // 목업 모드
+  if(p._pw!==undefined) return p._pw;   // 이 화면에서 이미 열어본 것
+  if(!p.pn) return '';
+  try{
+    const r=await fetch('/api/pc-secret?pn='+encodeURIComponent(p.pn),
+      {credentials:'same-origin',cache:'no-store'});
+    if(!r.ok) return null;
+    const d=await r.json();
+    p._pw=d.pw||''; p._copy=d.copyText||'';
+    return p._pw;
+  }catch(e){ return null; }
+}
+
+/* ── 고친 내용을 서버에 저장 ─────────────────────────────────
+   이게 없으면 화면에만 반영되고, 30초 뒤 서버에서 다시 받아올 때
+   원래대로 돌아갑니다. */
+async function pcSave(key, patch){
+  if(!LIVE) return {ok:true};           // 목업 모드에서는 화면만 바꿉니다
+  try{
+    const r=await fetch('/api/pc-update',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({key},patch))});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) return {ok:false,error:d.error||('저장 실패 ('+r.status+')')};
+    return {ok:true,pn:d.pn};
+  }catch(e){ return {ok:false,error:'서버에 연결하지 못했습니다'}; }
 }
 
 async function syncLive(){
