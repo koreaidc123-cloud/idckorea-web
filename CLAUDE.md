@@ -112,23 +112,30 @@ api/
   toss-webhook.js  가상계좌 입금 자동 감지
 
 agent/
-  kvc-agent.ps1    랙PC용 (1분마다 상태를 중계기 공유폴더에 기록)
-  kvc-relay.ps1    서버실 중계기용 (변경분만 서버로 전송)
+  kvc-agent.ps1    랙PC용 (2분마다 DB로 직접 전송)
   설치안내.md       현장 세팅하는 분이 보는 문서
 
 db/schema.sql       Supabase 에 붙여넣고 실행할 설계
+db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 결제-정산-준비.md    통신판매업 신고부터 정산까지
 ```
 
 ### 하트비트가 흐르는 길
 
 ```
-랙PC(kvc-agent) → 공유폴더 → 중계기(kvc-relay) → /api/heartbeat → DB → 관리자 랙맵
-     1분마다 파일       변경분만 배치 전송            30초마다 화면 갱신
+랙PC(kvc-agent) ──2분마다 직접──▶ Supabase rpc/beat ──▶ /api/pcs ──▶ 관리자 랙맵
+                                                          30초마다 화면 갱신
 ```
 
-**왜 중계기를 두었나**: 1,200대가 각자 쏘면 하루 172만 건. 중계기가 모아서 변경분만
-올리면 하루 수천 건. 랙PC를 인터넷에 열 필요도 없습니다.
+**중계기는 없습니다 (2026-08-16 결정).** 처음엔 서버실마다 중계기 PC 를 두는 설계였으나,
+정환님이 "PC 를 계속 켜둘 수 없다"고 지적하셔서 없앴습니다. 제가 중계기를 넣은 이유
+중 하나("랙PC 를 인터넷에 열어야 해서 위험")는 **틀린 판단**이었습니다 —
+랙PC 는 애니데스크 때문에 이미 인터넷에 나가 있습니다.
+
+- 2분 간격 × 1,200대 = 월 약 2.6GB → Supabase 무료 한도(5GB) 안
+- Vercel 함수는 **PC 등록할 때 딱 한 번**만 씁니다 (`/api/pc-register`)
+- 보안: PC 마다 전용 토큰. `beat` 함수(security definer)로 **자기 한 줄만** 갱신 가능.
+  표 자체는 RLS 로 잠겨 있어 공개키로는 아무것도 못 읽습니다.
 
 ### 가격을 바꿀 때 반드시 같이 고칠 3곳
 
@@ -161,11 +168,19 @@ db/schema.sql       Supabase 에 붙여넣고 실행할 설계
 | 이름 | 용도 |
 |---|---|
 | `SUPABASE_URL` | Supabase 프로젝트 주소 |
-| `SUPABASE_SERVICE_KEY` | service_role 키 (절대 공개 금지) |
-| `KVC_RELAY_KEY` | 서버실 중계기 암호 (아무 문자열이나 길게) |
+| `SUPABASE_SERVICE_KEY` | `sb_secret_…` (절대 공개 금지) |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (랙PC 에 배포되는 공개키) |
+| `KVC_SETUP_KEY` | 현장에서 랙PC 등록할 때 칠 암호 |
 | `KVC_ADMIN_PW` | 관리자 로그인 비밀번호 |
 | `KVC_ADMIN_SECRET` | 관리자 쿠키 서명용 (아무 문자열이나 길게) |
 | `TOSS_SECRET_KEY` | 토스 시크릿 키 (심사 통과 후) |
+
+> Supabase 키는 2026년부터 형식이 바뀌었습니다 (`service_role` JWT → `sb_secret_`).
+> 새 키는 JWT 가 아니라서 `Authorization: Bearer` 로 보내면 실패합니다.
+> `api/_supa.js` 가 키 앞글자로 판별해 알아서 나눠 보냅니다.
+
+**설정이 제대로 됐는지는 `/api/health` 를 브라우저로 열어 확인합니다.**
+환경변수·표·하트비트 창구가 각각 되는지 한글로 알려줍니다.
 
 ---
 

@@ -18,7 +18,8 @@ module.exports = async (req, res) => {
   const env = {
     SUPABASE_URL: process.env.SUPABASE_URL || '',
     SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || '',
-    KVC_RELAY_KEY: process.env.KVC_RELAY_KEY || '',
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY || '',
+    KVC_SETUP_KEY: process.env.KVC_SETUP_KEY || '',
     KVC_ADMIN_PW: process.env.KVC_ADMIN_PW || '',
     KVC_ADMIN_SECRET: process.env.KVC_ADMIN_SECRET || '',
     TOSS_SECRET_KEY: process.env.TOSS_SECRET_KEY || '',
@@ -33,7 +34,12 @@ module.exports = async (req, res) => {
          : /^eyJ/.test(env.SUPABASE_SERVICE_KEY) ? ' (옛 형식 JWT)'
          : ' ⚠️ 형식을 알 수 없습니다')
       : '❌ 없음',
-    '중계기 암호': env.KVC_RELAY_KEY ? '✅ ' + mask(env.KVC_RELAY_KEY) : '❌ 없음 — 하트비트를 받을 수 없습니다',
+    'Supabase 공개키': env.SUPABASE_PUBLISHABLE_KEY
+      ? (/^sb_publishable_/.test(env.SUPABASE_PUBLISHABLE_KEY)
+          ? '✅ ' + mask(env.SUPABASE_PUBLISHABLE_KEY)
+          : '⚠️ publishable 키가 아닙니다 — sb_publishable_ 로 시작해야 합니다')
+      : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
+    '현장 등록 암호': env.KVC_SETUP_KEY ? '✅ ' + mask(env.KVC_SETUP_KEY) : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '관리자 비밀번호': env.KVC_ADMIN_PW ? '✅ 등록됨' : '❌ 없음 — 관리자가 목업으로 동작합니다',
     '관리자 서명키': env.KVC_ADMIN_SECRET ? '✅ 등록됨' : '❌ 없음',
     '토스 시크릿키': env.TOSS_SECRET_KEY
@@ -61,12 +67,30 @@ module.exports = async (req, res) => {
       }
     }
     데이터베이스.상태 = 성공 === 표.length ? '✅ 정상 (표 6개 모두 확인)' : `⚠️ 표 ${성공}/${표.length}개만 확인됨`;
+
+    /* 하트비트 접수 창구가 살아 있는지 — 가짜 토큰을 넣어 거절되는지 봅니다.
+       DENIED 가 돌아오면 정상입니다. */
+    try {
+      const r = await sb('rpc/beat', {
+        method: 'POST',
+        body: { p_pn: 'Z-999', p_token: 'health-check-fake-token-000' },
+      });
+      데이터베이스['하트비트 창구'] = r === 'DENIED'
+        ? '✅ 정상 (가짜 토큰을 제대로 거절함)'
+        : '⚠️ 예상 밖 응답: ' + JSON.stringify(r).slice(0, 60);
+    } catch (e) {
+      const m = String(e.message || e);
+      데이터베이스['하트비트 창구'] = /PGRST202|does not exist|Could not find/.test(m)
+        ? '❌ 없습니다 — db/02-heartbeat.sql 을 실행해 주세요'
+        : '❌ ' + m.slice(0, 120);
+    }
   }
 
   const 다음할일 = [];
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) 다음할일.push('Vercel 환경변수에 SUPABASE_URL / SUPABASE_SERVICE_KEY 등록 후 Redeploy');
   if (ready() && 데이터베이스.상태 && 데이터베이스.상태.startsWith('⚠️')) 다음할일.push('Supabase SQL Editor 에서 db/schema.sql 실행');
-  if (!env.KVC_RELAY_KEY) 다음할일.push('KVC_RELAY_KEY 등록 (현장 중계기 설치 때 같은 값을 입력합니다)');
+  if (!env.SUPABASE_PUBLISHABLE_KEY) 다음할일.push('SUPABASE_PUBLISHABLE_KEY 등록 (Supabase → API Keys → Publishable key)');
+  if (!env.KVC_SETUP_KEY) 다음할일.push('KVC_SETUP_KEY 등록 (현장에서 랙PC 설치할 때 입력할 암호)');
   if (!env.KVC_ADMIN_PW || !env.KVC_ADMIN_SECRET) 다음할일.push('KVC_ADMIN_PW / KVC_ADMIN_SECRET 등록');
   if (!다음할일.length) 다음할일.push('모두 정상입니다. 현장에서 중계기·에이전트를 설치하시면 됩니다.');
 
