@@ -10,7 +10,16 @@
    ※ 아직 안 넣었으면 ready() 가 false 를 돌려주고,
       화면은 지금처럼 목업 데이터로 계속 돌아갑니다. 터지지 않습니다.
    ═══════════════════════════════════════════════════════════════ */
-const URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+/* Supabase 화면에서 주소를 복사하면 자리에 따라 세 가지 모양으로 나옵니다.
+     https://xxxx.supabase.co
+     https://xxxx.supabase.co/
+     https://xxxx.supabase.co/rest/v1/     ← Data API 화면에서 복사하면 이것
+   어느 것을 넣으셔도 되도록 뒤쪽을 정리해서 씁니다.
+   (정리하지 않으면 /rest/v1//rest/v1/pcs 가 되어 전부 404 가 납니다) */
+const URL = (process.env.SUPABASE_URL || '')
+  .trim()
+  .replace(/\/+$/, '')
+  .replace(/\/rest\/v1$/, '');
 const KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
 const ready = () => !!(URL && KEY);

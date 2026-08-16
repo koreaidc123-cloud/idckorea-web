@@ -26,7 +26,9 @@ module.exports = async (req, res) => {
   };
 
   const 환경변수 = {
-    'Supabase 주소': env.SUPABASE_URL ? '✅ ' + env.SUPABASE_URL : '❌ 없음',
+    'Supabase 주소': env.SUPABASE_URL
+      ? '✅ ' + env.SUPABASE_URL.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '')
+      : '❌ 없음',
     'Supabase 키': env.SUPABASE_SERVICE_KEY
       ? '✅ ' + mask(env.SUPABASE_SERVICE_KEY) +
         (/^sb_secret_/.test(env.SUPABASE_SERVICE_KEY) ? ' (새 형식 secret)'
