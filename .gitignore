@@ -1,6 +1,7 @@
-node_modules
-.vercel
-.DS_Store
-Thumbs.db
-
-.vercel
+# 실제 암호가 들어간 파일은 절대 올리지 않습니다.
+# (kvc-config.json 은 USB 로 나갈 때만 값이 채워지고, 저장소에는 빈 값으로 둡니다)
+agent/kvc-config.local.json
+*설정값*.txt
+.env
+.env.*
+.vercel/.env*
