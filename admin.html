@@ -439,30 +439,27 @@ let RACKS=defRacks();
 try{const s=JSON.parse(localStorage.getItem('kvc-racks')||'null');if(s&&s.K&&s.Y&&s.D)RACKS=s}catch(e){}
 const saveRacks=()=>localStorage.setItem('kvc-racks',JSON.stringify(RACKS));
 
-/* ═══ 랙 구조를 실제 PC 위치에서 만들어 냅니다 ═══
+/* ═══ 랙 구조 = 서버실 기본 배치 + 거기를 벗어난 PC 만큼만 확장 ═══
    전에는 랙 수·층수·자리수를 브라우저에 따로 저장했습니다. 그래서
      · 다른 PC 에서 관리자를 열면 구조가 달랐고
      · 현장에서 적어 온 자리가 그 구조를 벗어나면 랙맵에 안 보였습니다.
-   이제는 등록된 PC 들이 실제로 꽂힌 자리를 보고 격자를 그립니다.
-   구조를 따로 관리할 필요가 없고, 현장 입력과 절대 어긋나지 않습니다.
-   (여유분으로 랙·층·자리를 하나씩 더 그려 빈자리가 보이게 합니다) */
+   그다음에는 등록된 PC 위치만 보고 격자를 만들었는데, 이번엔
+     · 등록이 0~2대뿐이면 랙맵이 조그맣게 나와 전체 배치가 안 보였습니다.
+       (영태리는 9랙·4층·14자리가 이미 물리적으로 깔려 있습니다)
+   그래서 지금은 서버실마다 정해진 기본 배치를 항상 바닥에 깔아 두고,
+   그 밖에 꽂힌 PC 가 있으면 딱 거기까지만 넓힙니다.
+   → 0대여도 빈 자리가 전부 보이고, 구조 밖 PC 도 절대 사라지지 않습니다. */
 function racksFromPCS(){
-  const o={};
+  const o=defRacks();
   for(const r of ROOMS){
-    const mine=PCS.filter(p=>p.room===r.k && p.rack>0 && p.fl>0 && p.slot>0);
-    const maxRack=mine.reduce((m,p)=>Math.max(m,p.rack),0);
-    const racks=[];
-    for(let rk=1; rk<=Math.max(maxRack+1,1); rk++){
-      const inRack=mine.filter(p=>p.rack===rk);
-      const maxFl=inRack.reduce((m,p)=>Math.max(m,p.fl),0);
-      const fls=[];
-      for(let fl=1; fl<=Math.max(maxFl+1,1); fl++){
-        const maxSlot=inRack.filter(p=>p.fl===fl).reduce((m,p)=>Math.max(m,p.slot),0);
-        fls.push(Math.max(maxSlot+1,1));
-      }
-      racks.push(fls);
+    const racks=o[r.k];
+    for(const p of PCS){
+      if(p.room!==r.k || !(p.rack>0 && p.fl>0 && p.slot>0)) continue;
+      while(racks.length < p.rack) racks.push(Array.from({length:FLOORS},()=>SLOTS));
+      const fls=racks[p.rack-1];
+      while(fls.length < p.fl) fls.push(SLOTS);
+      if(fls[p.fl-1] < p.slot) fls[p.fl-1]=p.slot;
     }
-    o[r.k]=racks;
   }
   return o;
 }
@@ -1663,7 +1660,12 @@ async function syncLive(){
     const r=await fetch('/api/admin?do=pcs',{credentials:'same-origin',cache:'no-store'});
     if(!r.ok) return;                       // 401(미로그인)·503(DB 없음) → 목업 유지
     const d=await r.json();
-    if(!(d && Array.isArray(d.pcs) && d.pcs.length)) return;
+    /* 0 대여도 실데이터로 넘어갑니다. 예전에는 "0대면 그냥 두기" 였는데,
+       PC 를 전부 지운 직후 목업(가짜 PC 수백 대)이 랙맵에 되살아나
+       현장에서 "등록도 안 했는데 왜 이렇게 많지" 하고 헷갈렸습니다.
+       미로그인(401)·DB 미연결(503)·통신 실패는 위에서 걸러지므로
+       그 경우에는 지금처럼 목업이 그대로 남습니다. */
+    if(!(d && Array.isArray(d.pcs))) return;
     applyLive(d);
     /* 주문·회원도 이어서 받아옵니다 */
     try{
