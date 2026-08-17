@@ -315,7 +315,7 @@ async function loadPCS(){
         id:p.id, g:p.g, st:p.st,
         room:{K:1,Y:2,D:3}[p.room]||1,
         ssd:(G.find(x=>x.g===p.g)||{}).ssd || p.ssd || 0,
-        cpu:p.cpu, core:p.core, ram:p.ram, gpu:p.gpu,
+        cpu:p.cpu, core:p.core, ram:p.ram, gpu:p.gpu, ip:p.ip||'',
       });
     }
     LOADED=!!d.ready; LOAD_ERR = d.ready? '' : '준비중';
@@ -328,6 +328,13 @@ const gOf=x=>G.find(y=>y.g===x.g) || {
   g:0, n:x.cpu||'사양 확인중', cpu:x.cpu||'', core:x.core||'', ct:0,
   ram:x.ram||0, ssd:x.ssd||0, gpu:x.gpu||'', gk:'', list:0, p:0
 };
+/* 그래픽은 그 PC 에 실제로 꽂혀 있는 카드를 보여줍니다.
+   고객이 PC 를 한 대씩 골라 사시므로, 상품표의 범위(1050TI~1060)보다
+   실물 이름이 정확합니다. 제조사 접두사는 길기만 해서 떼어냅니다.
+     NVIDIA GeForce GTX 1060 3GB → GTX 1060 3GB
+   아직 사양을 못 읽어온 PC 는 상품표의 범위 문구로 대신합니다. */
+const gpuOf=x=>String(x.gpu||'').replace(/^(NVIDIA\s+GeForce|NVIDIA|AMD\s+Radeon|AMD|Intel)\s+/i,'').trim()
+              || gOf(x).gpu;
 const w=n=>n.toLocaleString('ko-KR');
 const $=i=>document.getElementById(i);
 
@@ -437,10 +444,10 @@ function draw(){
    + V.map(x=>{const g=gOf(x), ok=x.st==='free';
      return `<div class="tr ${sel===x.id?'sel':''} ${ok?'':'off'}" data-id="${x.id}" data-ok="${ok?1:0}">
        <div class="id">${x.id}</div>
-       <div class="cpu"><b>${g.cpu}</b><span>${g.core} · Windows 10 Pro · 공인IP ${x.ip}</span></div>
+       <div class="cpu"><b>${g.cpu}</b><span>${g.core} · Windows 10 Pro · ${x.ip?`공인IP ${x.ip}`:'개별 공인IP'}</span></div>
        <div class="num">${g.ram}GB</div>
        <div class="num">SSD ${x.ssd}GB</div>
-       <div style="font-size:12.5px;color:var(--ink2)">${g.gpu}</div>
+       <div style="font-size:12.5px;color:var(--ink2)">${gpuOf(x)}</div>
        <div class="st ${ok?'ok':'no'}">${ok?'<span class="dot"></span>임대 가능'
           : x.st==='fix' ? '<span class="sq"></span>점검중' : `<span class="sq"></span>임대 불가`}</div>
        <div class="pr"><s class="num">${w(g.list)}원</s><b class="num">${w(g.p)}원</b><span>/30일</span></div>
@@ -455,7 +462,7 @@ function stick(){
   const g=gOf(x),m=TM.find(t=>t.d===term);
   const base=Math.round(g.p*term/30), tot=base-Math.round(base*m.o/100);
   $('sn').textContent=`${g.n} ${g.core} · ${x.id}`;
-  $('ss').textContent=`${g.cpu} · 램 ${g.ram}GB · SSD ${x.ssd}GB · ${g.gpu} · 개별 공인IP`;
+  $('ss').textContent=`${g.cpu} · 램 ${g.ram}GB · SSD ${x.ssd}GB · ${gpuOf(x)} · ${x.ip?`공인IP ${x.ip}`:'개별 공인IP'}`;
   $('tm').innerHTML=TM.map(t=>`<button data-t="${t.d}" class="${term===t.d?'on':''}">${t.n}${t.o?` −${t.o}%`:''}</button>`).join('');
   $('sp').textContent=w(tot)+'원';
   $('stk').classList.add('on');

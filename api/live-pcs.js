@@ -4,16 +4,33 @@
    GET /api/live-pcs
 
    ★ 고객에게 나가면 안 되는 것 (여기서 아예 select 하지 않습니다)
-       애니데스크 번호 · 비밀번호 · 접속 토큰 · 내부 IP
+       애니데스크 번호 · 비밀번호 · 접속 토큰
        랙 위치(rack·fl·slot) · 메인보드 번호
      서버실은 알파벳(K/Y/D)만 나갑니다. 실명은 절대 나가지 않습니다.
 
    ★ 나가는 것
        품번(고객 문의번호) · 사양 · 임대 가능 여부
+       공인IP 는 앞 두 자리만 (예: 59.45.*.**) — maskIp 참고
 
    관리자 화면(/api/pcs)과 같은 대장을 보므로 숫자가 어긋나지 않습니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
+
+/* 공인IP 를 고객에게 보여줄 때는 앞 두 마디만 남기고 뒤는 가립니다 (59.45.*.**).
+   "PC 마다 개별 공인IP" 를 눈으로 확인시켜 드리되, 그 PC 를 직접 겨냥할 수 있는
+   전체 주소는 내보내지 않습니다.
+
+   현장 등록 프로그램은 랜카드에 붙은 주소를 그대로 읽어옵니다. 그래서 랙PC 가
+   공유기 뒤에 있으면 사설 대역(10. · 172.16~31. · 192.168.)이 들어옵니다.
+   그런 값은 고객에게 의미도 없고 내부망 구조만 드러내므로 아예 내보내지 않고
+   null 로 둡니다. 화면은 그때 "개별 공인IP" 라고만 적습니다. */
+const maskIp = (s) => {
+  const m = String(s || '').match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (!m) return null;
+  const a = Number(m[1]), b = Number(m[2]);
+  if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return null;
+  return a + '.' + b + '.*.**';
+};
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
@@ -27,7 +44,7 @@ module.exports = async (req, res) => {
   try {
     const [rows, setRows] = await Promise.all([
       sb('pcs', {
-        query: '?select=pn,room,spec_id,cpu,core,ram_gb,ssd_gb,gpu,status,online,last_beat' +
+        query: '?select=pn,room,spec_id,cpu,core,ram_gb,ssd_gb,gpu,ip,status,online,last_beat' +
                '&status=neq.new&order=pn.asc&limit=5000',
       }),
       sb('settings', { query: '?select=k,v&k=eq.down_sec' }),
@@ -55,6 +72,7 @@ module.exports = async (req, res) => {
         ram: p.ram_gb || null,
         ssd: p.ssd_gb || null,
         gpu: p.gpu || null,
+        ip: maskIp(p.ip),
       };
     });
 
