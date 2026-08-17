@@ -264,7 +264,45 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 
 ## 다음에 할 일
 
-**★ 진행 순서와 이유는 `관리자-기획.md` 에 자세히 적어 두었습니다. 먼저 읽으세요.**
+### ★★★ 0순위 — 서로 다른 PC 가 한 품번을 덮어씁니다 (2026-08-17 발견, 미해결)
+
+**증상**  3대를 등록했는데 대수가 안 늘고, `Y-001` 의 CPU·서버실·IP 가 통째로 바뀌었습니다.
+품번은 `Y-`(영태리)인데 서버실은 `K`(금촌)로 저장돼 있습니다.
+
+**원인**  `pc-register.js` 127~131줄이 메인보드 일련번호(`hw_id`)만 보고 기존 품번을 물려받습니다.
+
+```js
+if (autoPn && row.hw_id) {
+  const same = await sb('pcs', {query:`?select=pn&hw_id=eq.${row.hw_id}&limit=1`});
+  if (same && same[0]) { finalPn = same[0].pn; }   // ← 서버실을 안 봅니다
+}
+```
+
+그런데 `hwId = (Get-CimInstance Win32_BaseBoard).SerialNumber` 를 **검사 없이** 씁니다.
+조립 PC 메인보드는 일련번호가 `Default string` · `To be filled by O.E.M.` · 빈 값이거나
+**같은 모델끼리 전부 동일**한 경우가 흔합니다. 그러면 서로 다른 PC 가 한 줄을 계속 덮어씁니다.
+랙PC 를 수백 대 등록하는 이 사업에서는 치명적입니다.
+
+**먼저 확인**  랙PC 두 대에서 아래를 돌려 값이 같은지 봅니다.
+
+```powershell
+(Get-CimInstance Win32_BaseBoard).SerialNumber
+(Get-CimInstance Win32_ComputerSystemProduct).UUID
+```
+
+**고칠 방향**
+1. 쓸 수 없는 일련번호를 걸러냅니다 — 빈 값 · 8자 미만 · `default` · `o.e.m.` · `to be filled` · `123456789` · `none` · `n/a`
+2. 더 믿을 수 있는 값을 같이 씁니다 — `Win32_ComputerSystemProduct.UUID` (메인보드 일련번호보다 훨씬 고유합니다).
+   둘을 합쳐 해시한 값을 `hw_id` 로 보냅니다. (`kvc-setup.ps1` · `kvc-agent.ps1` 양쪽)
+3. 품번을 물려받을 때 **서버실이 같을 때만** 물려받습니다. 다르면 새 품번을 줍니다.
+4. 이미 섞인 줄이 있으면 정리합니다 — `Y-001` 은 지금 금촌에 있는 5700G 입니다.
+   원래의 1700 기록은 덮여서 사라졌으므로 다시 등록해야 합니다.
+
+**이걸 고치기 전에는 랙PC 를 더 등록하지 마세요.** 등록할수록 기록이 덮입니다.
+
+---
+
+**★ 그다음 진행 순서와 이유는 `관리자-기획.md` 에 자세히 적어 두었습니다.**
 
 | 순서 | 할 일 | 상태 |
 |---|---|---|
