@@ -277,7 +277,7 @@ const G=[
  {g:1,n:'인텔I5 4690',    cpu:'Intel Core i5-4690',    core:'4코어',ct:4,ram:8, ssd:120,gpu:'GTX 750~750TI',        gk:'NVIDIA',list:90000, p:40000},
  {g:2,n:'라이젠 2200G~2400G',cpu:'AMD Ryzen 2200G~2400G',core:'4코어',ct:4,ram:8, ssd:120,gpu:'VEGA 내장그래픽',   gk:'내장',  list:90000, p:40000},
  {g:3,n:'라이젠 5600G~5700G',cpu:'AMD Ryzen 5600G~5700G',core:'6~8코어',ct:6,ram:32,ssd:240,gpu:'내장그래픽 (추가 가능)',gk:'내장', list:120000,p:55000},
- {g:4,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:140000,p:60000},
+ {g:4,n:'라이젠 1700',    cpu:'AMD Ryzen 7 1700',      core:'8코어',ct:8,ram:32,ssd:240,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:140000,p:60000},
  {g:5,n:'라이젠 3700X',   cpu:'AMD Ryzen 7 3700X',     core:'8코어',ct:8,ram:32,ssd:480,gpu:'GTX 1050TI 4G ~ 1060 3G·6G',gk:'NVIDIA',list:160000,p:65000},
 ];
 const USE=[
@@ -314,7 +314,7 @@ async function loadPCS(){
       PCS.push({
         id:p.id, g:p.g, st:p.st,
         room:{K:1,Y:2,D:3}[p.room]||1,
-        ssd:p.ssd || (G.find(x=>x.g===p.g)||{}).ssd || 0,
+        ssd:(G.find(x=>x.g===p.g)||{}).ssd || p.ssd || 0,
         cpu:p.cpu, core:p.core, ram:p.ram, gpu:p.gpu,
       });
     }
