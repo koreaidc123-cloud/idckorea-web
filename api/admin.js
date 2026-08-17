@@ -13,6 +13,7 @@
      GET  /api/admin?do=pc-secret&pn=Y-042  애니데스크 비밀번호 (기록 남음)
      GET  /api/admin?do=orders              주문 · 회원
      POST /api/admin?do=pc-update           PC 정보 수정
+     POST /api/admin?do=pc-delete           PC 대장에서 빼기 (잘못 등록한 것)
      POST /api/admin?do=order-manual        수동 주문 등록
      POST /api/admin?do=order-action        연장 · 해지환불 · 이전 · 세금계산서
 
@@ -23,6 +24,7 @@ const HANDLERS = {
   'pcs':          require('./_admin-pcs'),
   'pc-secret':    require('./_admin-pc-secret'),
   'pc-update':    require('./_admin-pc-update'),
+  'pc-delete':    require('./_admin-pc-delete'),
   'orders':       require('./_admin-orders'),
   'order-manual': require('./_admin-order-manual'),
   'order-action': require('./_admin-order-action'),

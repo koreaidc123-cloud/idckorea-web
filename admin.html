@@ -479,6 +479,18 @@ function logView(pn,act){
 const cnt=st=>PCS.filter(p=>p.st===st).length;
 const stTag=p=>'<span class="tag '+STC[p.st]+'"><i></i>'+ST[p.st]+'</span>';
 const locStr=p=>p.roomName+' '+p.rack+'-'+p.fl+'-'+p.slot;
+
+/* ── 주문에 PC 가 안 붙어 있을 수 있습니다 ─────────────────────────
+   · 결제는 됐는데 아직 배정 전
+   · 그 PC 를 대장에서 뺀 경우
+   · 품번 연결이 끊긴 옛 주문
+   이때 o.pc.pn 을 그대로 쓰면 그 화면이 통째로 렌더링되지 않고 하얗게 뜹니다.
+   (실제로 겪었습니다 — 시험용 PC 를 정리하며 orders.pn 을 비웠더니
+    주문·회원 화면이 아예 열리지 않았습니다. 한 줄만 그래도 화면 전체가 죽습니다)
+   그래서 PC 를 거치는 값은 반드시 아래 두 함수로 꺼냅니다. */
+const oPn   = o => o.pn || (o.pc && o.pc.pn) || '미배정';
+const oSpec = o => (o.pc && o.pc.spec && o.pc.spec.n)
+                || (SPECS.find(s=>s.id===o.specId)||{}).n || '—';
 function badges(){
   const dn=cnt('down');
   $('bd-new').textContent=cnt('new');
@@ -528,7 +540,7 @@ function vDash(){
       <div class="sec-h"><h3>⏳ 만료 임박 (D-${SET.notiDay} 이내)</h3><span class="cnt">${exp.length}</span>
         <div class="r"><a class="btn btn-o btn-sm" href="#noti">알림 발송 →</a></div></div>
       <div class="sec-b"><table class="tbl"><tbody>${exp.slice(0,8).map(o=>`
-        <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
         <td class="dim">${fmtD(o.end)} 만료</td>
         <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b></td></tr>`).join('')}
       </tbody></table></div>
@@ -539,8 +551,8 @@ function vDash(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>사양</th><th>회원</th><th>결제</th><th>기간</th><th>금액</th><th></th></tr></thead>
       <tbody>${ORDERS.slice().sort(()=>0).slice(0,7).map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${o.pc.pn}</td>
-      <td>${o.pc.spec.n}</td><td>${o.nm}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${oPn(o)}</td>
+      <td>${oSpec(o)}</td><td>${o.nm}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
       <td class="dim">${o.pm}</td><td class="dim num">${o.days}일</td>
       <td class="num"><b>${w(o.amt)}원</b></td>
       <td class="dim">D-${o.left}</td></tr>`).join('')}</tbody></table></div>
@@ -629,7 +641,7 @@ function vToday(){
     <div class="card">
       <div class="sec-h"><h3>⏰ 내일까지 만료 — 연장 확인 전화</h3><span class="cnt">${d1.length}</span></div>
       <div class="sec-b"><table class="tbl"><tbody>${d1.slice(0,8).map(o=>`
-        <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
         <td class="dim num">${o.ph}</td><td><b style="color:var(--red)">D-${o.left}</b></td></tr>`).join('')
         ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
     </div>
@@ -786,7 +798,7 @@ function membersOf(){
     const key=o.ph;
     if(!map.has(key)) map.set(key,{nm:o.nm,ph:o.ph,via:o.via,orders:[],pcs:[],amt:0,joined:null});
     const m=map.get(key);
-    m.orders.push(o); m.pcs.push(o.pc); m.amt+=o.amt;
+    m.orders.push(o); if(o.pc) m.pcs.push(o.pc); m.amt+=o.amt;
     if(!m.joined||o.start<m.joined) m.joined=o.start;
     if(o.mis) m.mis=true;
   });
@@ -867,8 +879,8 @@ function openMem(ph){
       문의가 다른 이름으로 올 수 있습니다.</div>`:''}
     <div class="blockttl">이용 중인 PC</div>
     <table class="tbl"><tbody>${m.orders.map(o=>`
-      <tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td>
-      <td class="dim">${o.pc.spec.n}</td>
+      <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td>
+      <td class="dim">${oSpec(o)}</td>
       <td><b style="color:${o.left<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${o.left}</b></td>
       <td class="num">${w(o.amt)}원</td></tr>`).join('')}</tbody></table>
     <div class="blockttl">알림 보내기</div>
@@ -893,7 +905,8 @@ function openMem(ph){
   $('al-t').addEventListener('change',()=>fillTpl(m));
 }
 function fillTpl(m){
-  const t=$('al-t').value, o=m.orders[0], pc=o.pc;
+  /* PC 가 아직 안 붙은 주문이어도 문구는 만들어져야 합니다 (관리자가 고쳐 쓰십니다) */
+  const t=$('al-t').value, o=m.orders[0], pc=o.pc||{pn:oPn(o), ad:''};
   const tp={
     exp:`[한국 가상컴] ${m.nm}님\n이용 중이신 ${pc.pn} 이 ${fmtD(o.end)} 만료됩니다.\n연장하지 않으시면 자료가 초기화되니 미리 연장해 주세요.\n\n연장하기: idckorea1.com/mypage`,
     cred:`[한국 가상컴] ${m.nm}님\n요청하신 접속 정보를 다시 보내드립니다.\n문의번호: ${pc.pn}\n접속 주소: ${pc.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}\n비밀번호는 보안상 내 가상컴에서 확인해 주세요.`,
@@ -907,7 +920,7 @@ let OF={q:'',pg:1};
 let MF={q:'',via:'',risk:false,pg:1};
 function vOrders(){
   let L=ORDERS.filter(o=>!OF.q||o.nm.includes(OF.q)||o.no.includes(OF.q)
-    ||o.pc.pn.toLowerCase().includes(OF.q)||o.ph.replace(/-/g,'').includes(OF.q.replace(/-/g,''))
+    ||oPn(o).toLowerCase().includes(OF.q)||o.ph.replace(/-/g,'').includes(OF.q.replace(/-/g,''))
     ||(o.userNm&&o.userNm.includes(OF.q))||(o.depositor&&o.depositor.includes(OF.q)));
   const PER=30, last=Math.max(1,Math.ceil(L.length/PER));
   if(OF.pg>last)OF.pg=last;
@@ -924,7 +937,7 @@ function vOrders(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>회원(결제자)</th><th>실제 이용자</th><th>가입</th><th>결제</th><th>기간</th><th>만료</th></tr></thead>
       <tbody>${V.map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${o.pc.pn}</td>
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${oPn(o)}</td>
       <td>${o.nm}<div class="dim">${o.ph}</div></td>
       <td>${o.mis? o.userNm+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
       <td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
@@ -954,7 +967,7 @@ function vNoti(){
       <thead><tr><th>품번</th><th>회원</th><th>연락처</th><th>가입</th><th>만료</th><th>발송 채널</th><th>상태</th></tr></thead>
       <tbody>${exp.map((o,i)=>{
         const st=i%5===0?'wait':(o.via==='google'&&i%3===0)?'sms':'ok';
-        return `<tr data-ord="${o.no}"><td class="pn">${o.pc.pn}</td><td>${o.nm}</td>
+        return `<tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
         <td class="num dim">${o.ph}</td><td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
         <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b> <span class="dim">${fmtD(o.end)}</span></td>
         <td class="dim">알림톡 → 문자 전환</td>
@@ -996,7 +1009,7 @@ function vFind(){
       ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 PC 없음</span></div>'}</div>
   <div class="hitgrp"><div class="gt">주문 · 고객 (${ordHits.length})</div>
     ${ordHits.map(o=>`<div class="hit" data-ord="${o.no}"><b>${o.nm}</b>
-      <span class="dim">${o.no} · ${o.pc.pn} · ${o.pm}${o.mis?' · 이용자 '+o.userNm:''}</span>
+      <span class="dim">${o.no} · ${oPn(o)} · ${o.pm}${o.mis?' · 이용자 '+o.userNm:''}</span>
       <span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span></div>`).join('')
       ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 주문 없음</span></div>'}</div>`}`;
 }
@@ -1055,6 +1068,8 @@ function openPc(key,edit){
     <div style="display:flex;gap:8px;margin-bottom:6px">
       <button class="btn btn-b btn-sm" data-savepc="${key}">저장</button>
       <button class="btn btn-o btn-sm" data-editpc="${key}" data-off="1">취소</button>
+      ${p.pn? `<button class="btn btn-o btn-sm" data-delpc="${p.pn}"
+        style="color:var(--red);border-color:#F7CDD3;margin-left:auto">대장에서 빼기</button>`:''}
       <span id="e-msg" style="align-self:center;font-size:12.5px;color:var(--red);font-weight:700"></span>
     </div>`;
   $('drawer').innerHTML=`
@@ -1101,14 +1116,19 @@ function openPc(key,edit){
 /* ═══════════════ 드로어: 주문 상세 ═══════════════ */
 function openOrd(no){
   const o=ORDERS.find(x=>x.no===no); if(!o)return;
+  /* PC 가 안 붙은 주문(배정 전 · 대장에서 뺀 PC)이어도 상세는 열려야 합니다 */
   const p=o.pc;
+  const pnTx  = oPn(o);
+  const locTx = p ? locStr(p) : 'PC 미배정';
+  const sp    = (p && p.spec) || SPECS.find(s=>s.id===o.specId) || {n:'—',ram:0,ssd:0};
+  const adTx  = (p && p.ad) ? p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3') : '배정 후 발급됩니다';
   $('drawer').innerHTML=`
   <div class="hd"><b>${o.no}</b><span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span>
     <button class="x" data-close>✕</button></div>
   <div class="bd">
     <div class="kv">
-      <span class="k">품번</span><span class="v big">${p.pn} <span class="dim" style="font-size:12px">${locStr(p)}</span></span>
-      <span class="k">사양</span><span class="v">${p.spec.n} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
+      <span class="k">품번</span><span class="v big">${pnTx} <span class="dim" style="font-size:12px">${locTx}</span></span>
+      <span class="k">사양</span><span class="v">${sp.n} · 램 ${sp.ram}GB · SSD ${sp.ssd}GB</span>
       <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
       <span class="k">금액</span><span class="v num"><b>${w(o.amt)}원</b> <span class="dim">${o.pm}</span></span>
     </div>
@@ -1123,9 +1143,9 @@ function openOrd(no){
       어느 이름으로 검색해도 이 주문이 나옵니다.</div>`:''}
     <div class="blockttl">고객이 받은 접속 정보 (결제 직후 화면 + 문자)</div>
     <div class="credbox">
-      <div class="ch">📱 ${o.nm}님의 가상컴 — 문의번호 ${p.pn}</div>
+      <div class="ch">📱 ${o.nm}님의 가상컴 — 문의번호 ${pnTx}</div>
       <div class="cb">
-        <div class="cr"><span>접속 주소</span><b class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b></div>
+        <div class="cr"><span>접속 주소</span><b class="num">${adTx}</b></div>
         <div class="cr"><span>비밀번호</span><b><span class="mask">••••••</span></b></div>
         <div class="cr"><span>이용 기간</span><b class="num">${fmtD(o.start)} ~ ${fmtD(o.end)}</b></div>
       </div>
@@ -1201,10 +1221,28 @@ const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vP
 function route(){
   const v=(location.hash||'#dash').slice(1);
   const fn=VIEWS[v]||vDash;
+  /* ★ 다시 그리기 전에 커서가 어디 있었는지 기억해 둡니다.
+     화면을 innerHTML 로 통째로 갈아끼우면 입력칸이 파괴되어 포커스가 풀립니다.
+     그래서 검색창에 한 글자 칠 때마다 포커스가 날아갔고, 그 상태에서 누른
+     백스페이스가 브라우저의 "뒤로 가기" 로 먹혀 이전 화면으로 튕겼습니다.
+     (통합검색 화면만 예외적으로 포커스를 되살리고 있었습니다) */
+  const ae=document.activeElement;
+  let keep=null;
+  if(ae && (ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')){
+    const sel = ae.id      ? '#'+ae.id
+              : ae.dataset.f  ? `[data-f="${ae.dataset.f}"]`
+              : ae.dataset.mf ? `[data-mf="${ae.dataset.mf}"]`
+              : ae.dataset.of ? `[data-of="${ae.dataset.of}"]` : null;
+    if(sel) keep={sel, s:ae.selectionStart, e:ae.selectionEnd};
+  }
   $('main').innerHTML=fn();
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   badges();
-  if(v==='find'){const q=$('findq'); if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
+  if(keep){
+    const el=document.querySelector(keep.sel);
+    if(el){ el.focus(); try{ el.setSelectionRange(keep.s,keep.e) }catch(err){} }
+  }
+  else if(v==='find'){const q=$('findq'); if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
 }
 addEventListener('hashchange',route);
 
@@ -1320,6 +1358,30 @@ document.addEventListener('click',async e=>{
   /* PC 정보 수정 (품번 · 애니번호 · 비번 · 위치 · 메모) */
   const ep=t.closest('[data-editpc]');
   if(ep){openPc(ep.dataset.editpc, !ep.dataset.off);return}
+  /* PC 대장에서 빼기 — 현장에서 서버실·랙을 잘못 골라 등록된 것을 지웁니다.
+     되돌릴 수 없으므로 무엇을 지우는지 그대로 보여주고 한 번 더 묻습니다.
+     임대중이거나 지난 주문이 걸린 PC 는 서버가 거부합니다(이력 보호). */
+  const dl=t.closest('[data-delpc]');
+  if(dl){
+    const pn=dl.dataset.delpc;
+    const p=PCS.find(x=>x.pn===pn);
+    const 어디=p?`${p.roomName} ${p.rack}-${p.fl}-${p.slot}`:'';
+    if(!confirm(`${pn} 을 PC 대장에서 뺍니다.\n\n`
+      +`  자리       ${어디}\n`
+      +`  애니데스크 ${p&&p.ad?p.ad:'—'}\n\n`
+      +`되돌릴 수 없습니다. 빼시겠습니까?`)) return;
+    dl.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=pc-delete',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({pn})});
+      const d=await r.json().catch(()=>({}));
+      dl.disabled=false;
+      if(!r.ok){ alert(d.error||'빼지 못했습니다'); return; }
+    }catch(e){ dl.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    const i=PCS.findIndex(x=>x.pn===pn); if(i>=0) PCS.splice(i,1);
+    RACKS=racksFromPCS();
+    closeDrawer(); route(); return;
+  }
   const sv=t.closest('[data-savepc]');
   if(sv){
     const p=PCS.find(x=>x.pn===sv.dataset.savepc||x.ad===sv.dataset.savepc); if(!p)return;
@@ -1440,6 +1502,9 @@ document.addEventListener('click',async e=>{
   if(cp2){
     const o=ORDERS.find(x=>x.no===cp2.dataset.copycust); if(!o)return;
     const p=o.pc;
+    /* 배정된 PC 가 없으면 보낼 접속 정보 자체가 없습니다 */
+    if(!p){ cp2.textContent='이 주문에는 배정된 PC 가 없습니다';
+      setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},2200); return; }
     const pw=await getPw(p);      // 서버에서 한 번 꺼내옵니다 (기록 남음)
     if(pw===null){ cp2.textContent='비밀번호를 가져오지 못했습니다';
       setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},2000); return; }
@@ -1516,6 +1581,18 @@ document.addEventListener('input',e=>{
   const of=e.target.closest('[data-of]');
   if(of){OF.q=of.value;OF.pg=1;clearTimeout(window._ot);window._ot=setTimeout(route,300);return}
 });
+/* 입력칸 밖에서 누른 백스페이스가 브라우저 "뒤로 가기" 로 동작하지 않게 막습니다.
+   위의 포커스 복원으로 대부분 해결되지만, 표를 한 번 클릭한 뒤처럼 포커스가
+   입력칸에 없을 때를 대비한 안전망입니다. 관리자 화면에서 뒤로 가기가
+   쓸모 있는 경우는 없고, 실수로 화면이 넘어가면 하던 일이 날아갑니다. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Backspace') return;
+  const t=e.target;
+  const editable = t && (t.isContentEditable ||
+    ((t.tagName==='INPUT'||t.tagName==='TEXTAREA') && !t.disabled && !t.readOnly));
+  if(!editable) e.preventDefault();
+}, true);
+
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='findq'){FQ=e.target.value;route()}
   if(e.key==='Enter'&&e.target.id==='gate-pw'){tryGate()}
@@ -1635,7 +1712,7 @@ function applyOrders(d){
   for(const o of (d.orders||[])){
     const pc=byPn[o.pn]||null;
     const ord={
-      no:o.no, pc, pn:o.pn, nm:o.nm, ph:o.ph, via:o.via, email:o.email,
+      no:o.no, pc, pn:o.pn, specId:o.specId, nm:o.nm, ph:o.ph, via:o.via, email:o.email,
       payer:o.payer, userNm:o.userNm, userPh:o.userPh, mis:o.mis,
       pm:o.pm, card:null, depositor:o.pm==='가상계좌'?o.payer:null,
       days:o.days, amt:o.amt, st:o.st,

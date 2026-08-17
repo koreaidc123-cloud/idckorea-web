@@ -103,11 +103,6 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 .gal .big{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#0F1218;
   aspect-ratio:4/3}
 .gal .big img{width:100%;height:100%;object-fit:cover}
-.gal .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
-.gal .thumbs button{border:1px solid var(--line);border-radius:9px;overflow:hidden;aspect-ratio:1;
-  background:#0F1218;transition:.14s}
-.gal .thumbs button.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
-.gal .thumbs img{width:100%;height:100%;object-fit:cover}
 
 .pt-h{font-size:26px;font-weight:800;letter-spacing:-.05em;line-height:1.32}
 .auto{display:flex;align-items:center;gap:11px;margin-top:14px;padding:13px 16px;border-radius:10px;
@@ -280,8 +275,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
   <div class="top">
     <!-- 좌: 갤러리 -->
     <div class="gal">
-      <div class="big"><img src="img/pc-black.png" alt="라이젠 3700X 8코어 가상컴" id="big"></div>
-      <div class="thumbs" id="thumbs"></div>
+      <div class="big"><img src="img/p7-3700x.jpg" alt="라이젠 3700X 8코어 가상컴" id="big"></div>
     </div>
 
     <!-- 우: 정보 + 주문 -->
@@ -295,7 +289,10 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
       </div>
 
       <div class="spec">
-        <div class="sp"><div class="k">품번</div><div class="v">Y-042 <em>문의하실 때 이 번호를 알려주세요</em></div></div>
+        <!-- 여기에 특정 품번(Y-042)을 박아두었더니 실제로 없는 번호였습니다.
+             이 페이지는 PC 한 대가 아니라 상품 전체를 파는 자리이므로,
+             품번은 결제 후 배정되는 것으로 안내합니다. -->
+        <div class="sp"><div class="k">품번</div><div class="v">결제 후 바로 배정됩니다 <em>배정된 품번은 접속 정보와 함께 알려드립니다</em></div></div>
         <div class="sp"><div class="k">임대 상태</div>
           <div class="v" style="display:flex;align-items:center;gap:7px;color:var(--gr)">
             <span class="dot"></span> 임대 가능 <em style="color:var(--ink4)">결제하시면 바로 이용하실 수 있습니다</em></div></div>
@@ -405,15 +402,17 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 </div>
 
 <div class="stk"><div class="shell">
-  <div class="l"><b>라이젠 3700X 8코어 · Y-042</b>
+  <div class="l"><b>라이젠 3700X 8코어</b>
     <span>32GB · SSD 480GB · GTX 1050TI 4G ~ 1060 3G·6G · 개별 공인IP</span></div>
-  <div class="p"><b class="num" id="stk-p">—</b><span>부가세 별도 · 설치비 0원</span></div>
+  <div class="p"><b class="num" id="stk-p">—</b><span>부가세 별도 · 초기 세팅비 포함</span></div>
   <button class="btn btn-r" onclick="document.getElementById('go').click()">결제하고 바로 이용하기 →</button>
 </div></div>
 
 <script src="https://js.tosspayments.com/v2/standard"></script>
 <script>
-const IMGS=['pc-black','pc-cpu','idc-rack','idc-hall'];
+/* 상품 사진은 목록(live·index)에 쓰는 것과 같은 한 장만 씁니다.
+   예전에는 썸네일 4장을 깔았는데 pc-black·pc-cpu 파일이 실제로 없어서
+   큰 사진과 썸네일 2장이 깨진 채로 나갔습니다. */
 /* 토스페이먼츠 — 공식 문서 공개 샌드박스 키 (실결제 불가).
    실서비스 전환 시: 클라이언트 키만 교체 + Vercel 환경변수에 시크릿 키 등록 */
 const TOSS_CK='test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
@@ -486,9 +485,6 @@ const P=[
 const BASE=65000, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
 let S={d:30,p:'vb'};
 
-$('thumbs').innerHTML=IMGS.map((x,i)=>
- `<button class="${i?'':'on'}" data-i="${i}"><img src="img/${x}.jpg" alt=""></button>`).join('');
-
 function terms(){$('terms').innerHTML=TM.map(t=>
  `<button class="${S.d===t.d?'on':''}" data-t="${t.d}"><b>${t.n}</b>
    <span class="${t.o?'':'z'}">${t.o?t.o+'% 할인':'기본'}</span></button>`).join('')}
@@ -511,10 +507,6 @@ document.addEventListener('click',e=>{
  const t=e.target.closest('[data-t]'); if(t){S.d=+t.dataset.t;terms();calc();return}
  const p=e.target.closest('[data-p][class*="on"],.pays button');
  if(p&&p.dataset.p){S.p=p.dataset.p;pays();calc();return}
- const i=e.target.closest('.thumbs button');
- if(i){$('big').src=`img/${IMGS[i.dataset.i]}.png`;
-   document.querySelectorAll('.thumbs button').forEach(b=>b.classList.remove('on'));
-   i.classList.add('on');return}
  const tb=e.target.closest('.tabs button');
  if(tb){const n=tb.dataset.p;
    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('on'));tb.classList.add('on');

@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { ready, sb, authed, baseUrl } = require('./_supa');
 const kv = require('./_crypto');
 const { guessSpec } = require('./_spec');
+const { checkLoc } = require('./_rooms');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : null) || null;
@@ -71,10 +72,27 @@ module.exports = async (req, res) => {
   /* 랙 위치 — 현장에서 세팅하시는 분이 적어 주십니다 (예: 1-2-1)
      세 값이 모두 있으면 그 자리로 등록하고, 없으면 0 으로 두어
      관리자가 나중에 지정하게 합니다. */
-  const rack = num(b.rack, 1, 999);
-  const fl = num(b.fl, 1, 99);
-  const slot = num(b.slot, 1, 99);
+  const rack = num(b.rack, 1, 9999);
+  const fl = num(b.fl, 1, 999);
+  const slot = num(b.slot, 1, 999);
   const hasLoc = rack !== null && fl !== null && slot !== null;
+
+  /* ★ 자리를 셋 중 일부만 적어 보내면 되돌려보냅니다.
+     예전에는 조용히 "자리 없음" 으로 처리해서, 현장에서는 적었다고 생각하는데
+     서버에는 자리 없이 등록되는 일이 있었습니다. */
+  const 적은게있나 = [b.rack, b.fl, b.slot]
+    .some(v => v !== undefined && v !== null && String(v).trim() !== '');
+  if (적은게있나 && !hasLoc) {
+    return res.status(400).json({ error: '랙 · 층 · 자리를 세 칸 모두 숫자로 적어 주세요' });
+  }
+
+  /* ★ 그 서버실에 실제로 있는 자리인지 확인합니다.
+     예전에는 1~999 면 다 통과시켜서 "등원리 99번 랙" 같은 것이 그대로
+     저장됐습니다. 실제로 엉뚱한 서버실에 한 대가 등록됐습니다. */
+  if (hasLoc) {
+    const 안되는이유 = checkLoc(room, rack, fl, slot);
+    if (안되는이유) return res.status(400).json({ error: 안되는이유 });
+  }
 
   const row = {
     room,

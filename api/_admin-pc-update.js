@@ -18,6 +18,7 @@
 const { ready, sb } = require('./_supa');
 const { verify } = require('./admin-login');
 const kv = require('./_crypto');
+const { checkLoc } = require('./_rooms');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
 const ST = ['new', 'unv', 'ok', 'rent', 'fix', 'down'];
@@ -76,8 +77,18 @@ module.exports = async (req, res) => {
   if (fl !== null && fl !== cur.fl) patch.fl = fl;
   if (slot !== null && slot !== cur.slot) patch.slot = slot;
   if (patch.room || patch.rack !== undefined || patch.fl !== undefined || patch.slot !== undefined) {
+    /* ★ 옮긴 뒤의 자리가 그 서버실에 실제로 있는 자리인지 확인합니다.
+       0-0-0 (자리 미지정) 은 그대로 둡니다 — 현장에서 아직 안 정한 PC 입니다. */
+    const nRoom = room || cur.room;
+    const nRack = rack !== null ? rack : cur.rack;
+    const nFl   = fl   !== null ? fl   : cur.fl;
+    const nSlot = slot !== null ? slot : cur.slot;
+    if (nRack || nFl || nSlot) {
+      const 안되는이유 = checkLoc(nRoom, nRack, nFl, nSlot);
+      if (안되는이유) return res.status(400).json({ error: 안되는이유 });
+    }
     logs.push(`위치 이동 ${cur.room}${cur.rack}-${cur.fl}-${cur.slot} → ` +
-              `${room || cur.room}${rack ?? cur.rack}-${fl ?? cur.fl}-${slot ?? cur.slot}`);
+              `${nRoom}${nRack}-${nFl}-${nSlot}`);
   }
 
   /* ── 애니데스크 번호 ── */
