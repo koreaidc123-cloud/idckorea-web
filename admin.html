@@ -217,6 +217,13 @@ a{color:inherit;text-decoration:none}
 .blockttl{font-size:12px;font-weight:800;color:var(--ink3);margin:18px 0 8px;
   padding-top:14px;border-top:1px solid var(--line2)}
 .viewlog{font-size:12px;color:var(--ink4);line-height:1.7}
+/* PC 상세 — 예전에 쓰던 분 목록 */
+.tbl2{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tr2{display:grid;grid-template-columns:78px 108px 1fr auto;gap:10px;align-items:center;
+  padding:8px 12px;border-bottom:1px solid var(--line2);font-size:12.5px}
+.tr2:last-child{border-bottom:0}
+.tr2 b{font-weight:800;letter-spacing:-.03em}
+.tr2 .dim{color:var(--ink4)}
 .dracts{display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
 .overlay{position:fixed;inset:0;background:rgba(11,14,20,.35);z-index:110;opacity:0;
   pointer-events:none;transition:.2s}
@@ -1097,6 +1104,15 @@ function openPc(key,edit){
     ${o.mis? `<div class="mismatch"><b>⚠ 결제자와 이용자가 다릅니다.</b><br>
       문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다.</div>`:''}`
     : `<div class="blockttl">임대 정보</div><div class="kv"><span class="k">고객</span><span class="v dim">현재 임대중이 아닙니다</span></div>`}
+    ${(()=>{const past=p.pn?pastOf(p.pn):[];
+      if(!past.length) return '';
+      const 상태={expired:'기간 만료',refunded:'환불',canceled:'취소'};
+      return `<div class="blockttl">예전에 쓰던 분 (${past.length}건)</div>
+      <div class="tbl2">${past.slice(0,8).map(o=>
+        `<div class="tr2"><b>${o.nm}</b><span class="num">${o.ph||''}</span>
+         <span class="num dim">${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
+         <span class="dim">${상태[o.st]||o.st}${o.refundAmt?' '+w(o.refundAmt)+'원':''}</span></div>`).join('')}
+      </div>`;})()}
     <div class="blockttl">변경 · 열람 기록 (최근 6건)</div>
     <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>v.t+' — '+(v.act||'열람')).join('<br>')||'기록 없음'}</div>
   </div>
@@ -1734,9 +1750,20 @@ async function pcSave(key, patch){
 }
 
 /* 서버에서 받은 주문을 화면이 쓰는 모양으로 바꿔 넣습니다 */
+/* ORDERS  = 진행중인 주문만  (대시보드·랙맵·집계가 이 배열을 씁니다)
+   HISTORY = 끝난 것까지 전부 (PC 상세의 "예전에 쓰던 분" 에 씁니다)
+
+   ★ 둘을 섞으면 안 됩니다.
+     전부 한 배열에 담으면 만료·환불된 주문까지 "이용중"으로 세어져
+     대시보드 숫자와 매출이 틀어집니다. */
+const HISTORY=[];
+const ACTIVE_ST=['assigned','paid','ready'];
+
 function applyOrders(d){
-  ORDERS.length=0;
+  ORDERS.length=0; HISTORY.length=0;
   const byPn={}; for(const p of PCS) if(p.pn) byPn[p.pn]=p;
+  for(const p of PCS) p.order=null;      // 지난 회차가 남아 있지 않게 먼저 비웁니다
+
   for(const o of (d.orders||[])){
     const pc=byPn[o.pn]||null;
     const ord={
@@ -1750,14 +1777,21 @@ function applyOrders(d){
       taxInvoice:o.taxInvoice, bizNo:o.bizNo,
       refundAmt:o.refundAmt, refundWhy:o.refundWhy,
     };
-    ORDERS.push(ord);
-    if(pc) pc.order=ord;      // 랙맵·PC 상세에서 "누가 쓰고 있나"를 보여줍니다
+    HISTORY.push(ord);
+    if(ACTIVE_ST.includes(o.st)){
+      ORDERS.push(ord);
+      if(pc) pc.order=ord;   // 랙맵·PC 상세에서 "지금 누가 쓰고 있나"
+    }
   }
   ORDERS.sort((a,b)=>a.left-b.left);
+  HISTORY.sort((a,b)=>(b.start?+b.start:0)-(a.start?+a.start:0));   // 최근 것부터
   SRV_MEMBERS = d.members||[];
   SRV_COUNTS  = d.counts||{};
 }
 let SRV_MEMBERS=[], SRV_COUNTS={};
+
+/* 이 PC 를 예전에 쓰던 분들 */
+const pastOf=pn=>HISTORY.filter(o=>o.pn===pn && !ACTIVE_ST.includes(o.st));
 
 async function syncLive(){
   if(sessionStorage.getItem('kvc-adm')!=='1') return;
@@ -1774,7 +1808,9 @@ async function syncLive(){
     applyLive(d);
     /* 주문·회원도 이어서 받아옵니다 */
     try{
-      const r2=await fetch('/api/admin?do=orders',{credentials:'same-origin',cache:'no-store'});
+      /* all=1 — 끝난 주문·환불건까지 전부 받아옵니다.
+         진행중만 받아오면 "이 PC 를 예전에 누가 썼는지" 를 볼 수 없습니다. */
+      const r2=await fetch('/api/admin?do=orders&all=1',{credentials:'same-origin',cache:'no-store'});
       if(r2.ok){ applyOrders(await r2.json()); route(); }
     }catch(e){}
   }catch(e){}                               // 서버 함수가 없는 환경 → 목업 유지

@@ -10,6 +10,7 @@
    · "다운" 판정은 서버가 합니다 — 마지막 신호가 down_sec 보다 오래됐으면 다운.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
+const { sweepExpired } = require('./_sweep');
 const { verify } = require('./admin-login');
 
 module.exports = async (req, res) => {
@@ -19,6 +20,10 @@ module.exports = async (req, res) => {
 
   const room = String(req.query.room || '').toUpperCase();
   const where = ['K', 'Y', 'D'].includes(room) ? `&room=eq.${room}` : '';
+
+  /* 기간이 끝난 주문을 먼저 정리합니다.
+     이걸 안 하면 만료된 PC 가 계속 임대중으로 남아 다시 팔 수 없습니다. */
+  await sweepExpired();
 
   try {
     /* 비밀번호(pw_enc)는 select 목록에서 아예 빼둡니다 — 실수로 새어나갈 길을 막습니다 */
