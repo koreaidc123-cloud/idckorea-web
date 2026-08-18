@@ -119,17 +119,33 @@ module.exports = async (req, res) => {
   if (pwSealed) row.pw_enc = pwSealed;   // 비밀번호를 안 보내면 기존 값을 그대로 둡니다
 
   /* 같은 기계를 다시 세팅한 경우, 새 번호를 또 뽑지 않고 원래 품번을 씁니다.
-     (메인보드 일련번호로 알아봅니다) */
+
+     ★ 2026-08-17 사고 — 여기서 서로 다른 PC 가 한 품번을 덮어썼습니다.
+       옛 프로그램은 메인보드 일련번호를 검사 없이 그대로 보냈는데,
+       조립 PC 는 그 값이 'Default string' 인 경우가 흔합니다.
+       그래서 모든 PC 가 같은 값을 갖고, 3대를 등록해도 1대만 남았습니다.
+       (Y-001 이 영태리 1700 에서 금촌 5700G 로 덮어써졌습니다)
+
+     막는 방법 두 가지
+       1) 새 프로그램이 만든 값(hw1-…)만 신뢰합니다.
+          옛 형식이 오면 무시하고 새 품번을 줍니다.
+       2) 서버실이 같을 때만 물려받습니다.
+          영태리에서 등록하는데 금촌 품번을 물려받는 일이 없어야 합니다. */
+  const looksLikeOurHwId = s => /^hw1-[0-9a-f]{28}$/.test(s || '');
   let finalPn = pn;
   let exists = false;
 
   try {
-    if (autoPn && row.hw_id) {
+    if (autoPn && looksLikeOurHwId(row.hw_id)) {
       const same = await sb('pcs', {
-        query: `?select=pn&hw_id=eq.${encodeURIComponent(row.hw_id)}&limit=1`,
+        query: `?select=pn,room&hw_id=eq.${encodeURIComponent(row.hw_id)}&limit=1`,
       });
-      if (same && same[0]) { finalPn = same[0].pn; }
+      /* 서버실까지 같아야 물려받습니다 */
+      if (same && same[0] && same[0].room === room) { finalPn = same[0].pn; }
     }
+    /* 옛 형식이거나 못 믿을 값이면 아예 저장하지 않습니다.
+       나중에 이 값으로 또 잘못 묶이는 것을 막습니다. */
+    if (!looksLikeOurHwId(row.hw_id)) row.hw_id = null;
     if (finalPn) {
       const found = await sb('pcs', { query: `?select=pn&pn=eq.${encodeURIComponent(finalPn)}&limit=1` });
       exists = !!(found && found[0]);

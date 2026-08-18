@@ -230,6 +230,58 @@ function Register-BeatTask {
   }
 }
 
+# ── 이 컴퓨터를 구별하는 값 만들기 ─────────────────────────────────
+#    ★ 메인보드 일련번호 하나만 믿으면 안 됩니다.
+#      조립 PC 는 이 값이 'Default string' 이거나 비어 있는 경우가 흔해서,
+#      서로 다른 PC 가 전부 같은 값을 갖게 됩니다. 그러면 서버에서
+#      한 품번을 계속 덮어써 3대를 등록해도 1대만 남습니다.
+#      (2026-08-17 실제로 겪었습니다. B550M 보드에서 'Default string' 확인)
+#
+#    그래서 여러 곳에서 값을 모아, 쓸 만한 것만 골라 합친 뒤 해시합니다.
+#    하나도 쓸 만한 게 없으면 빈 값을 돌려주고, 서버는 그때 항상 새 품번을 줍니다.
+function Test-HwValue([string]$v) {
+  if ([string]::IsNullOrWhiteSpace($v)) { return $false }
+  $s = $v.Trim()
+  if ($s.Length -lt 8) { return $false }
+  if ($s -eq '00000000-0000-0000-0000-000000000000') { return $false }
+  # 제조사가 채우지 않고 내보낸 기본값들
+  if ($s -match '(?i)default|to be filled|o\.?e\.?m|^none$|^n/?a$|unknown|system serial|invalid|^0+$|^1234') { return $false }
+  return $true
+}
+
+function Get-HwId {
+  $parts = @()
+  try { $v = (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction Stop).UUID
+        if (Test-HwValue $v) { $parts += "uuid=$($v.Trim())" } } catch {}
+  try { $v = (Get-CimInstance Win32_DiskDrive -ErrorAction Stop |
+              Where-Object { $_.MediaType -like '*Fixed*' -and $_.SerialNumber } |
+              Sort-Object DeviceID | Select-Object -First 1).SerialNumber
+        if (Test-HwValue $v) { $parts += "disk=$($v.Trim())" } } catch {}
+  try { $v = (Get-CimInstance Win32_BaseBoard -ErrorAction Stop).SerialNumber
+        if (Test-HwValue $v) { $parts += "board=$($v.Trim())" } } catch {}
+  try { $v = (Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber
+        if (Test-HwValue $v) { $parts += "bios=$($v.Trim())" } } catch {}
+
+  # 위에서 하나도 못 건졌을 때만 쓰는 예비 수단.
+  # CPU ID 와 랜카드 주소는 같은 모델끼리 겹칠 수 있어 마지막에 둡니다.
+  if ($parts.Count -eq 0) {
+    try { $v = (Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1).ProcessorId
+          if (Test-HwValue $v) { $parts += "cpu=$($v.Trim())" } } catch {}
+    try { $v = (Get-CimInstance Win32_NetworkAdapter -ErrorAction Stop |
+                Where-Object { $_.PhysicalAdapter -and $_.MACAddress } |
+                Sort-Object DeviceID | Select-Object -First 1).MACAddress
+          if ($v) { $parts += "mac=$($v.Trim())" } } catch {}
+  }
+
+  if ($parts.Count -eq 0) { return '' }     # 못 믿을 기계 — 서버가 새 품번을 줍니다
+
+  $joined = ($parts -join '|')
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $hash = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))
+  $sha.Dispose()
+  return 'hw1-' + (($hash | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0, 28)
+}
+
 # ── 이 컴퓨터 정보 읽기 ───────────────────────────────────────────
 function Get-Spec {
   $cpu  = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -243,7 +295,7 @@ function Get-Spec {
     cpu = $cpu.Name.Trim(); core = "$($cpu.NumberOfCores)코어"
     ramGb = [int][Math]::Round($ramB/1GB); ssdGb = [int][Math]::Round($disk.Size/1GB)
     gpu = if ($gpu) { $gpu.Name.Trim() } else { $null }
-    ip = $ip; hwId = (Get-CimInstance Win32_BaseBoard).SerialNumber
+    ip = $ip; hwId = Get-HwId
   }
 }
 function Get-AnydeskId {
