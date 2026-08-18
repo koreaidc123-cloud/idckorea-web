@@ -23,6 +23,12 @@ module.exports = async (req, res) => {
     KVC_ADMIN_PW: process.env.KVC_ADMIN_PW || '',
     KVC_SECRET: process.env.KVC_SECRET || process.env.KVC_ADMIN_SECRET || '',
     TOSS_SECRET_KEY: process.env.TOSS_SECRET_KEY || '',
+    TOSS_CLIENT_KEY: process.env.TOSS_CLIENT_KEY || '',
+    KAKAO_JS_KEY: process.env.KAKAO_JS_KEY || '',
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+    ALIGO_KEY: process.env.ALIGO_KEY || '',
+    ALIGO_USER_ID: process.env.ALIGO_USER_ID || '',
+    ALIGO_SENDER: process.env.ALIGO_SENDER || '',
   };
 
   const 환경변수 = {
@@ -51,6 +57,26 @@ module.exports = async (req, res) => {
     '토스 시크릿키': env.TOSS_SECRET_KEY
       ? (/^live_sk_/.test(env.TOSS_SECRET_KEY) ? '✅ 실결제 키' : '⚠️ 테스트 키 (실결제 불가)')
       : '⚠️ 미등록 (기본 테스트 키로 동작)',
+    /* 시크릿 키만 라이브로 바꾸고 클라이언트 키를 그대로 두면 결제창이
+       테스트로 떠서 승인 단계에서 어긋납니다. 둘은 항상 짝이어야 합니다. */
+    '토스 클라이언트키': env.TOSS_CLIENT_KEY
+      ? (/^live_ck_/.test(env.TOSS_CLIENT_KEY) ? '✅ 실결제 키'
+         : /^test_ck_/.test(env.TOSS_CLIENT_KEY) ? '⚠️ 테스트 키 (실결제 불가)'
+         : '❌ 형식이 이상합니다 — test_ck_ 또는 live_ck_ 로 시작해야 합니다')
+      : '⚠️ 미등록 (코드에 든 샌드박스 키로 동작)',
+    '카카오 로그인': env.KAKAO_JS_KEY
+      ? (env.KAKAO_JS_KEY.length > 40 ? '❌ JavaScript 키가 아닌 것 같습니다' : '✅ 켜짐')
+      : '❌ 꺼짐 — KAKAO_JS_KEY 가 없어 카카오 로그인 버튼이 동작하지 않습니다',
+    '구글 로그인': env.GOOGLE_CLIENT_ID
+      ? (/\.apps\.googleusercontent\.com$/.test(env.GOOGLE_CLIENT_ID)
+          ? '✅ 켜짐 (구글 콘솔의 [승인된 JavaScript 원본] 에 이 사이트 주소가 있어야 실제로 됩니다)'
+          : '❌ .apps.googleusercontent.com 으로 끝나야 합니다')
+      : '❌ 꺼짐 — GOOGLE_CLIENT_ID 가 없습니다',
+    '문자 발송 (알리고)': (env.ALIGO_KEY && env.ALIGO_USER_ID && env.ALIGO_SENDER)
+      ? '✅ 켜짐 · 발신번호 ' + env.ALIGO_SENDER
+      : (env.ALIGO_KEY || env.ALIGO_USER_ID || env.ALIGO_SENDER)
+        ? '⚠️ 일부만 등록됨 — ALIGO_KEY · ALIGO_USER_ID · ALIGO_SENDER 셋 다 필요합니다'
+        : '⚠️ 미등록 — 접속정보 문자·만료 안내가 나가지 않습니다',
   };
 
   const 데이터베이스 = {};

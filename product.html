@@ -409,13 +409,21 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 </div></div>
 
 <script src="https://js.tosspayments.com/v2/standard"></script>
+<script src="/api/auth-config" onerror="this.remove()"></script>
 <script>
 /* 상품 사진은 목록(live·index)에 쓰는 것과 같은 한 장만 씁니다.
    예전에는 썸네일 4장을 깔았는데 pc-black·pc-cpu 파일이 실제로 없어서
    큰 사진과 썸네일 2장이 깨진 채로 나갔습니다. */
-/* 토스페이먼츠 — 공식 문서 공개 샌드박스 키 (실결제 불가).
-   실서비스 전환 시: 클라이언트 키만 교체 + Vercel 환경변수에 시크릿 키 등록 */
-const TOSS_CK='test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
+/* 토스페이먼츠 클라이언트 키.
+
+   ★ Vercel 환경변수 TOSS_CLIENT_KEY 가 있으면 그것을 씁니다.
+     심사에 통과해 라이브 키(live_ck_…)를 받으시면, 환경변수만 바꾸고
+     서버 쪽 TOSS_SECRET_KEY 를 라이브 시크릿 키로 넣으시면 실결제가 열립니다.
+     코드를 고칠 필요가 없습니다.
+
+   환경변수가 없을 때만 아래 샌드박스 키로 돕니다 (실결제 불가). */
+const TOSS_CK=(window.KVC_AUTH&&window.KVC_AUTH.TOSS_CLIENT_KEY)
+  || 'test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
 /* 이 페이지가 파는 상품 번호 — api/_price.js 의 번호와 같아야 합니다 (5 = 라이젠 3700X) */
 const SPEC_ID=5;
 let _pay=null;
