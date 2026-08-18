@@ -1089,8 +1089,12 @@ function openPc(key,edit){
     ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
     ${p.st==='fix'? `<button class="btn btn-g" data-took="${p.pn}">점검 완료 → 판매</button>`:''}
     ${p.st==='down'? `<button class="btn btn-r" style="pointer-events:none">⚡ 현장 확인 필요 — ${locStr(p)}</button>`:''}
-    ${p.pn&&p.st!=='down'? `<button class="btn btn-o" data-reboot="${p.pn}"
-      style="color:#E08B00;border-color:#F6DFA8">↻ 원격 재부팅</button>`:''}
+    ${p.pn&&p.st!=='down'? (p.cmd
+      ? `<button class="btn btn-o" disabled
+           style="color:#E08B00;border-color:#F6DFA8;background:#FFF8E6">
+           ⏳ ${({reboot:'재부팅',cancel:'재부팅 취소'})[p.cmd]||p.cmd} 대기중 — 다음 신호에 실행됩니다</button>`
+      : `<button class="btn btn-o" data-reboot="${p.pn}"
+           style="color:#E08B00;border-color:#F6DFA8">↻ 원격 재부팅</button>`):''}
     ${p.pn? `<button class="btn btn-o" data-delpc="${p.pn}"
       style="color:var(--red);border-color:#F7CDD3">🗑 대장에서 빼기</button>`:''}
     <button class="btn btn-o" data-close>닫기</button>
@@ -1386,9 +1390,15 @@ document.addEventListener('click',async e=>{
       rb.disabled=false; rb.textContent='↻ 원격 재부팅';
       if(!r.ok){ alert(d.error||'재부팅 요청에 실패했습니다'); return; }
       logView(pn,'원격 재부팅 요청');
+      /* 화면에 바로 "대기중" 으로 보이게 합니다. 이게 없으면 눌러도
+         아무 흔적이 안 남아서 먹통인 줄 알게 됩니다. */
+      if(p) p.cmd='reboot';
+      openPc(pn);
       alert(`${pn} 재부팅을 요청했습니다.\n\n`
         +`마지막 신호가 ${d.lastBeatSec}초 전이었으니\n`
-        +`약 ${Math.max(0,120-(d.lastBeatSec||0))}초 안에 실행됩니다.`);
+        +`약 ${Math.max(0,120-(d.lastBeatSec||0))}초 안에 실행됩니다.\n\n`
+        +`그동안 버튼이 「⏳ 재부팅 대기중」 으로 바뀝니다.\n`
+        +`그 PC 가 명령을 받아가면 다시 원래대로 돌아옵니다.`);
     }catch(e){ rb.disabled=false; rb.textContent='↻ 원격 재부팅'; alert('서버에 연결하지 못했습니다'); }
     return;
   }
@@ -1677,6 +1687,9 @@ function applyLive(d){
              ram:p.ram_gb||0, ssd:p.ssd_gb||0, gpu:p.gpu||'', p:0},
       ad:p.anydesk||'', pw:'', ip:p.ip||'',
       beat:p.beatAge, live:p.live, inUse:p.in_use,
+      /* 걸어둔 명령 — 그 PC 가 다음 신호를 보낼 때 받아가고 사라집니다.
+         이게 없으면 재부팅을 눌러도 화면에 아무 흔적이 안 남습니다. */
+      cmd:p.cmd||null, cmdAt:p.cmdAt||null,
     });
   }
   /* 미등록 PC — 품번이 아직 안 붙어 신호만 오는 것들.

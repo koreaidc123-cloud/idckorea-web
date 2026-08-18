@@ -82,6 +82,18 @@ module.exports = async (req, res) => {
       note: '다음 신호가 올 때 실행됩니다 (최대 2분)',
     });
   } catch (e) {
-    res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+    const m = String(e.message || e);
+    /* cmd 칸이 아직 없으면 = 재부팅용 SQL 을 아직 안 돌리신 것입니다.
+       그냥 두면 "SUPABASE 400: column pcs.cmd does not exist" 같은
+       알아볼 수 없는 영어가 뜹니다. 무엇을 하면 되는지로 바꿔 드립니다. */
+    if (/cmd/.test(m) && /does not exist|42703|schema cache/i.test(m)) {
+      return res.status(503).json({
+        error: '원격 재부팅이 아직 데이터베이스에 설치되지 않았습니다.\n\n' +
+               'Supabase → SQL Editor 에서\n' +
+               'db/06-B-사라진PC-잡기.sql 을 한 번 실행하시면\n' +
+               '바로 됩니다. (버튼은 정상입니다)',
+      });
+    }
+    res.status(500).json({ error: m.slice(0, 200) });
   }
 };
