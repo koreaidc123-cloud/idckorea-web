@@ -515,11 +515,35 @@ function vNew(){
   return `
   <div class="top"><h1>미등록 PC</h1>
     <span class="live">세팅 프로그램에서 올라온 PC · 품번을 부여하면 <b>미검증</b> 단계로 넘어갑니다</span></div>
+  ${(()=>{const lost=list.filter(p=>p.lost);
+    if(!lost.length) return '';
+    return `<div class="card" style="margin-bottom:14px;border-color:#F6DFA8;background:#FFFBF0">
+      <div class="sec-h"><h3 style="color:#8A6100">🔎 대장에서 사라진 PC</h3>
+        <span class="cnt" style="background:#FFF0CC;color:#8A6100">${lost.length}</span></div>
+      <div class="sec-b pad" style="font-size:13px;color:#7A5200;line-height:1.8">
+        아래 컴퓨터는 <b>멀쩡히 켜져 있고 신호도 보내고 있는데</b> 대장에서만 사라졌습니다.
+        다른 PC 가 같은 품번을 가져가면서 열쇠가 어긋난 경우입니다.<br>
+        <b>화면에서 품번만 되돌려서는 살아나지 않습니다.</b> 열쇠는 그 PC 안에 들어 있어서,
+        그 PC 에서 등록을 다시 해야 새 열쇠를 받습니다.<br>
+        <b>아래 애니데스크 번호로 원격 접속</b> → USB 의 <b>PC등록</b> 실행 → 같은 자리·비밀번호로 다시 등록.
+        현장에 가지 않으셔도 됩니다.
+      </div>
+      <table class="tbl">
+        <thead><tr><th>원래 품번</th><th>애니데스크 번호 (여기로 접속)</th><th>사양</th><th>IP</th><th>마지막 신호</th></tr></thead>
+        <tbody>${lost.map(p=>`<tr>
+          <td class="pn" style="color:#8A6100">${p.claimedPn}</td>
+          <td><b class="num" style="font-size:16px">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b>
+            ${p.ad?`<button class="btn btn-o btn-sm" data-copy="${p.ad}" style="margin-left:8px">복사</button>`:''}</td>
+          <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+          <td class="num dim">${p.ip||'—'}</td>
+          <td class="dim">신호 오는 중</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;})()}
   <div class="card">
-    <div class="sec-h"><h3>등록 대기</h3><span class="cnt">${list.length}</span></div>
-    <div class="sec-b">${list.length? `<table class="tbl">
+    <div class="sec-h"><h3>등록 대기</h3><span class="cnt">${list.filter(p=>!p.lost).length}</span></div>
+    <div class="sec-b">${list.filter(p=>!p.lost).length? `<table class="tbl">
       <thead><tr><th>세팅자 입력 위치</th><th>애니데스크 번호</th><th>자동 수집 사양</th><th>비번 입력</th><th>품번 부여</th><th></th></tr></thead>
-      <tbody>${list.map(p=>{
+      <tbody>${list.filter(p=>!p.lost).map(p=>{
         const next=p.room+'-'+pad(seq[p.room]+1);
         return `<tr><td class="pn">${locStr(p)}</td>
         <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
@@ -1655,12 +1679,18 @@ function applyLive(d){
       beat:p.beatAge, live:p.live, inUse:p.in_use,
     });
   }
-  /* 미등록 PC — 품번이 아직 안 붙어 신호만 오는 것들 */
+  /* 미등록 PC — 품번이 아직 안 붙어 신호만 오는 것들.
+     여기에는 "대장에서 사라진 PC" 도 함께 올라옵니다.
+     (다른 PC 가 같은 품번을 가져가서 열쇠가 어긋난 경우.
+      멀쩡히 켜져 있는데 대장에서만 없어진 상태라 꼭 찾아야 합니다) */
   for(const u of (d.unregistered||[])){
     PCS.push({room:u.room||'K', roomName:rooms[u.room]||'', rack:0, fl:0, slot:0,
       pn:null, hwId:u.hw_id, st:'new',
       spec:{n:u.cpu||'사양 미확인',core:u.core||'',ram:u.ram_gb||0,ssd:u.ssd_gb||0,gpu:u.gpu||'',p:0},
-      ad:u.anydesk||'', pw:'', ip:u.ip||'', beat:0, live:true});
+      ad:u.anydesk||'', pw:'', ip:u.ip||'', beat:0, live:true,
+      claimedPn:u.claimed_pn||null,        // 자기가 어느 품번이라고 주장하는지
+      lost:!!u.claimed_pn,                 // 대장에서 사라진 PC 인가
+      unregNote:u.note||''});
   }
   ORDERS.length=0;
   LIVE=true; LIVE_AT=new Date(); LOADING=false; LOAD_ERR='';
