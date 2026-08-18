@@ -529,7 +529,8 @@ function vNew(){
         현장에 가지 않으셔도 됩니다.
       </div>
       <table class="tbl">
-        <thead><tr><th>원래 품번</th><th>애니데스크 번호 (여기로 접속)</th><th>사양</th><th>IP</th><th>마지막 신호</th></tr></thead>
+        <thead><tr><th>원래 품번</th><th>애니데스크 번호 (여기로 접속)</th><th>사양</th><th>IP</th>
+          <th>마지막 신호</th><th></th></tr></thead>
         <tbody>${lost.map(p=>`<tr>
           <td class="pn" style="color:#8A6100">${p.claimedPn}</td>
           <td><b class="num" style="font-size:16px">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b>
@@ -537,6 +538,8 @@ function vNew(){
           <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
           <td class="num dim">${p.ip||'—'}</td>
           <td class="dim">신호 오는 중</td>
+          <td><button class="btn btn-o btn-sm" data-delnew="${p.ad}"
+            style="color:var(--red);border-color:#F7CDD3" title="목록에서 지우기">🗑</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`;})()}
   ${(()=>{const wait=list.filter(p=>!p.lost);
@@ -1386,8 +1389,12 @@ document.addEventListener('click',async e=>{
       +'애니데스크  '+(p.ad||'—')+'\n'
       +p.spec.n+' · 램'+p.spec.ram+'G · SSD'+p.spec.ssd+'G\n'
       +(p.pn?'품번  '+p.pn+'\n':'')
-      +'\n⚠ 그 PC 가 켜져 있으면 다시 신호를 보내 또 올라옵니다.\n'
-      +'정말 안 쓰는 PC 라면 전원을 끄거나 세팅 프로그램을 지운 뒤에 지워 주세요.\n\n'
+      +(p.claimedPn?'본인 주장 품번  '+p.claimedPn+'\n':'')
+      +'\n⚠ 그 PC 가 켜져 있으면 2분 뒤 다시 신호를 보내 또 올라옵니다.\n'
+      +'목록에서 치우는 것이지 그 PC 를 멈추는 게 아닙니다.\n'
+      +'영영 안 올라오게 하려면 그 PC 에서 아래를 지우셔야 합니다.\n'
+      +'   · C:\\KVC 폴더\n'
+      +'   · 작업 스케줄러의 KVC 항목\n\n'
       +'지울까요?')) return;
     dn.disabled=true;
     try{
