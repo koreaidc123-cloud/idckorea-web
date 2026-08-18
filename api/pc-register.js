@@ -183,17 +183,26 @@ module.exports = async (req, res) => {
         row.pn = finalPn;
         await sb('pcs', { method: 'POST', body: [row], prefer: 'return=minimal' });
       } else {
-        /* 자동 발급 — 그 서버실의 다음 번호를 찾아 넣습니다.
-           같은 순간에 두 대가 등록되면 번호가 겹칠 수 있으므로,
-           겹치면(중복 오류) 다음 번호로 다시 시도합니다. */
-        const last = await sb('pcs', {
-          query: `?select=pn&room=eq.${room}&order=pn.desc&limit=1`,
+        /* 자동 발급 — 그 서버실에서 비어 있는 가장 작은 번호를 씁니다.
+
+           ★ 왜 "다음 번호" 가 아니라 "빈 번호" 인가
+             PC 를 빼거나 잘못 등록해서 지우면 그 번호가 빕니다.
+             전에는 늘 마지막 번호 +1 을 줬기 때문에, Y-001 을 지워도
+             다음 등록은 Y-004 를 받았습니다. 번호가 계속 커지고
+             빈 번호는 영영 안 쓰이게 됩니다.
+             자리(랙 위치)처럼 품번도 비면 다시 쓰는 것이 맞습니다.
+             같은 순간에 두 대가 들어오면 아래에서 중복을 잡아 다음 번호로 넘깁니다. */
+        const used = await sb('pcs', {
+          query: `?select=pn&room=eq.${room}&order=pn.asc&limit=1000`,
         });
+        const taken = new Set(
+          (used || []).map(x => {
+            const m = String(x.pn || '').match(/^[KYD]-(\d{3})$/);
+            return m ? parseInt(m[1], 10) : null;
+          }).filter(Boolean)
+        );
         let n = 1;
-        if (last && last[0]) {
-          const m = String(last[0].pn).match(/^[KYD]-(\d{3})$/);
-          if (m) n = parseInt(m[1], 10) + 1;
-        }
+        while (taken.has(n) && n <= 999) n++;
         let saved = false;
         for (let i = 0; i < 20 && n <= 999; i++, n++) {
           row.pn = room + '-' + String(n).padStart(3, '0');

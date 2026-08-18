@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 /* ═══════════════════════════════════════════════════════════════
-   한국 가상컴 관리자 (시안 · 목업 데이터)
+   한국 가상컴 관리자
    확정 설계 반영:
    · 식별 3층 — 위치(영태리 5-4-1) / 품번(Y-042) / 애니데스크 번호·비번
    · 자리 번호는 오른쪽 끝이 1번, 1층이 화면 맨 아래
@@ -329,7 +329,7 @@ a{color:inherit;text-decoration:none}
     <a href="#find" data-v="find"><i>🔎</i><span>통합검색</span></a>
     <a href="#set" data-v="set"><i>⚙️</i><span>설정</span></a>
   </nav>
-  <div class="ft">시안 · 목업 데이터<br><b>실서비스 연동 전</b></div>
+  <div class="ft" id="ftstate">불러오는 중…</div>
 </aside>
 
 <main class="main" id="main"></main>
@@ -361,77 +361,20 @@ const SPECS=[
 const ST={rent:'임대중',ok:'임대 가능',fix:'점검중',new:'미등록',unv:'미검증',down:'다운'};
 const STC={rent:'t-rent',ok:'t-ok',fix:'t-fix',new:'t-new',unv:'t-unv',down:'t-down'};
 
-/* PC 생성 — 방·랙·층·자리 물리 좌표 기준 */
+/* ═══ PC 목록은 서버에서만 받아옵니다 ═══
+   전에는 여기서 1,136대를 지어내 화면을 채웠습니다. 그래서 로그인하면
+   가짜 데이터가 먼저 보이고, 잠시 뒤 실데이터로 바뀌면서
+   "자료가 갑자기 사라진다" 처럼 보였습니다.
+   이제 처음엔 비어 있고, 서버에서 받아온 것만 보여줍니다. */
 const PCS=[]; const seq={K:0,Y:0,D:0};
-for(const r of ROOMS){
-  for(let rack=1;rack<=r.racks;rack++){
-    for(let fl=1;fl<=FLOORS;fl++){
-      for(let slot=1;slot<=SLOTS;slot++){
-        if(rnd()<.08) continue;                       // 빈 자리
-        const sp=SPECS[Math.floor(rnd()*rnd()*SPECS.length)];
-        const st=rnd()<.70?'rent':'ok';
-        PCS.push({
-          room:r.k, roomName:r.name, rack, fl, slot,
-          pn:r.k+'-'+pad(++seq[r.k]),
-          spec:sp, st,
-          ad:String(100000000+Math.floor(rnd()*899999999)),
-          pw:'한국'+(1000+Math.floor(rnd()*9000)),
-          ip:[59,121,175,211,220][Math.floor(rnd()*5)]+'.'+(10+Math.floor(rnd()*80))+'.*.**',
-          beat: Math.floor(rnd()*9)+1,                // n초 전 신호
-        });
-      }
-    }
-  }
-}
-/* 상태 후처리 — 재현 가능한 위치에서 뽑는다 */
-function pick(st,n,to,unsetPn){
-  let c=0;
-  for(let i=0;i<PCS.length&&c<n;i+=7){
-    const x=PCS[(i*13+c*31)%PCS.length];
-    if(x.st===st && !x.touched){ x.st=to; x.touched=1; if(unsetPn){x.pnOld=x.pn;x.pn=null;} c++; }
-  }
-}
-pick('ok',22,'fix');
-pick('ok',7,'unv');
-pick('ok',5,'new',true);
-pick('rent',3,'down');           // ★ 임대중 다운 = 최우선 경고
-pick('ok',4,'down');
+let LOADING=true, LOAD_ERR='';
 
-/* 고객·주문 생성 — 임대중 PC 에 배정 */
-const SUR='김이박최정강조윤장임한오서신권황안송전홍'.split('');
-const GN=['민준','서연','도윤','지우','예준','하은','시우','수아','주원','지호','준서','다은','건우','채원','현우','유진','우진','서현','민재','가은'];
-const name=()=>SUR[Math.floor(rnd()*SUR.length)]+GN[Math.floor(rnd()*GN.length)];
-const phone=()=>'010-'+(1000+Math.floor(rnd()*9000))+'-'+(1000+Math.floor(rnd()*9000));
-const PMS=['가상계좌','신용카드','카카오페이','네이버페이','스마트스토어'];
-const CARDS=['신한','국민','현대','삼성','롯데','우리'];
+/* 주문도 서버에서만 받아옵니다 (아래 applyOrders) */
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
 const fmtD=d=>{const x=new Date(d);return (x.getMonth()+1)+'/'+x.getDate()};
+const PMS=['가상계좌','신용카드','카카오페이','네이버페이','스마트스토어'];
 const ORDERS=[];
 let ono=2600;
-for(const pc of PCS){
-  if(pc.st!=='rent'&&pc.st!=='down')continue;
-  if(pc.st==='rent'&&rnd()<.55)continue;              // 전부 다 만들면 무거우니 일부만
-  const days=[30,30,30,60,90][Math.floor(rnd()*5)];
-  const left=1+Math.floor(rnd()*days);
-  const start=new Date(TODAY); start.setDate(start.getDate()-(days-left));
-  const end=new Date(start); end.setDate(end.getDate()+days);
-  const via=rnd()<.72?'kakao':'google';
-  const nm=name();
-  const mis=rnd()<.15;
-  const pm=PMS[Math.floor(rnd()*PMS.length)];
-  const off=days===60?3:days===90?5:0;
-  const amt=Math.round(pc.spec.p*days/30*(100-off)/100);
-  ORDERS.push({
-    no:'2608-'+(ono++), pc, nm, ph:phone(), via,
-    payer: mis&&rnd()<.5? name():nm,
-    userNm: mis? name():nm, userPh: mis? phone():null, mis,
-    pm, card: pm==='신용카드'? CARDS[Math.floor(rnd()*CARDS.length)]+' '+(1000+Math.floor(rnd()*9000)):null,
-    depositor: pm==='가상계좌'? (mis&&rnd()<.5?name():nm):null,
-    days, amt, start, end, left,
-  });
-  pc.order=ORDERS[ORDERS.length-1];
-}
-ORDERS.sort((a,b)=>a.left-b.left);
 
 /* 설정 — 하드코딩 금지, 관리자에서 수정 (localStorage) */
 const DEFSET={setup:5000, downSec:60, notiDay:5, off60:3, off90:5};
@@ -1253,6 +1196,27 @@ function route(){
               : ae.dataset.of ? `[data-of="${ae.dataset.of}"]` : null;
     if(sel) keep={sel, s:ae.selectionStart, e:ae.selectionEnd};
   }
+  /* 아직 못 받아왔거나 실패했으면 화면을 그리지 않고 상태를 알립니다.
+     예전에는 목업을 먼저 보여줘서 "가짜가 떴다가 사라지는" 것처럼 보였습니다. */
+  if(!LIVE && (LOADING || LOAD_ERR)){
+    $('main').innerHTML = LOADING
+      ? `<div class="top"><h1>${({dash:'대시보드',newpc:'미등록 PC',verify:'검증 대기',today:'오늘 할 일',rack:'랙맵',pcs:'PC 관리',members:'회원 관리',orders:'주문 · 고객',noti:'알림 발송',find:'통합검색',set:'설정'})[v]||'대시보드'}</h1></div>
+         <div class="card" style="padding:60px 20px;text-align:center;color:var(--ink4)">
+           <div style="font-size:17px;font-weight:800;color:var(--ink2);margin-bottom:8px">불러오는 중입니다</div>
+           서버에서 PC 목록을 받아오고 있습니다.</div>`
+      : `<div class="top"><h1>연결 확인이 필요합니다</h1></div>
+         <div class="card" style="padding:52px 24px;text-align:center">
+           <div style="font-size:17px;font-weight:800;color:var(--red);margin-bottom:10px">${LOAD_ERR}</div>
+           <div style="color:var(--ink4);font-size:14px;line-height:1.8">
+             무엇이 문제인지 아래에서 바로 확인하실 수 있습니다.</div>
+           <a class="btn btn-o btn-sm" style="margin-top:18px" href="/api/health" target="_blank">진단 화면 열기 ↗</a>
+           <button class="btn btn-b btn-sm" style="margin-top:18px;margin-left:6px"
+             onclick="location.reload()">다시 시도</button></div>`;
+    document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
+    const ft=document.querySelector('.ft');
+    if(ft) ft.innerHTML = LOADING ? '불러오는 중…' : '<b style="color:#FF8A96">연결 안 됨</b>';
+    return;
+  }
   $('main').innerHTML=fn();
   document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   badges();
@@ -1699,7 +1663,7 @@ function applyLive(d){
       ad:u.anydesk||'', pw:'', ip:u.ip||'', beat:0, live:true});
   }
   ORDERS.length=0;
-  LIVE=true; LIVE_AT=new Date();
+  LIVE=true; LIVE_AT=new Date(); LOADING=false; LOAD_ERR='';
   /* 랙 구조를 실제 위치에서 다시 만듭니다 — 현장 입력과 어긋날 수 없습니다 */
   RACKS=racksFromPCS();
   /* 운영 설정도 서버 값을 씁니다. 화면과 서버가 다른 값을 보면
@@ -1797,7 +1761,13 @@ async function syncLive(){
   if(sessionStorage.getItem('kvc-adm')!=='1') return;
   try{
     const r=await fetch('/api/admin?do=pcs',{credentials:'same-origin',cache:'no-store'});
-    if(!r.ok) return;                       // 401(미로그인)·503(DB 없음) → 목업 유지
+    if(!r.ok){
+      LOADING=false;
+      LOAD_ERR = r.status===401 ? '로그인이 풀렸습니다. 새로고침 후 다시 들어와 주세요.'
+               : r.status===503 ? '데이터베이스에 연결되지 않았습니다. /api/health 를 확인해 주세요.'
+               : '목록을 불러오지 못했습니다 (오류 '+r.status+')';
+      route(); return;
+    }
     const d=await r.json();
     /* 0 대여도 실데이터로 넘어갑니다. 예전에는 "0대면 그냥 두기" 였는데,
        PC 를 전부 지운 직후 목업(가짜 PC 수백 대)이 랙맵에 되살아나
@@ -1813,7 +1783,11 @@ async function syncLive(){
       const r2=await fetch('/api/admin?do=orders&all=1',{credentials:'same-origin',cache:'no-store'});
       if(r2.ok){ applyOrders(await r2.json()); route(); }
     }catch(e){}
-  }catch(e){}                               // 서버 함수가 없는 환경 → 목업 유지
+  }catch(e){
+    LOADING=false;
+    LOAD_ERR='서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.';
+    route();
+  }
 }
 syncLive();
 setInterval(syncLive, 30000);               // 30초마다 새로 받아옵니다
