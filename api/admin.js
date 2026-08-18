@@ -25,6 +25,7 @@ const HANDLERS = {
   'pc-secret':    require('./_admin-pc-secret'),
   'pc-update':    require('./_admin-pc-update'),
   'pc-delete':    require('./_admin-pc-delete'),
+  'pc-cmd':       require('./_admin-pc-cmd'),
   'orders':       require('./_admin-orders'),
   'order-manual': require('./_admin-order-manual'),
   'order-action': require('./_admin-order-action'),

@@ -330,11 +330,40 @@ try {
         -ContentType 'application/json; charset=utf-8' `
         -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 25
 
-  if ("$r" -eq 'OK') {
+  $resp = "$r"
+
+  if ($resp -eq 'OK') {
     if ($Once) { Write-Host "보냈습니다 - $($cfg.pn) (사용중: $(if($inUse){'예'}else{'아니오'}) / 유휴 $([int]($idle/60))분)" -ForegroundColor Green }
-  } else {
-    Log "거절됨 ($r) - 품번이나 토큰이 맞지 않습니다. -Setup 으로 다시 등록하세요."
-    if ($Once) { Write-Host "거절됨 : $r  →  -Setup 으로 다시 등록해 주세요" -ForegroundColor Red }
+  }
+  elseif ($resp -like 'CMD:*') {
+    # ── 관리자가 걸어둔 명령 ──────────────────────────────────
+    #    서버가 명령을 한 번만 주고 바로 지웁니다. 여기서 실패해도
+    #    다시 걸리지 않으므로, 반복 재부팅에 빠질 걱정이 없습니다.
+    $cmd = $resp.Substring(4).Trim()
+    Log "명령 받음 : $cmd"
+    if ($Once) { Write-Host "명령 받음 : $cmd" -ForegroundColor Yellow }
+
+    switch ($cmd) {
+      'reboot' {
+        Log '재부팅합니다 (관리자 요청)'
+        # 쓰고 계신 분이 있으면 안내를 띄우고 60초 뒤에 끕니다.
+        # 아무도 안 쓰면 20초 뒤 바로 끕니다.
+        $wait = if ($inUse) { 60 } else { 20 }
+        $msg  = '한국 가상컴 - 관리자 요청으로 이 컴퓨터를 다시 시작합니다. 작업 중인 내용을 저장해 주세요.'
+        try { & shutdown.exe /r /t $wait /c $msg /d p:2:4 | Out-Null }
+        catch { Log "재부팅 실패 : $($_.Exception.Message)" }
+      }
+      'cancel' {
+        # 잘못 눌렀을 때 되돌리기
+        Log '재부팅 취소'
+        try { & shutdown.exe /a | Out-Null } catch {}
+      }
+      default { Log "모르는 명령이라 넘어갑니다 : $cmd" }
+    }
+  }
+  else {
+    Log "거절됨 ($resp) - 품번이나 토큰이 맞지 않습니다. -Setup 으로 다시 등록하세요."
+    if ($Once) { Write-Host "거절됨 : $resp  →  -Setup 으로 다시 등록해 주세요" -ForegroundColor Red }
     exit 1
   }
 } catch {
