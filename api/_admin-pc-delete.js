@@ -30,7 +30,39 @@ module.exports = async (req, res) => {
   if (!verify(req)) return res.status(401).json({ error: '관리자 로그인이 필요합니다' });
   if (!ready()) return res.status(503).json({ error: 'DB 미연결' });
 
-  const pn = String((req.body || {}).pn || '').toUpperCase().trim();
+  const b = req.body || {};
+  const pn = String(b.pn || '').toUpperCase().trim();
+  const hwId = String(b.hwId || '').trim();
+
+  /* ── 아직 품번이 없는 PC (pcs_unregistered) ────────────────────
+     예전에 테스트하던 PC 가 신호만 계속 보내서 목록에 남아 있는 경우입니다.
+     품번이 없으니 주문이 걸릴 수 없어, 이력 검사 없이 바로 지웁니다.
+
+     ※ 그 PC 가 켜져 있으면 다음 신호에 다시 올라옵니다.
+       지우는 것은 "목록에서 치우는 것" 이지 그 PC 를 멈추는 게 아닙니다.
+       화면에서도 그렇게 안내합니다. */
+  if (!pn && hwId) {
+    if (hwId.length < 4 || hwId.length > 128) {
+      return res.status(400).json({ error: '어느 PC 를 뺄지 알 수 없습니다' });
+    }
+    try {
+      await sb('pcs_unregistered', {
+        method: 'DELETE',
+        query: `?hw_id=eq.${encodeURIComponent(hwId)}`,
+        prefer: 'return=minimal',
+      });
+    } catch (e) {
+      return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+    }
+    try {
+      await sb('view_log', {
+        method: 'POST', prefer: 'return=minimal',
+        body: [{ pn: null, act: `미등록 PC 삭제 (${hwId})`, who: '관리자' }],
+      });
+    } catch (e) {}
+    return res.status(200).json({ ok: true, hwId });
+  }
+
   if (!isPn(pn)) return res.status(400).json({ error: '어느 PC 를 뺄지 알 수 없습니다' });
 
   /* 지금 상태를 먼저 봅니다 */

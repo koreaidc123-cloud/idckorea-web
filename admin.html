@@ -539,22 +539,47 @@ function vNew(){
           <td class="dim">신호 오는 중</td>
         </tr>`).join('')}</tbody>
       </table></div>`;})()}
-  <div class="card">
-    <div class="sec-h"><h3>등록 대기</h3><span class="cnt">${list.filter(p=>!p.lost).length}</span></div>
-    <div class="sec-b">${list.filter(p=>!p.lost).length? `<table class="tbl">
-      <thead><tr><th>세팅자 입력 위치</th><th>애니데스크 번호</th><th>자동 수집 사양</th><th>비번 입력</th><th>품번 부여</th><th></th></tr></thead>
-      <tbody>${list.filter(p=>!p.lost).map(p=>{
-        const next=p.room+'-'+pad(seq[p.room]+1);
-        return `<tr><td class="pn">${locStr(p)}</td>
-        <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+  ${(()=>{const wait=list.filter(p=>!p.lost);
+    /* 품번 제안 — 이미 번호를 받은 PC 는 그 번호를 그대로 보여줍니다.
+       아직 없으면 그 서버실에서 비어 있는 가장 작은 번호를 제안합니다.
+       ★ 전에는 seq 값을 썼는데, 목업을 지우면서 그 값이 0 에 멈춰
+         어느 PC 든 001 을 제안했습니다. 이미 쓰는 번호라 부여가 안 됐습니다. */
+    const busy=new Set(PCS.filter(x=>x.pn).map(x=>x.pn)), sug={};
+    for(const p of wait){
+      if(p.pn){sug[p.ad]=p.pn;continue}
+      let n=1; while(busy.has(p.room+'-'+pad(n))&&n<999) n++;
+      sug[p.ad]=p.room+'-'+pad(n); busy.add(sug[p.ad]);
+    }
+    const ns='width:46px;height:32px;border:1px solid var(--line);border-radius:7px;'
+            +'padding:0 4px;text-align:center;font-weight:800';
+    return `<div class="card">
+    <div class="sec-h"><h3>등록 대기</h3><span class="cnt">${wait.length}</span></div>
+    <div class="sec-b">${wait.length? `<table class="tbl">
+      <thead><tr><th>서버실</th><th>자리 (랙-층-자리)</th><th>애니데스크 번호</th>
+        <th>자동 수집 사양</th><th>비번</th><th>품번</th><th></th></tr></thead>
+      <tbody>${wait.map(p=>`<tr>
+        <td class="pn">${p.roomName||p.room}</td>
+        <td style="white-space:nowrap">
+          <input type="number" min="1" max="99" value="${p.rack||''}" placeholder="랙"
+            data-for="${p.ad}" data-loc="rack" style="${ns}"> -
+          <input type="number" min="1" max="99" value="${p.fl||''}" placeholder="층"
+            data-for="${p.ad}" data-loc="fl" style="${ns}"> -
+          <input type="number" min="1" max="99" value="${p.slot||''}" placeholder="자리"
+            data-for="${p.ad}" data-loc="slot" style="${ns}"></td>
+        <td class="num">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
         <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
-        <td><span class="tag t-ok"><i></i>입력됨 · 2회 확인</span></td>
-        <td><input value="${next}" data-pnin="${p.ad}" style="width:90px;height:32px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-weight:800"></td>
-        <td><button class="btn btn-b btn-sm" data-assign="${p.ad}">품번 부여</button></td></tr>`}).join('')}
+        <td><span class="tag t-ok"><i></i>입력됨</span></td>
+        <td><input value="${sug[p.ad]}" data-pnin="${p.ad}"
+          style="width:90px;height:32px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-weight:800"></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-b btn-sm" data-assign="${p.ad}">저장 · 품번 부여</button>
+          <button class="btn btn-o btn-sm" data-delnew="${p.ad}"
+            style="color:var(--red);border-color:#F7CDD3;margin-left:6px" title="목록에서 지우기">🗑</button></td>
+      </tr>`).join('')}
       </tbody></table>`
       : `<div class="empty2"><b>대기 중인 PC가 없습니다</b>세팅 프로그램으로 등록하면 여기 표시됩니다.</div>`}
     </div>
-  </div>
+  </div>`;})()}
   <div class="card" style="margin-top:14px"><div class="sec-b pad" style="font-size:13px;color:var(--ink3);line-height:1.8">
     <b style="color:var(--ink)">현장 세팅 순서</b> — ① 포맷 · 애니데스크 설치 · 번호와 비밀번호 설정(기존과 동일)
     ② 세팅 프로그램 실행 → 위치(서버실·랙-층-자리)와 비밀번호 입력 ③ 여기서 품번 부여
@@ -1314,20 +1339,68 @@ document.addEventListener('click',async e=>{
   const opg=t.closest('[data-opg]');
   if(opg&&!opg.disabled){OF.pg=+opg.dataset.opg;route();return}
 
-  /* 미등록 → 품번 부여 → 미검증 */
+  /* 미등록 → 자리·품번 저장 → 미검증
+     세팅하시는 분이 자리를 안 적었거나 잘못 적어도 여기서 고칠 수 있어야 합니다.
+     (전에는 관리자에서 자리를 고칠 방법이 아예 없었습니다) */
   const asg=t.closest('[data-assign]');
   if(asg){
     const p=PCS.find(x=>x.ad===asg.dataset.assign); if(!p)return;
     const inp=document.querySelector('[data-pnin="'+p.ad+'"]');
     const val=(inp&&inp.value.trim().toUpperCase())||'';
     if(!/^[KYD]-\d{3}$/.test(val)){alert('품번 형식은 K-001 · Y-042 · D-113 입니다.');return}
-    if(PCS.some(x=>x.pn===val)){alert(val+' 은 이미 사용 중인 품번입니다.');return}
+    if(PCS.some(x=>x.pn===val&&x!==p)){alert(val+' 은 이미 사용 중인 품번입니다.');return}
+
+    const num=n=>{const el=document.querySelector('[data-for="'+p.ad+'"][data-loc="'+n+'"]');
+      return el?parseInt(el.value,10):NaN};
+    const rack=num('rack'), fl=num('fl'), slot=num('slot');
+    const done=[rack,fl,slot].every(v=>Number.isFinite(v)&&v>=1&&v<=99);
+    if(!done && [rack,fl,slot].some(v=>Number.isFinite(v))){
+      alert('자리는 랙·층·자리 셋을 모두 적어야 합니다. (예: 5 - 4 - 14)');return;
+    }
+    if(!done && !confirm('자리를 안 적으셨습니다.\n\n'
+      +'이대로 두면 랙맵에 안 나와서 나중에 어디 꽂혀 있는지 찾기 어렵습니다.\n'
+      +'그래도 품번만 먼저 부여할까요?')) return;
+    /* 그 자리에 이미 다른 PC 가 있으면 서버가 거부합니다. 미리 알려드립니다. */
+    if(done){
+      const taken=PCS.find(x=>x!==p&&x.room===val.charAt(0)&&x.rack===rack&&x.fl===fl&&x.slot===slot);
+      if(taken){alert(val.charAt(0)+'실 '+rack+'-'+fl+'-'+slot+' 자리에는 이미 '
+        +(taken.pn||'다른 PC')+' 가 있습니다.\n자리 번호를 다시 확인해 주세요.');return}
+    }
+
     asg.disabled=true;
-    const r=await pcSave(p.pn||'', {pn:val, room:val.charAt(0), status:'unv'});
+    const patch={pn:val, room:val.charAt(0), status:'unv'};
+    if(done){patch.rack=rack; patch.fl=fl; patch.slot=slot}
+    const r=await pcSave(p.pn||'', patch);
     asg.disabled=false;
     if(!r.ok){alert(r.error);return}
-    p.pn=val; p.st='unv'; seq[p.room]=Math.max(seq[p.room],parseInt(val.slice(2),10));
+    p.pn=val; p.room=val.charAt(0); p.st='unv';
+    if(done){p.rack=rack; p.fl=fl; p.slot=slot}
     route();return;
+  }
+
+  /* 미등록 PC 지우기 — 예전에 테스트하던 PC 가 목록에 남아 있는 경우 */
+  const dn=t.closest('[data-delnew]');
+  if(dn){
+    const p=PCS.find(x=>x.ad===dn.dataset.delnew); if(!p)return;
+    if(!confirm('이 PC 를 목록에서 지웁니다.\n\n'
+      +'애니데스크  '+(p.ad||'—')+'\n'
+      +p.spec.n+' · 램'+p.spec.ram+'G · SSD'+p.spec.ssd+'G\n'
+      +(p.pn?'품번  '+p.pn+'\n':'')
+      +'\n⚠ 그 PC 가 켜져 있으면 다시 신호를 보내 또 올라옵니다.\n'
+      +'정말 안 쓰는 PC 라면 전원을 끄거나 세팅 프로그램을 지운 뒤에 지워 주세요.\n\n'
+      +'지울까요?')) return;
+    dn.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=pc-delete',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(p.pn?{pn:p.pn}:{hwId:p.hwId})});
+      const d=await r.json().catch(()=>({}));
+      dn.disabled=false;
+      if(!r.ok){alert(d.error||'지우지 못했습니다');return}
+      const i=PCS.indexOf(p); if(i>=0) PCS.splice(i,1);
+      route();
+    }catch(e){ dn.disabled=false; alert('서버에 연결하지 못했습니다'); }
+    return;
   }
   /* 검증 확인 / 실패 / 점검 전환 — 서버에 먼저 저장합니다 */
   const stBtn = t.closest('[data-verok]')||t.closest('[data-verfail]')
