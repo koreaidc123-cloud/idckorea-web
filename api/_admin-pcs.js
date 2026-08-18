@@ -51,6 +51,17 @@ module.exports = async (req, res) => {
     const pending = Object.fromEntries(cmdRows.map(r => [r.pn, r]));
 
     const set = Object.fromEntries((setRows || []).map(r => [r.k, r.v]));
+
+    /* 관리자가 지운 미등록 PC 는 다시 신호가 와도 안 보이게 걸러냅니다.
+       그 PC 가 켜져 있으면 2분마다 계속 올라오기 때문입니다.
+       지운 것이 영영 안 보이면 그것도 위험하므로, 몇 대를 숨겼는지는
+       화면에 알려주고 [다시 보이기] 로 되돌릴 수 있게 했습니다. */
+    let hidden = [];
+    try {
+      const h = JSON.parse(set.lost_hidden || '[]');
+      if (Array.isArray(h)) hidden = h;
+    } catch (e) {}
+    const unregShown = (unreg || []).filter(u => !hidden.includes(u.hw_id));
     const downSec = Number(set.down_sec || 180);
     const now = Date.now();
 
@@ -76,7 +87,8 @@ module.exports = async (req, res) => {
       at: new Date().toISOString(),
       settings: set,
       counts: pcs.reduce((o, p) => (o[p.status] = (o[p.status] || 0) + 1, o), {}),
-      unregistered: unreg || [],
+      unregistered: unregShown,
+      hiddenLost: hidden.length,
       pcs,
     });
   } catch (e) {

@@ -34,6 +34,37 @@ module.exports = async (req, res) => {
   const pn = String(b.pn || '').toUpperCase().trim();
   const hwId = String(b.hwId || '').trim();
 
+  /* ── 숨김 목록 ────────────────────────────────────────────────
+     지운 PC 가 켜져 있으면 2분 뒤 신호를 보내 또 올라옵니다.
+     "지워도 소용없다" 는 정환님 지적이 맞습니다.
+     그래서 지울 때 그 PC 를 숨김 목록에 넣어 다시 안 보이게 합니다.
+
+     표를 새로 만들거나 beat 함수를 고치지 않았습니다.
+     이미 있는 settings 표에 목록만 적어두고, PC 목록을 내려줄 때
+     걸러냅니다. 랙PC 1,200대 쪽에는 아무 영향이 없습니다. */
+  const HIDE_KEY = 'lost_hidden';
+  const readHidden = async () => {
+    try {
+      const r = await sb('settings', { query: `?select=v&k=eq.${HIDE_KEY}&limit=1` });
+      const arr = JSON.parse((r && r[0] && r[0].v) || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  };
+  const writeHidden = async list => {
+    await sb('settings', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: [{ k: HIDE_KEY, v: JSON.stringify(list.slice(-500)) }],
+    });
+  };
+
+  /* 숨긴 것 전부 다시 보이기 */
+  if (b.unhideAll) {
+    try { await writeHidden([]); }
+    catch (e) { return res.status(500).json({ error: String(e.message || e).slice(0, 200) }); }
+    return res.status(200).json({ ok: true, unhidden: true });
+  }
+
   /* ── 아직 품번이 없는 PC (pcs_unregistered) ────────────────────
      예전에 테스트하던 PC 가 신호만 계속 보내서 목록에 남아 있는 경우입니다.
      품번이 없으니 주문이 걸릴 수 없어, 이력 검사 없이 바로 지웁니다.
@@ -54,13 +85,21 @@ module.exports = async (req, res) => {
     } catch (e) {
       return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
     }
+    /* 다시 올라와도 안 보이게 숨김 목록에 넣습니다.
+       나중에 그 PC 를 제대로 등록하면 품번을 받아 대장으로 가므로
+       이 목록과 상관없이 정상으로 보입니다. */
+    let hidden = [];
+    try {
+      hidden = await readHidden();
+      if (!hidden.includes(hwId)) { hidden.push(hwId); await writeHidden(hidden); }
+    } catch (e) {}
     try {
       await sb('view_log', {
         method: 'POST', prefer: 'return=minimal',
         body: [{ pn: null, act: `미등록 PC 삭제 (${hwId})`, who: '관리자' }],
       });
     } catch (e) {}
-    return res.status(200).json({ ok: true, hwId });
+    return res.status(200).json({ ok: true, hwId, hiddenCount: hidden.length });
   }
 
   if (!isPn(pn)) return res.status(400).json({ error: '어느 PC 를 뺄지 알 수 없습니다' });
