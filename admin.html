@@ -1039,9 +1039,25 @@ function vSet(){
   </div>`;
 }
 
+/* 화면에서 PC 한 대를 찾습니다.
+
+   ★ 2026-08-18 정환님 지적 — 여기서 엉뚱한 PC 가 잡히고 있었습니다.
+     전에는 PCS.find(x=>x.pn===key||x.ad===key) 였습니다.
+     같은 PC 가 "대장(품번 있음)" 과 "미등록" 양쪽에 겹쳐 있으면
+     (재등록했는데 옛 미등록 기록이 남은 경우) 애니데스크 번호가 같아서
+     대장 쪽이 먼저 잡힙니다. 그래서 미등록 줄을 지우려고 누르면
+     멀쩡한 Y-001 (영태리 5-4-14) 이 지워질 뻔했습니다.
+
+     이제 품번이 정확히 맞는 PC 를 먼저 찾고,
+     애니데스크 번호로는 "품번이 없는 PC(미등록)" 만 찾습니다. */
+function findPc(key){
+  if(!key) return null;
+  return PCS.find(x=>x.pn===key) || PCS.find(x=>!x.pn&&x.ad===key) || null;
+}
+
 /* ═══════════════ 드로어: PC 상세 (보기 + 수정) ═══════════════ */
 function openPc(key,edit){
-  const p=PCS.find(x=>x.pn===key||x.ad===key); if(!p)return;
+  const p=findPc(key); if(!p)return;
   const o=p.order;
   const editForm=!edit?'':`
     <div class="blockttl">✏️ 정보 수정</div>
@@ -1124,7 +1140,12 @@ function openPc(key,edit){
       : `<button class="btn btn-o" data-reboot="${p.pn}"
            style="color:#E08B00;border-color:#F6DFA8">↻ 원격 재부팅</button>`):''}
     ${p.pn? `<button class="btn btn-o" data-delpc="${p.pn}"
-      style="color:var(--red);border-color:#F7CDD3">🗑 대장에서 빼기</button>`:''}
+      style="color:var(--red);border-color:#F7CDD3">🗑 대장에서 빼기</button>`
+      /* 품번이 아직 없는 PC(미등록)도 여기서 뺄 수 있어야 합니다.
+         전에는 이 버튼이 품번 있는 PC 에만 나와서, 미등록 PC 를 지우려면
+         [미등록 PC] 화면으로 되돌아가는 길밖에 없었습니다. */
+      : `<button class="btn btn-o" data-delnew="${p.ad}"
+      style="color:var(--red);border-color:#F7CDD3">🗑 목록에서 지우기</button>`}
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
@@ -1347,7 +1368,7 @@ document.addEventListener('click',async e=>{
      (전에는 관리자에서 자리를 고칠 방법이 아예 없었습니다) */
   const asg=t.closest('[data-assign]');
   if(asg){
-    const p=PCS.find(x=>x.ad===asg.dataset.assign); if(!p)return;
+    const p=findPc(asg.dataset.assign); if(!p)return;
     const inp=document.querySelector('[data-pnin="'+p.ad+'"]');
     const val=(inp&&inp.value.trim().toUpperCase())||'';
     if(!/^[KYD]-\d{3}$/.test(val)){alert('품번 형식은 K-001 · Y-042 · D-113 입니다.');return}
@@ -1384,7 +1405,7 @@ document.addEventListener('click',async e=>{
   /* 미등록 PC 지우기 — 예전에 테스트하던 PC 가 목록에 남아 있는 경우 */
   const dn=t.closest('[data-delnew]');
   if(dn){
-    const p=PCS.find(x=>x.ad===dn.dataset.delnew); if(!p)return;
+    const p=findPc(dn.dataset.delnew); if(!p)return;
     if(!confirm('이 PC 를 목록에서 지웁니다.\n\n'
       +'애니데스크  '+(p.ad||'—')+'\n'
       +p.spec.n+' · 램'+p.spec.ram+'G · SSD'+p.spec.ssd+'G\n'
@@ -1405,7 +1426,7 @@ document.addEventListener('click',async e=>{
       dn.disabled=false;
       if(!r.ok){alert(d.error||'지우지 못했습니다');return}
       const i=PCS.indexOf(p); if(i>=0) PCS.splice(i,1);
-      route();
+      closeDrawer(); route();
     }catch(e){ dn.disabled=false; alert('서버에 연결하지 못했습니다'); }
     return;
   }
@@ -1506,7 +1527,7 @@ document.addEventListener('click',async e=>{
   }
   const sv=t.closest('[data-savepc]');
   if(sv){
-    const p=PCS.find(x=>x.pn===sv.dataset.savepc||x.ad===sv.dataset.savepc); if(!p)return;
+    const p=findPc(sv.dataset.savepc); if(!p)return;
     const msg=s=>{const m=$('e-msg');if(m)m.textContent=s};
     const pn=$('e-pn').value.trim().toUpperCase();
     const ad=$('e-ad').value.trim();
@@ -1517,7 +1538,7 @@ document.addEventListener('click',async e=>{
     if(pn && pn.charAt(0)!==room){msg('품번 앞글자('+pn.charAt(0)+')와 서버실('+room+')이 다릅니다');return}
     if(pn && PCS.some(x=>x!==p&&x.pn===pn)){msg(pn+' 은 이미 사용 중인 품번입니다');return}
     if(!/^\d{6,12}$/.test(ad)){msg('애니데스크 번호는 숫자 6~12자리입니다');return}
-    if(PCS.some(x=>x!==p&&x.ad===ad)){msg('이미 다른 PC에 등록된 애니데스크 번호입니다');return}
+    if(PCS.some(x=>x!==p&&x.pn&&x.ad===ad)){msg('이미 다른 PC에 등록된 애니데스크 번호입니다');return}
     if(pw && pw.length<4){msg('비밀번호는 4자 이상이어야 합니다');return}
     const cfgL=RACKS[room];
     if(rack<1||rack>cfgL.length){msg(room+' 서버실에는 '+cfgL.length+'번 랙까지 있습니다');return}
@@ -1555,7 +1576,7 @@ document.addEventListener('click',async e=>{
   /* 비번 열람 — 누르는 순간 서버에 물어보고, 서버가 기록을 남깁니다 */
   const ps=t.closest('[data-pwshow]');
   if(ps){
-    const p=PCS.find(x=>x.pn===ps.dataset.pwshow||x.ad===ps.dataset.pwshow); if(!p)return;
+    const p=findPc(ps.dataset.pwshow); if(!p)return;
     const m=document.querySelector('[data-pwm="'+ps.dataset.pwshow+'"]');
     ps.textContent='…'; ps.disabled=true;
     const pw=await getPw(p);
@@ -1565,7 +1586,7 @@ document.addEventListener('click',async e=>{
     logView(p.pn||p.ad); ps.remove(); return;
   }
   if(t.id==='dr-pwbtn'){
-    const p=PCS.find(x=>x.pn===t.dataset.pn||x.ad===t.dataset.pn); if(!p)return;
+    const p=findPc(t.dataset.pn); if(!p)return;
     t.textContent='…'; t.disabled=true;
     const pw=await getPw(p);
     if(pw===null){ t.textContent='실패'; t.disabled=false;

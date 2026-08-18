@@ -227,6 +227,31 @@ module.exports = async (req, res) => {
       }
     }
 
+    /* 등록에 성공했으면 이 PC 의 옛 "미등록" 기록을 치웁니다.
+
+       ★ 2026-08-18 정환님 지적 — 이게 없어서 한 대가 두 줄로 보였습니다.
+         대장에서 사라졌던 PC 를 다시 등록하면, 대장에는 정상으로 들어오는데
+         pcs_unregistered 에 남아 있던 옛 줄이 그대로 있었습니다.
+         두 줄의 애니데스크 번호가 같으니, 미등록 줄을 지우려다
+         멀쩡한 품번(Y-001)이 지워질 뻔했습니다.
+
+       하트비트가 만든 줄은 hw_id 가 'lost:<애니데스크번호>' 입니다.
+       여기서 실패해도 등록 자체는 이미 끝났으므로 조용히 넘어갑니다. */
+    if (row.anydesk) {
+      try {
+        await sb('pcs_unregistered', {
+          method: 'DELETE',
+          query: `?hw_id=eq.${encodeURIComponent('lost:' + row.anydesk)}`,
+          prefer: 'return=minimal',
+        });
+        await sb('pcs_unregistered', {
+          method: 'DELETE',
+          query: `?anydesk=eq.${encodeURIComponent(row.anydesk)}`,
+          prefer: 'return=minimal',
+        });
+      } catch (e) {}
+    }
+
     res.status(200).json({
       ok: true,
       pn: finalPn,
