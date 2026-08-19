@@ -431,6 +431,28 @@ const cnt=st=>PCS.filter(p=>p.st===st).length;
 const stTag=p=>'<span class="tag '+STC[p.st]+'"><i></i>'+ST[p.st]+'</span>';
 const locStr=p=>p.roomName+' '+p.rack+'-'+p.fl+'-'+p.slot;
 
+/* ── 관리자에서 보는 사양 이름 ────────────────────────────────────
+   고객에게는 상품명만 나갑니다 (라이젠 3700X).
+   우리 화면에서는 실제 칩이 다르면 괄호로 덧붙입니다 —
+   3800XT 를 3700X 상품으로 파는데, 랙 앞에서 어느 PC 가 실제로
+   3800XT 인지 못 보면 교체·수리 때 헷갈립니다.
+
+     라이젠 3700X            ← 진짜 3700X
+     라이젠 3700X (3800XT)   ← 3800XT 를 3700X 로 파는 것
+
+   ※ 상품명 안에 이미 그 모델 번호가 들어 있으면 덧붙이지 않습니다.
+     (5600G 가 "라이젠 5600G~5700G" 상품인 경우 등) */
+const cpuModel=cpu=>{
+  const m=String(cpu||'').match(/\b(\d{4}[A-Z]{0,2})\b/i);
+  return m? m[1].toUpperCase() : '';
+};
+const specTx=p=>{
+  const n=(p.spec&&p.spec.n)||'';
+  if(!n) return p.cpu||'사양 확인중';
+  const md=cpuModel(p.cpu);
+  return (md && !n.toUpperCase().replace(/\s/g,'').includes(md)) ? n+' ('+md+')' : n;
+};
+
 /* ── 주문에 PC 가 안 붙어 있을 수 있습니다 ─────────────────────────
    · 결제는 됐는데 아직 배정 전
    · 그 PC 를 대장에서 뺀 경우
@@ -543,7 +565,7 @@ function vNew(){
           <td class="pn" style="color:#8A6100">${p.claimedPn}</td>
           <td><b class="num" style="font-size:16px">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b>
             ${p.ad?`<button class="btn btn-o btn-sm" data-copy="${p.ad}" style="margin-left:8px">복사</button>`:''}</td>
-          <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+          <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
           <td class="num dim">${p.ip||'—'}</td>
           ${(()=>{ /* 아직 신호가 오는지, 이미 끝난 옛 기록인지 구분해 줍니다.
                       5분 넘게 조용하면 그 PC 는 이미 되살아났거나 꺼진 것이라
@@ -586,7 +608,7 @@ function vNew(){
           <input type="number" min="1" max="99" value="${p.slot||''}" placeholder="자리"
             data-for="${p.ad}" data-loc="slot" style="${ns}"></td>
         <td class="num">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
-        <td class="dim">${p.spec.n} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+        <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
         <td><span class="tag t-ok"><i></i>입력됨</span></td>
         <td><input value="${sug[p.ad]}" data-pnin="${p.ad}"
           style="width:90px;height:32px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-weight:800"></td>
@@ -618,7 +640,7 @@ function vVerify(){
       <thead><tr><th>품번</th><th>위치</th><th>사양</th><th>애니데스크</th><th>비밀번호</th><th></th></tr></thead>
       <tbody>${list.map(p=>`
       <tr><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
-      <td class="dim">${p.spec.n}</td>
+      <td class="dim">${specTx(p)}</td>
       <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
       <td><span class="mask" data-pwm="${p.pn}">••••••</span>
         <button class="btn btn-o btn-sm" data-pwshow="${p.pn}">보기</button></td>
@@ -680,7 +702,7 @@ function vToday(){
     <div class="sec-h"><h3>🔧 점검중 — 처리 후 판매 전환</h3><span class="cnt">${fix.length}</span></div>
     <div class="sec-b"><table class="tbl"><tbody>${fix.slice(0,10).map(p=>`
       <tr data-pc="${p.pn}"><td class="pn">${locStr(p)}</td><td>${p.pn}</td>
-      <td class="dim">${p.spec.n}</td><td>${p.memo||'<span class="dim">메모 없음</span>'}</td></tr>`).join('')
+      <td class="dim">${specTx(p)}</td><td>${p.memo||'<span class="dim">메모 없음</span>'}</td></tr>`).join('')
       ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
   </div>`;
 }
@@ -793,7 +815,7 @@ function vPcs(){
       <tbody>${V.map(p=>`
       <tr data-pc="${p.pn||p.ad}"><td class="pn">${p.pn||'<span class="dim">미등록</span>'}</td>
       <td class="dim">${locStr(p)}</td><td>${stTag(p)}</td>
-      <td class="dim">${p.spec.n}</td>
+      <td class="dim">${specTx(p)}</td>
       <td class="num dim">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
       <td class="num dim">${p.ip}</td>
       <td>${p.order? p.order.nm+(p.order.mis?' <span class="warnbadge">⚠</span>':'') : '<span class="dim">—</span>'}</td></tr>`).join('')}
@@ -912,10 +934,10 @@ function openMem(ph){
     <textarea id="al-msg" style="width:100%;height:120px;border:1px solid var(--line);border-radius:9px;
       padding:11px 13px;font:inherit;line-height:1.7;resize:vertical"></textarea>
     <div class="dim" style="font-size:12px;margin-top:6px">
-      알림톡으로 발송되고, 카톡 미설치·차단이면 <b>문자로 자동 전환</b>됩니다.</div>
+      발송 업체를 정하기 전이라, 지금은 이 내용을 복사해 카카오톡·문자로 직접 보내십니다.</div>
   </div>
   <div class="dracts">
-    <button class="btn btn-r" data-dosend="${m.ph}">알림톡 발송</button>
+    <button class="btn btn-b" data-dosend="${m.ph}">문구 복사</button>
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
@@ -976,30 +998,28 @@ function vOrders(){
 function vNoti(){
   const exp=ORDERS.filter(o=>o.left<=SET.notiDay);
   return `
-  <div class="top"><h1>알림 발송</h1>
-    <span class="live">만료 D-${SET.notiDay} 자동 발송 · 알림톡 실패 시 문자로 자동 전환</span></div>
+  <div class="top"><h1>만료 안내</h1>
+    <span class="live">만료 D-${SET.notiDay} 이내인 분들입니다 · 자동 발송은 아직 붙지 않았습니다</span></div>
   <div class="card">
-    <div class="sec-h"><h3>만료 안내 대상</h3><span class="cnt">${exp.length}</span>
-      <div class="r"><button class="btn btn-r btn-sm" id="noti-all">전체 발송 (시뮬레이션)</button></div></div>
+    <div class="sec-h"><h3>연락드릴 분</h3><span class="cnt">${exp.length}</span>
+      <div class="r"><button class="btn btn-o btn-sm" id="noti-all">전체 명단 복사</button></div></div>
     <div class="sec-b"><table class="tbl">
-      <thead><tr><th>품번</th><th>회원</th><th>연락처</th><th>가입</th><th>만료</th><th>발송 채널</th><th>상태</th></tr></thead>
-      <tbody>${exp.map((o,i)=>{
-        const st=i%5===0?'wait':(o.via==='google'&&i%3===0)?'sms':'ok';
-        return `<tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
+      <thead><tr><th>품번</th><th>회원</th><th>연락처</th><th>가입</th><th>만료</th><th>안내 문구</th></tr></thead>
+      <tbody>${exp.map(o=>
+        `<tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
         <td class="num dim">${o.ph}</td><td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
         <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b> <span class="dim">${fmtD(o.end)}</span></td>
-        <td class="dim">알림톡 → 문자 전환</td>
-        <td>${st==='ok'?'<span class="noti-st n-ok">✓ 알림톡 발송됨</span>'
-             :st==='sms'?'<span class="noti-st n-sms">→ 문자 전환됨</span>'
-             :'<button class="btn btn-b btn-sm" data-noti1>발송</button>'}</td></tr>`}).join('')}
+        <td><button class="btn btn-b btn-sm" data-noti1="${o.no}">문구 복사</button></td></tr>`).join('')}
       </tbody></table></div>
   </div>
-  <div class="card" style="margin-top:14px"><div class="sec-b pad" style="font-size:13px;color:var(--ink3);line-height:1.85">
-    <b style="color:var(--ink)">발송 규칙</b> — 알림톡은 카카오 가입 여부와 무관하게 <b>전화번호로 발송</b>됩니다.
-    카톡 미설치·차단으로 실패하면 같은 내용이 <b>문자(LMS)로 자동 전환</b>됩니다.
-    그래서 구글 가입자도 알림을 받습니다 — 전화번호만 정확하면 됩니다.<br>
-    발송 내용: 만료일 · 품번 · 원클릭 연장 링크 (자동결제 아님, 고객이 눌러서 연장)
-  </div></div>`;
+  <div class="card" style="margin-top:14px"><div class="sec-b pad"
+    style="font-size:13px;color:var(--ink3);line-height:1.85">
+    <b style="color:var(--ink)">지금은 이렇게 쓰십니다</b> — [문구 복사] 를 누르면 그분에게 보낼 안내문이
+    복사됩니다. 카카오톡이나 문자에 그대로 붙여넣어 보내시면 됩니다.<br>
+    발송 업체(알리고·솔라피)를 정하시면 이 화면에서 <b>바로 발송</b>되도록 바꿉니다.
+    그때까지는 잘못된 발송 표시를 띄우지 않습니다 — 보냈다고 나오는데 안 가면 그게 더 위험합니다.
+  </div></div>
+  `;
 }
 
 /* ═══════════════ 화면: 통합검색 ═══════════════ */
@@ -1023,7 +1043,7 @@ function vFind(){
   ${q.length<2? `<div class="card"><div class="empty2"><b>두 글자 이상 입력하세요</b>고객이 어떤 이름으로 문의해도, 품번 하나만 알아도 찾을 수 있습니다.</div></div>`:`
   <div class="hitgrp"><div class="gt">PC (${pcHits.length})</div>
     ${pcHits.map(p=>`<div class="hit" data-pc="${p.pn||p.ad}"><b>${p.pn||'미등록'}</b>
-      <span class="dim">${locStr(p)} · ${p.spec.n} · 애니 ${p.ad}</span>${stTag(p)}</div>`).join('')
+      <span class="dim">${locStr(p)} · ${specTx(p)} · 애니 ${p.ad}</span>${stTag(p)}</div>`).join('')
       ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 PC 없음</span></div>'}</div>
   <div class="hitgrp"><div class="gt">주문 · 고객 (${ordHits.length})</div>
     ${ordHits.map(o=>`<div class="hit" data-ord="${o.no}"><b>${o.nm}</b>
@@ -1110,7 +1130,7 @@ function openPc(key,edit){
     <div class="kv">
       <span class="k">위치</span><span class="v big">${locStr(p)}</span>
       <span class="k">상태</span><span class="v">${ST[p.st]} <span class="dim num">· 마지막 신호 ${p.st==='down'?'끊김':p.beat+'초 전'}</span></span>
-      <span class="k">사양</span><span class="v">${p.spec.n} · ${p.spec.core} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
+      <span class="k">사양</span><span class="v">${specTx(p)} · ${p.spec.core} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
       <span class="k">그래픽</span><span class="v">${p.spec.gpu}</span>
       <span class="k">공인IP</span><span class="v num">${p.ip}</span>
       <span class="k">애니 번호</span><span class="v num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</span>
@@ -1144,6 +1164,10 @@ function openPc(key,edit){
     <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>v.t+' — '+(v.act||'열람')).join('<br>')||'기록 없음'}</div>
   </div>
   <div class="dracts">
+    ${/* 임대 가능한 PC 는 여기서 바로 고객을 붙일 수 있어야 합니다.
+          스마트스토어·전화로 들어온 주문이 대부분이라, 랙맵에서 초록 칸을
+          누른 그 자리에서 배정이 끝나야 합니다. */''}
+    ${p.st==='ok'? `<button class="btn btn-r" data-pcassign="${p.pn}">👤 이 PC 에 고객 배정</button>`:''}
     ${edit?'':`<button class="btn btn-o" data-editpc="${key}">✏️ 정보 수정 · 자리 변경</button>`}
     ${p.st==='unv'? `<button class="btn btn-g" data-verok="${p.pn}">접속 확인 완료 → 판매</button>`:''}
     ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
@@ -1219,8 +1243,13 @@ function openOrd(no){
   </div>
   <div class="dracts">
     <button class="btn btn-b" data-copycust="${o.no}">📋 고객 전달용 복사 (위치 제외)</button>
-    <button class="btn btn-o" data-resend="${o.no}">문자 재발송</button>
     <button class="btn btn-o" data-extend="${o.no}">30일 연장</button>
+    ${/* 서버에는 있는데 버튼이 없어 못 쓰던 것들입니다 */''}
+    <button class="btn btn-o" data-custedit="${o.no}">👤 고객 정보 수정</button>
+    <button class="btn btn-o" data-taxreq="${o.no}">
+      🧾 세금계산서 ${o.taxInvoice? `요청됨${o.bizNo?' · '+o.bizNo:''}` : '요청'}</button>
+    <button class="btn btn-o" data-cancelord="${o.no}"
+      style="color:var(--red);border-color:#F7CDD3">해지 · 환불</button>
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
@@ -1228,7 +1257,44 @@ function openOrd(no){
 function closeDrawer(){$('drawer').classList.remove('on');$('overlay').classList.remove('on')}
 
 /* ═══════════════ 드로어: 수동 주문 등록 (스마트스토어 병행) ═══════════════ */
-function openManual(){
+/* ═══════════════ 드로어: 고객 정보 수정 ═══════════════
+   전화·스마트스토어 주문은 사람이 받아 적기 때문에 오타가 납니다.
+   번호가 바뀌거나, 결제한 분과 실제 쓰시는 분이 다르다는 걸
+   뒤늦게 아는 일도 흔합니다. 그때 여기서 고칩니다. */
+function openCust(no){
+  const o=ORDERS.find(x=>x.no===no); if(!o)return;
+  const inp=(id,v,ph)=>`<input id="${id}" value="${(v||'').replace(/"/g,'&quot;')}" placeholder="${ph}"
+    style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px">`;
+  $('drawer').innerHTML=`
+  <div class="hd"><b>고객 정보 수정</b><span class="dim" style="font-size:12px">${o.no} · ${oPn(o)}</span>
+    <button class="x" data-close>✕</button></div>
+  <div class="bd">
+    <p class="dim" style="font-size:13px;margin-bottom:14px">
+      여기서 고친 성함·연락처로 <b>만료 알림과 통합검색</b>이 걸립니다.
+      실제로 연락이 닿는 번호인지 꼭 확인해 주세요.</p>
+    <div class="kv">
+      <span class="k">고객 성함</span><span class="v">${inp('c-nm',o.nm,'주문자 성함')}</span>
+      <span class="k">연락처</span><span class="v">${inp('c-ph',o.ph,'010-0000-0000')}</span>
+    </div>
+    <div class="blockttl">결제자 · 이용자가 다른 경우에만</div>
+    <div class="kv">
+      <span class="k">결제자</span><span class="v">${inp('c-pnm',o.payer,'비워두면 고객 성함과 같음')}</span>
+      <span class="k">이용자</span><span class="v">${inp('c-unm',o.userNm,'비워두면 고객 성함과 같음')}</span>
+      <span class="k">이용자 연락처</span><span class="v">${inp('c-uph',o.userPh,'비워두면 위 연락처와 같음')}</span>
+    </div>
+    <div id="c-msg" style="font-size:12.5px;color:var(--red);font-weight:700;min-height:18px;margin-top:10px"></div>
+  </div>
+  <div class="dracts">
+    <button class="btn btn-b" data-custsave="${o.no}">저장</button>
+    <button class="btn btn-o" data-close>취소</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+}
+
+/* pn 을 주면 그 PC 를 미리 골라 둡니다.
+   랙맵에서 초록 칸을 눌러 바로 배정할 수 있어야 합니다 —
+   예전에는 [주문·고객] 화면까지 가서 목록에서 그 PC 를 다시 찾아야 했습니다. */
+function openManual(pn){
   const avail=PCS.filter(p=>p.st==='ok').slice(0,120);
   $('drawer').innerHTML=`
   <div class="hd"><b>수동 주문 등록</b><span class="tag t-fix"><i></i>스마트스토어 · 전화 주문</span>
@@ -1239,7 +1305,8 @@ function openManual(){
     <div class="kv">
       <span class="k">PC 선택</span><span class="v">
         <select id="m-pc" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px">
-          ${avail.map(p=>`<option value="${p.pn}">${p.pn} — ${p.spec.n} (${w(p.spec.p)}원/30일)</option>`).join('')}
+          ${avail.length? avail.map(p=>`<option value="${p.pn}" ${p.pn===pn?'selected':''}>${p.pn} — ${locStr(p)} — ${specTx(p)} (${w(p.spec.p)}원/30일)</option>`).join('')
+            : '<option value="">임대 가능한 PC 가 없습니다</option>'}
         </select></span>
       <span class="k">고객명</span><span class="v">
         <input id="m-nm" placeholder="주문자 성함" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px"></span>
@@ -1441,7 +1508,7 @@ document.addEventListener('click',async e=>{
     const p=findPc(dn.dataset.delnew); if(!p)return;
     if(!confirm('이 PC 를 목록에서 지웁니다.\n\n'
       +'애니데스크  '+(p.ad||'—')+'\n'
-      +p.spec.n+' · 램'+p.spec.ram+'G · SSD'+p.spec.ssd+'G\n'
+      +specTx(p)+' · 램'+p.spec.ram+'G · SSD'+p.spec.ssd+'G\n'
       +(p.pn?'품번  '+p.pn+'\n':'')
       +(p.claimedPn?'본인 주장 품번  '+p.claimedPn+'\n':'')
       +'위치  '+locStr(p)+'\n'
@@ -1493,10 +1560,10 @@ document.addEventListener('click',async e=>{
     const m=membersOf().find(x=>x.ph===dosend.dataset.dosend);
     const msg=$('al-msg').value.trim();
     if(!msg){alert('보낼 내용을 입력해 주세요.');return}
-    logView(m.pcs[0].pn,'알림 발송 — '+m.nm+' ('+m.ph+')');
-    dosend.textContent='✓ 발송 요청됨'; dosend.disabled=true;
-    setTimeout(()=>{closeDrawer();
-      alert('실서비스에서는 여기서 알림톡이 발송되고,\n실패 시 문자로 자동 전환됩니다.\n\n대상: '+m.nm+' ('+m.ph+')')},400);
+    logView(m.pcs[0].pn,'안내 문구 복사 — '+m.nm+' ('+m.ph+')');
+    (navigator.clipboard? navigator.clipboard.writeText(msg):Promise.reject())
+      .then(()=>{dosend.textContent='✓ 복사됨';setTimeout(()=>{dosend.textContent='문구 복사'},1600)})
+      .catch(()=>{prompt(m.nm+'님('+m.ph+') 에게 보낼 내용입니다. 복사해 주세요.',msg)});
     return;
   }
   /* PC 정보 수정 (품번 · 애니번호 · 비번 · 위치 · 메모) */
@@ -1631,6 +1698,10 @@ document.addEventListener('click',async e=>{
 
   /* 수동 주문 등록 */
   if(t.closest('[data-manual]')){openManual();return}
+  /* 랙맵·PC 상세에서 그 PC 를 지정해 바로 배정.
+     ※ data-assign 은 이미 [미등록 PC 품번 부여]가 쓰고 있어 이름이 다릅니다. */
+  const pcasg=t.closest('[data-pcassign]');
+  if(pcasg){openManual(pcasg.dataset.pcassign);return}
   if(t.id==='m-mis'){$('m-misbox').hidden=!t.checked;return}
   if(t.closest('[data-mansave]')){
     const msg=s=>{$('m-msg').textContent=s};
@@ -1706,12 +1777,142 @@ document.addEventListener('click',async e=>{
       .catch(()=>{prompt('아래 내용을 복사하세요 (위치 미포함)',txt)});
     logView(p.pn,'고객 전달용 정보 복사'); return;
   }
-  /* 알림 개별 발송 */
+  /* 만료 안내 문구 복사 — 발송 업체를 정하기 전까지는 직접 붙여넣어 보내십니다 */
   const n1=t.closest('[data-noti1]');
-  if(n1){n1.outerHTML='<span class="noti-st n-ok">✓ 발송 요청됨</span>';return}
+  if(n1){
+    const o=ORDERS.find(x=>x.no===n1.dataset.noti1); if(!o)return;
+    const txt='[한국 가상컴] 이용 만료 안내\n\n'
+      +o.nm+'님, 사용 중이신 가상컴 '+oPn(o)+' 의\n'
+      +'이용 기간이 '+fmtD(o.end)+' 에 만료됩니다. (D-'+o.left+')\n\n'
+      +'계속 이용하시려면 연장해 주세요.\n'
+      +'   연장 문의 : 010-8446-8710\n'
+      +'   카카오톡 : 「한국 가상컴」 채널\n\n'
+      +'감사합니다.';
+    (navigator.clipboard? navigator.clipboard.writeText(txt):Promise.reject())
+      .then(()=>{n1.textContent='✓ 복사됨';setTimeout(()=>{n1.textContent='문구 복사'},1600)})
+      .catch(()=>{prompt('아래 내용을 복사해 보내 주세요',txt)});
+    return;
+  }
 
-  if(t.closest('[data-resend]')){alert('실서비스에서는 접속 정보 문자가 재발송됩니다.');return}
+  /* 해지 · 환불 — 고객 카드에서 실제로 돈이 돌아갑니다.
+     ★ 금액은 반드시 서버가 계산한 값을 씁니다.
+       화면 계산과 서버 계산이 어긋나면 돈이 잘못 나갑니다. */
+  const cn=t.closest('[data-cancelord]');
+  if(cn){
+    const o=ORDERS.find(x=>x.no===cn.dataset.cancelord); if(!o)return;
+    if(!LIVE){ alert('서버에 연결된 상태에서만 해지할 수 있습니다.'); return; }
+    cn.disabled=true;
+
+    /* 1) 규정대로 얼마인지 서버에 물어봅니다 */
+    let q;
+    try{
+      const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({no:o.no, act:'quote'})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){ cn.disabled=false; alert(d.error||'환불 금액을 계산하지 못했습니다'); return; }
+      q=d.quote||{};
+    }catch(e){ cn.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+
+    const 안내 = q.allowed
+      ? `환불 ${w(q.refund)}원\n\n`
+        + `   결제      ${w(o.amt)}원 (${o.days}일)\n`
+        + `   사용      ${q.used}일 × ${w(q.perDay)}원\n`
+        + `   세팅비    −${w(q.setupFee)}원\n\n`
+        + `고객에게 실제로 환불됩니다.`
+      : `${q.used}일 사용 — 7일이 지나 환불 대상이 아닙니다.\n\n`
+        + `환불 없이 해지만 하시겠습니까?\n(PC 는 판매 재고로 돌아갑니다)`;
+    if(!confirm(`${o.nm}님 · ${oPn(o)} 해지\n\n${안내}`)){ cn.disabled=false; return; }
+
+    const why=prompt('해지 사유를 적어 주세요 (기록에 남습니다)','고객 요청');
+    if(why===null){ cn.disabled=false; return; }
+
+    const send=async extra=>{
+      const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(Object.assign({no:o.no, act:'cancel', why}, extra))});
+      return { r, d: await r.json().catch(()=>({})) };
+    };
+
+    let out;
+    try{ out=await send({}); }
+    catch(e){ cn.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+
+    /* 가상계좌는 돌려드릴 통장을 알려줘야 토스가 취소해 줍니다 */
+    if(out.r.status===409 && out.d.needAccount){
+      const bank=prompt('돌려드릴 은행 (예: 신한)');   if(bank===null){cn.disabled=false;return}
+      const num=prompt('계좌번호 (숫자만)');            if(num===null){cn.disabled=false;return}
+      const holder=prompt('예금주');                     if(holder===null){cn.disabled=false;return}
+      try{ out=await send({account:{bank,num,holder}}); }
+      catch(e){ cn.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    }
+    cn.disabled=false;
+    if(!out.r.ok){ alert(out.d.error||'해지하지 못했습니다'); return; }
+
+    alert('해지되었습니다.\n\n'
+      + (out.d.moneyBack   ? `✓ 토스에서 ${w(out.d.refund)}원이 환불되었습니다.`
+       : out.d.manualRefund? `⚠ 토스 결제가 아니라 자동 환불이 안 됩니다.\n`
+                           + `   ${w(out.d.refund)}원을 직접 보내 주셔야 합니다.`
+       :                     '환불액은 없습니다.')
+      + (out.d.pcReturned ? `\n✓ ${oPn(o)} 이 판매 재고로 돌아갔습니다.` : ''));
+    closeDrawer();
+    await syncLive(); return;
+  }
+
   /* 기간 연장 — 서버에 저장해야 실제로 늘어납니다 */
+  /* 고객 정보 수정 창 열기 */
+  const ce=t.closest('[data-custedit]');
+  if(ce){ openCust(ce.dataset.custedit); return }
+
+  /* 고객 정보 저장 */
+  const cs=t.closest('[data-custsave]');
+  if(cs){
+    const o=ORDERS.find(x=>x.no===cs.dataset.custsave); if(!o)return;
+    const g=id=>($(id)&&$(id).value||'').trim();
+    const nm=g('c-nm'), ph=g('c-ph'), pnm=g('c-pnm'), unm=g('c-unm'), uph=g('c-uph');
+    if(!nm){ $('c-msg').textContent='고객 성함을 적어 주세요'; return }
+    cs.disabled=true;
+    if(LIVE){
+      try{
+        const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({no:o.no, act:'cust', name:nm, phone:ph,
+                               payerName:pnm, userName:unm, userPhone:uph})});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok){ cs.disabled=false; $('c-msg').textContent=d.error||'저장하지 못했습니다'; return; }
+      }catch(e){ cs.disabled=false; $('c-msg').textContent='서버에 연결하지 못했습니다'; return; }
+    }
+    o.nm=nm; o.ph=ph; o.payer=pnm||nm; o.userNm=unm||nm; o.userPh=uph||ph;
+    o.mis=!!(pnm && unm && pnm!==unm);
+    logView(o.pn||o.no,'고객 정보 수정 — '+nm);
+    closeDrawer(); route(); return;
+  }
+
+  /* 세금계산서 요청 — 서버에는 있었는데 버튼이 없어 못 쓰던 기능입니다 */
+  const tx=t.closest('[data-taxreq]');
+  if(tx){
+    const o=ORDERS.find(x=>x.no===tx.dataset.taxreq); if(!o)return;
+    const biz=prompt(o.nm+'님 '+oPn(o)+' 세금계산서 요청입니다.\n'
+      +'사업자등록번호를 숫자 10자리로 적어 주세요. (모르시면 비워두셔도 됩니다)',
+      o.bizNo||'');
+    if(biz===null)return;
+    const only=String(biz).replace(/[^\d]/g,'');
+    if(only && only.length!==10){ alert('사업자등록번호는 숫자 10자리입니다.'); return }
+    tx.disabled=true;
+    if(LIVE){
+      try{
+        const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({no:o.no, act:'tax', bizNo:only})});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok){ tx.disabled=false; alert(d.error||'저장하지 못했습니다'); return; }
+      }catch(e){ tx.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    }
+    o.taxInvoice=true; o.bizNo=only||null;
+    logView(o.pn||o.no,'세금계산서 요청'+(only?' · '+only:''));
+    closeDrawer(); route(); return;
+  }
+
   const ex=t.closest('[data-extend]');
   if(ex){
     const o=ORDERS.find(x=>x.no===ex.dataset.extend); if(!o)return;
@@ -1731,7 +1932,17 @@ document.addEventListener('click',async e=>{
     o.days+=30; o.amt+=(+amt||0);
     ORDERS.sort((a,b)=>a.left-b.left); closeDrawer(); route(); return;
   }
-  if(t.id==='noti-all'){alert('실서비스에서는 대상 전원에게 알림톡이 발송되고,\n실패 건은 문자로 자동 전환됩니다.');return}
+  /* 전체 명단 복사 — 엑셀에 그대로 붙습니다 (탭으로 칸이 나뉩니다) */
+  if(t.id==='noti-all'){
+    const exp=ORDERS.filter(o=>o.left<=SET.notiDay);
+    if(!exp.length){ alert('만료가 가까운 분이 없습니다.'); return; }
+    const txt='품번\t회원\t연락처\t만료일\t남은일\n'
+      + exp.map(o=>[oPn(o),o.nm,o.ph,fmtD(o.end),'D-'+o.left].join('\t')).join('\n');
+    (navigator.clipboard? navigator.clipboard.writeText(txt):Promise.reject())
+      .then(()=>{t.textContent='✓ '+exp.length+'명 복사됨';setTimeout(()=>{t.textContent='전체 명단 복사'},1800)})
+      .catch(()=>{prompt('아래 명단을 복사하세요',txt)});
+    return;
+  }
 
   if(t.id==='findgo'){FQ=$('findq').value;route();return}
 
@@ -1830,6 +2041,11 @@ function applyLive(d){
       spec: SPECS.find(s=>s.id===p.spec_id) ||
             {id:p.spec_id||null, n:p.cpu||'사양 미확인', core:p.core||'',
              ram:p.ram_gb||0, ssd:p.ssd_gb||0, gpu:p.gpu||'', p:0},
+      /* 실제로 읽어온 CPU 이름을 따로 남겨 둡니다.
+         상품에 묶이면 spec.n 이 상품명(라이젠 3700X)으로 덮여서,
+         이 PC 가 실제로 어떤 칩인지(3800XT) 우리도 못 보게 됩니다.
+         고객 화면에는 상품명만 나가고, 관리자에서만 괄호로 덧붙입니다. */
+      cpu:p.cpu||'',
       ad:p.anydesk||'', pw:'', ip:p.ip||'',
       beat:p.beatAge, live:p.live, inUse:p.in_use,
       /* 걸어둔 명령 — 그 PC 가 다음 신호를 보낼 때 받아가고 사라집니다.

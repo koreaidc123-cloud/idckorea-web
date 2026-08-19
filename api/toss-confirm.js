@@ -110,21 +110,32 @@ module.exports = async (req, res) => {
        ★ online 칸만 보면 안 됩니다. 그 칸은 신호가 끊겨도 true 로 남습니다.
          마지막 신호 시각까지 함께 봐야 꺼진 PC 를 고객에게 배정하지 않습니다. */
     const fresh = new Date(now.getTime() - beatCutoffSec() * 1000).toISOString();
+    /* 후보를 여러 대 받아 둡니다. 한 대만 받아 오면 그 사이 다른 주문이
+       가져갔을 때 결제는 됐는데 배정이 통째로 실패합니다. */
     const cand = await sb('pcs', {
       query: `?select=pn,anydesk,room,rack,fl,slot&status=eq.ok&online=is.true` +
              `&last_beat=gte.${fresh}` +
-             `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=1`,
+             `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=5`,
     });
-    assigned = cand && cand[0] ? cand[0] : null;
 
-    if (assigned) {
-      await sb('pcs', {
+    /* ★ 실제로 잡히는 PC 가 나올 때까지 다음 후보로 넘어갑니다.
+       status=eq.ok 를 조건으로 건 PATCH 는 이미 남이 가져간 PC 를
+       한 줄도 안 바꿉니다. 예전에는 return=minimal 이라 안 바뀐 것을
+       알 수가 없어서 그냥 넘어갔고, 관리자가 수동으로 배정한 PC 를
+       고객이 결제로 또 받아가는 일이 생길 수 있었습니다.
+       두 사람에게 같은 애니데스크 번호와 비밀번호가 나갑니다. */
+    for (const c of (cand || [])) {
+      const got = await sb('pcs', {
         method: 'PATCH',
-        query: `?pn=eq.${encodeURIComponent(assigned.pn)}&status=eq.ok`,   // 그 사이 남이 가져갔으면 안 바뀝니다
+        query: `?pn=eq.${encodeURIComponent(c.pn)}&status=eq.ok&select=pn`,
         body: { status: 'rent', updated_at: now.toISOString() },
-        prefer: 'return=minimal',
+        prefer: 'return=representation',
       });
+      if (got && got[0]) { assigned = c; break; }
     }
+    /* 한 대도 못 잡으면 배정 없이 결제 완료로 둡니다 (status='paid', pn=null).
+       관리자 화면에 배정 대기로 뜨고, 거기서 직접 배정합니다.
+       결제는 이미 승인됐으므로 여기서 실패로 되돌릴 수 없습니다. */
 
     await sb('orders', {
       method: 'PATCH',

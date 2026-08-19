@@ -78,17 +78,22 @@ module.exports = async (req, res) => {
     const fresh = new Date(now.getTime() - Number(process.env.KVC_ASSIGN_FRESH_SEC || 420) * 1000).toISOString();
     const cand = await sb('pcs', {
       query: `?select=pn,anydesk&status=eq.ok&online=is.true&last_beat=gte.${fresh}` +
-             `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=1`,
+             `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=5`,
     });
-    const pc = cand && cand[0];
 
-    if (pc) {
-      await sb('pcs', {
+    /* ★ 실제로 잡히는 PC 가 나올 때까지 다음 후보로 넘어갑니다.
+       status=eq.ok 조건이 걸린 PATCH 는 이미 남이 가져간 PC 를 한 줄도
+       안 바꿉니다. 예전에는 return=minimal 이라 안 바뀐 것을 알 수 없어서,
+       관리자가 수동 배정한 PC 를 입금 고객이 또 받아갈 수 있었습니다. */
+    let pc = null;
+    for (const c of (cand || [])) {
+      const got = await sb('pcs', {
         method: 'PATCH',
-        query: `?pn=eq.${encodeURIComponent(pc.pn)}&status=eq.ok`,
+        query: `?pn=eq.${encodeURIComponent(c.pn)}&status=eq.ok&select=pn`,
         body: { status: 'rent', updated_at: now.toISOString() },
-        prefer: 'return=minimal',
+        prefer: 'return=representation',
       });
+      if (got && got[0]) { pc = c; break; }
     }
     await sb('orders', {
       method: 'PATCH',

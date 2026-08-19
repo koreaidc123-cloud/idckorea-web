@@ -82,44 +82,73 @@ module.exports = async (req, res) => {
       if (!pc) return res.status(409).json({ error: '지금 배정할 수 있는 PC 가 없습니다. 품번을 직접 지정해 주세요' });
     }
 
+    /* ── ★ PC 부터 잡습니다 ────────────────────────────────────────
+       예전에는 주문을 먼저 만들고 PC 를 나중에 잡았습니다. 그 사이에
+       다른 고객이 홈페이지에서 결제하면 같은 PC 를 가져갈 수 있고,
+       그러면 주문만 남고 PC 는 남의 것이 됩니다.
+       두 고객이 같은 애니데스크 번호와 비밀번호를 받게 됩니다.
+
+       status=eq.ok 를 조건으로 걸면 이미 남이 가져간 PC 는 한 줄도
+       안 바뀝니다. 예전에는 return=minimal 이라 안 바뀐 것을 알 수가
+       없어서 그냥 넘어갔습니다. 이제 바뀐 줄을 실제로 받아 확인합니다. */
+    const locked = await sb('pcs', {
+      method: 'PATCH',
+      query: `?pn=eq.${encodeURIComponent(pc.pn)}&status=eq.ok&select=pn`,
+      body: { status: 'rent', updated_at: now.toISOString() },
+      prefer: 'return=representation',
+    });
+    if (!(locked && locked[0])) {
+      return res.status(409).json({
+        error: `${pc.pn} 은 방금 다른 주문에 배정됐습니다. 새로고침 후 다시 확인해 주세요`,
+      });
+    }
+    /* 뒤에서 실패하면 잡아둔 PC 를 반드시 놓아줍니다.
+       안 그러면 아무도 안 쓰는데 임대중으로 남아 영영 안 팔립니다. */
+    const unlock = async () => {
+      try {
+        await sb('pcs', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?pn=eq.${encodeURIComponent(pc.pn)}&status=eq.rent`,
+          body: { status: 'ok', updated_at: new Date().toISOString() },
+        });
+      } catch (e) {}
+    };
+
     /* ── 회원 — 전화번호가 같으면 같은 사람으로 봅니다 ── */
     let memberId = null;
-    const found = await sb('members', {
-      query: `?select=id&phone=eq.${encodeURIComponent(phone)}&limit=1`,
-    });
-    if (found && found[0]) memberId = found[0].id;
-    else {
-      const made = await sb('members', {
-        method: 'POST', prefer: 'return=representation',
-        body: [{ via: 'manual', social_id: 'manual:' + phone, name, phone }],
-      });
-      memberId = made && made[0] ? made[0].id : null;
-    }
-
-    /* ── 주문 ── */
     const orderId = newOrderId();
-    await sb('orders', {
-      method: 'POST', prefer: 'return=minimal',
-      body: [{
-        order_id: orderId, member_id: memberId, pn: pc.pn,
-        spec_id: q.specId, days: q.days, amount,
-        status: 'assigned',
-        pay_method: str(b.payMethod, 30) || '수동 등록',
-        paid_at: now.toISOString(),
-        starts_at: starts.toISOString(), ends_at: ends.toISOString(),
-        payer_name: str(b.payerName, 30) || name,
-        user_name: str(b.userName, 30) || name,
-        user_phone: str(b.userPhone, 20) || phone,
-      }],
-    });
+    try {
+      const found = await sb('members', {
+        query: `?select=id&phone=eq.${encodeURIComponent(phone)}&limit=1`,
+      });
+      if (found && found[0]) memberId = found[0].id;
+      else {
+        const made = await sb('members', {
+          method: 'POST', prefer: 'return=representation',
+          body: [{ via: 'manual', social_id: 'manual:' + phone, name, phone }],
+        });
+        memberId = made && made[0] ? made[0].id : null;
+      }
 
-    /* ── PC 를 임대중으로 ── */
-    await sb('pcs', {
-      method: 'PATCH',
-      query: `?pn=eq.${encodeURIComponent(pc.pn)}&status=eq.ok`,
-      body: { status: 'rent', updated_at: now.toISOString() },
-      prefer: 'return=minimal',
-    });
+      /* ── 주문 ── */
+      await sb('orders', {
+        method: 'POST', prefer: 'return=minimal',
+        body: [{
+          order_id: orderId, member_id: memberId, pn: pc.pn,
+          spec_id: q.specId, days: q.days, amount,
+          status: 'assigned',
+          pay_method: str(b.payMethod, 30) || '수동 등록',
+          paid_at: now.toISOString(),
+          starts_at: starts.toISOString(), ends_at: ends.toISOString(),
+          payer_name: str(b.payerName, 30) || name,
+          user_name: str(b.userName, 30) || name,
+          user_phone: str(b.userPhone, 20) || phone,
+        }],
+      });
+    } catch (e) {
+      await unlock();   /* 주문을 못 만들었으면 PC 를 다시 판매 가능으로 */
+      throw e;
+    }
 
     /* ── 기록 ── */
     const note = amount !== q.amount

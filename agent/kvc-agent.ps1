@@ -36,6 +36,11 @@ $CfgDir  = 'C:\KVC'
 $CfgFile = Join-Path $CfgDir 'pc.json'
 $LogFile = Join-Path $CfgDir 'agent.log'
 
+# 이 파일이 우리 프로그램이 맞는지 확인하는 표식입니다.
+# 자동 갱신할 때 엉뚱한 내용을 받아 덮어쓰는 사고를 막습니다.
+$AgentMark = 'KVC-AGENT-FILE-OK'
+$AgentVer  = '2026-08-19'
+
 # ── 지금 누가 쓰고 있는지 ─────────────────────────────────────────
 #    ★ 예약 작업은 SYSTEM 계정으로 돕니다. SYSTEM 은 화면이 없는 별도 공간에서
 #      실행되기 때문에, 마지막 키보드·마우스 입력을 묻는 방식으로는
@@ -297,6 +302,60 @@ if (-not (Test-Path $CfgFile)) {
   exit 1
 }
 $cfg  = Get-Content $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json
+
+# ══════════════ 프로그램 자동 갱신 (하루 한 번) ═══════════════════
+#    새 기능이 생길 때마다 랙PC 를 한 대씩 찾아다닐 수는 없습니다.
+#    하루에 한 번만 최신본을 받아 보고, 지금 것과 다르면 바꿔 둡니다.
+#    지금 도는 것은 그대로 끝내고, 다음 실행(2분 뒤)부터 새 것이 돕니다.
+#
+#    ★ 여기서 잘못된 파일을 받아 덮어쓰면 랙PC 전체가 한꺼번에 멈춥니다.
+#      그래서 바꾸기 전에 아래를 모두 확인하고, 하나라도 아니면 안 바꿉니다.
+#        · 내용이 충분히 길다 (받다 끊긴 것 거르기)
+#        · 우리 파일임을 알리는 표식이 들어 있다 (엉뚱한 페이지 거르기)
+#        · PowerShell 이 읽을 수 있는 문법이다 (깨진 파일 거르기)
+#      바꾸기 전 파일은 kvc-agent.bak 으로 남겨 둡니다.
+function Update-Self {
+  $tmp = Join-Path $CfgDir 'kvc-agent.new'
+  try {
+    # 하루에 한 번만 — 2분마다 1,200대가 받아 가면 안 됩니다
+    $today = (Get-Date).ToString('yyyy-MM-dd')
+    $stamp = Join-Path $CfgDir 'update.txt'
+    if (Test-Path $stamp) {
+      $last = (Get-Content $stamp -Raw -ErrorAction SilentlyContinue)
+      if ($last -and $last.Trim() -eq $today) { return }
+    }
+    # 먼저 날짜를 적어 둡니다. 받다가 실패해도 오늘은 다시 안 받습니다.
+    Set-Content -Path $stamp -Value $today -Encoding UTF8
+
+    $self = Join-Path $CfgDir 'kvc-agent.ps1'
+    if (-not (Test-Path $self)) { return }
+
+    Invoke-WebRequest -Uri "$Server/agent/kvc-agent.ps1" -OutFile $tmp `
+      -TimeoutSec 30 -UseBasicParsing
+    $new = Get-Content $tmp -Raw -Encoding UTF8
+
+    if ([string]::IsNullOrWhiteSpace($new) -or $new.Length -lt 5000) { return }
+    if ($new -notlike "*$AgentMark*")                                { return }
+    $null = [ScriptBlock]::Create($new)        # 문법이 틀리면 여기서 예외
+
+    $cur = Get-Content $self -Raw -Encoding UTF8
+    if ($cur -eq $new) { return }              # 이미 최신
+
+    Copy-Item $self (Join-Path $CfgDir 'kvc-agent.bak') -Force
+    Copy-Item $tmp  $self -Force
+    Log '프로그램을 최신본으로 바꿨습니다. 다음 실행부터 적용됩니다.'
+    if ($Once) { Write-Host '프로그램을 최신본으로 갱신했습니다.' -ForegroundColor Cyan }
+  }
+  catch {
+    # 갱신은 실패해도 신호 보내기는 계속돼야 합니다. 조용히 넘어갑니다.
+    try { Log "자동 갱신 건너뜀 : $($_.Exception.Message)" } catch {}
+  }
+  finally {
+    try { if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue } } catch {}
+  }
+}
+Update-Self
+
 $spec = Get-Spec
 
 # 누가 쓰고 있나 — quser 를 먼저 보고, 못 쓰면 마지막 입력 시각으로 갈음합니다
