@@ -1168,6 +1168,11 @@ function openPc(key,edit){
           스마트스토어·전화로 들어온 주문이 대부분이라, 랙맵에서 초록 칸을
           누른 그 자리에서 배정이 끝나야 합니다. */''}
     ${p.st==='ok'? `<button class="btn btn-r" data-pcassign="${p.pn}">👤 이 PC 에 고객 배정</button>`:''}
+    ${/* 임대중인 PC 는 여기서 주문으로 바로 넘어가 연장·해지를 합니다.
+          전에는 임대 정보가 보이기만 하고, 고치려면 [주문·고객] 화면에서
+          그 고객을 다시 찾아야 했습니다 (정환님 지적 2026-08-20). */''}
+    ${o? `<button class="btn btn-o" data-openord="${o.no}"
+      style="color:var(--blue);border-color:#BFD3F7">🧾 주문 상세 — 연장 · 해지 · 이전</button>`:''}
     ${edit?'':`<button class="btn btn-o" data-editpc="${key}">✏️ 정보 수정 · 자리 변경</button>`}
     ${p.st==='unv'? `<button class="btn btn-g" data-verok="${p.pn}">접속 확인 완료 → 판매</button>`:''}
     ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
@@ -1695,6 +1700,12 @@ document.addEventListener('click',async e=>{
     $('dr-pw').classList.remove('mask');
     logView(p.pn||p.ad); t.remove(); return;
   }
+
+  /* PC 상세 → 주문 상세로 바로 (연장·해지·이전)
+     ※ 표 줄에 쓰는 data-ord 처리는 버튼 클릭을 일부러 걸러내므로
+       (줄 안의 다른 버튼과 헷갈리지 않게) 버튼용은 따로 받습니다. */
+  const oo=t.closest('[data-openord]');
+  if(oo){openOrd(oo.dataset.openord);return}
 
   /* 수동 주문 등록 */
   if(t.closest('[data-manual]')){openManual();return}
