@@ -12,6 +12,7 @@
 const { ready, sb } = require('./_supa');
 const { sweepExpired } = require('./_sweep');
 const { verify } = require('./admin-login');
+const { guessSpec } = require('./_spec');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
@@ -35,6 +36,36 @@ module.exports = async (req, res) => {
       sb('settings', { query: '?select=k,v' }),
       sb('pcs_unregistered', { query: '?select=*&order=last_beat.desc&limit=200' }),
     ]);
+
+    /* ── 상품번호가 빠진 PC 를 그 자리에서 채웁니다 ────────────────
+       ★ 2026-08-20 정환님 지적 — Y-006(3800XT) 이 고객 화면에
+         실제 칩 이름 그대로 + 0원으로 나갔습니다.
+         어제 _spec.js 에 3800XT 규칙을 넣었지만 그건 "새로 등록할 때"만
+         돕습니다. 규칙이 생기기 전에 등록된 PC 는 상품번호가 빈 채 남고,
+         그런 PC 는 ① 고객 화면에서 상품표를 못 찾아 0원으로 보이고
+         ② 결제 자동배정이 spec_id 로 찾으므로 영영 배정이 안 됩니다.
+
+       그래서 관리자 화면을 열 때마다 빈 것을 다시 맞혀 봅니다.
+       등록 때 쓰는 것과 같은 guessSpec 이라 판단 기준도 같고,
+       확실하지 않으면 그대로 두므로(null) 잘못 붙을 걱정이 없습니다.
+       실패해도 목록 조회는 계속돼야 하므로 조용히 넘어갑니다. */
+    for (const p of (rows || [])) {
+      if (p.spec_id) continue;
+      const g = guessSpec(p.cpu, p.ram_gb, p.ssd_gb, p.gpu);
+      if (!g) continue;
+      try {
+        await sb('pcs', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?pn=eq.${encodeURIComponent(p.pn)}&spec_id=is.null`,
+          body: { spec_id: g },
+        });
+        p.spec_id = g;
+        try {
+          await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+            body: [{ pn: p.pn, act: `상품번호 자동 지정 → ${g}번 (${p.cpu || ''})`.slice(0, 120), who: '시스템' }] });
+        } catch (e) {}
+      } catch (e) {}
+    }
 
     /* 걸어둔 명령(재부팅 등) — 지금 대기중인 것만 따로 물어봅니다.
        ★ 왜 따로 물어보나

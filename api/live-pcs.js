@@ -59,10 +59,18 @@ module.exports = async (req, res) => {
       const dead = age === null || age > downSec;
       /* 고객 화면에서는 세 가지로만 보여줍니다.
          free = 임대 가능 / busy = 임대중 / fix = 점검중
-         신호가 끊긴 PC 는 임대 가능으로 내보내면 안 됩니다. */
+         신호가 끊긴 PC 는 임대 가능으로 내보내면 안 됩니다.
+
+         ★ 상품번호(spec_id)가 없는 PC 도 임대 가능으로 내보내면 안 됩니다.
+           고객 화면은 상품표에서 이름·가격을 찾는데, 번호가 없으면
+           실제 칩 이름 그대로 + 0원 인 채로 [선택] 버튼까지 눌립니다.
+           (2026-08-20 Y-006 3800XT 가 실제로 이렇게 나갔습니다)
+           결제해도 자동배정이 spec_id 로 찾으므로 배정도 안 됩니다.
+           번호가 붙을 때까지 점검중으로 보입니다 — 관리자 화면을 한 번
+           열면 자동으로 붙습니다. */
       let st = 'fix';
       if (p.status === 'rent') st = 'busy';
-      else if (p.status === 'ok' && !dead && p.online) st = 'free';
+      else if (p.status === 'ok' && !dead && p.online && p.spec_id) st = 'free';
       return {
         id: p.pn,
         room: p.room,
