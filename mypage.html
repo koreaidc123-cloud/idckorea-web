@@ -185,6 +185,19 @@ const $=i=>document.getElementById(i);
 const w=n=>Number(n).toLocaleString('ko-KR');
 const fmt=d=>{const x=new Date(d);return x.getFullYear()+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+String(x.getDate()).padStart(2,'0')};
 
+/* 애니데스크 번호 표기 — 실제 애니데스크는 **뒤에서부터** 세 자리씩 끊습니다.
+   전에는 서버가 준 값을 그대로 붙여서 1713782535 처럼 나왔습니다.
+   고객이 애니데스크 화면과 대조할 때 헷갈리므로 맞춰 둡니다.
+     1713782535 → 1 713 782 535
+   [복사] 버튼은 띄어쓰기를 뺀 숫자만 복사합니다. */
+const adFmt=s=>{
+  const d=String(s||'').replace(/[^0-9]/g,'');
+  if(!d) return '';
+  const out=[];
+  for(let i=d.length;i>0;i-=3) out.unshift(d.slice(Math.max(0,i-3),i));
+  return out.join(' ');
+};
+
 /* ═══ 로그인 상태 ═══
    서버가 발급한 출입증(httpOnly 쿠키)으로 내 정보를 받아옵니다.
    전에는 브라우저 저장소에 든 값을 그대로 믿어서, 저장소를 고치면
@@ -245,8 +258,8 @@ function render(){
         <span class="st"><span class="dot"></span>가동 중</span></div>
       <div class="pc-b">
         <div class="row"><span class="k">사양</span><span class="v">${p.spec}</span></div>
-        <div class="row"><span class="k">접속 주소</span><span class="v"><span class="num">${p.ad}</span>
-          <button class="cp" data-c="${p.ad.replace(/ /g,'')}">복사</button></span></div>
+        <div class="row"><span class="k">접속 주소</span><span class="v"><span class="num">${adFmt(p.ad)}</span>
+          <button class="cp" data-c="${String(p.ad||'').replace(/[^0-9]/g,'')}">복사</button></span></div>
         <div class="row"><span class="k">비밀번호</span><span class="v">
           <span class="mask" id="pw${i}">••••••</span>
           <button class="cp" data-pw="${i}">보기</button></span></div>

@@ -343,6 +343,22 @@ let seed=20260811;
 const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
 const pad=(n,w)=>String(n).padStart(w||3,'0');
 const w=n=>n.toLocaleString('ko-KR');
+
+/* 애니데스크 번호 표기 — 실제 애니데스크와 똑같이 보이게 합니다.
+
+   ★ 애니데스크는 **뒤에서부터** 세 자리씩 끊습니다.
+     전에는 앞에서부터 끊어서 10자리 번호가 어긋났습니다.
+       1713782535 →  171 378 2535  (틀림)
+                  →  1 713 782 535 (실제 애니데스크 표기)
+     9자리는 우연히 같아서 그동안 눈에 안 띄었습니다.
+     현장에서 번호를 대조할 때 헷갈리므로 맞춰 둡니다. */
+const adFmt=s=>{
+  const d=String(s||'').replace(/[^0-9]/g,'');
+  if(!d) return '';
+  const out=[];
+  for(let i=d.length;i>0;i-=3) out.unshift(d.slice(Math.max(0,i-3),i));
+  return out.join(' ');
+};
 const $=id=>document.getElementById(id);
 
 const ROOMS=[
@@ -563,7 +579,7 @@ function vNew(){
           <th>마지막 신호</th><th></th></tr></thead>
         <tbody>${lost.map(p=>`<tr>
           <td class="pn" style="color:#8A6100">${p.claimedPn}</td>
-          <td><b class="num" style="font-size:16px">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</b>
+          <td><b class="num" style="font-size:16px">${adFmt((p.ad||''))}</b>
             ${p.ad?`<button class="btn btn-o btn-sm" data-copy="${p.ad}" style="margin-left:8px">복사</button>`:''}</td>
           <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
           <td class="num dim">${p.ip||'—'}</td>
@@ -607,7 +623,7 @@ function vNew(){
             data-for="${p.ad}" data-loc="fl" style="${ns}"> -
           <input type="number" min="1" max="99" value="${p.slot||''}" placeholder="자리"
             data-for="${p.ad}" data-loc="slot" style="${ns}"></td>
-        <td class="num">${(p.ad||'').replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+        <td class="num">${adFmt((p.ad||''))}</td>
         <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
         <td><span class="tag t-ok"><i></i>입력됨</span></td>
         <td><input value="${sug[p.ad]}" data-pnin="${p.ad}"
@@ -641,7 +657,7 @@ function vVerify(){
       <tbody>${list.map(p=>`
       <tr><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
       <td class="dim">${specTx(p)}</td>
-      <td class="num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+      <td class="num">${adFmt(p.ad)}</td>
       <td><span class="mask" data-pwm="${p.pn}">••••••</span>
         <button class="btn btn-o btn-sm" data-pwshow="${p.pn}">보기</button></td>
       <td style="display:flex;gap:6px">
@@ -816,7 +832,7 @@ function vPcs(){
       <tr data-pc="${p.pn||p.ad}"><td class="pn">${p.pn||'<span class="dim">미등록</span>'}</td>
       <td class="dim">${locStr(p)}</td><td>${stTag(p)}</td>
       <td class="dim">${specTx(p)}</td>
-      <td class="num dim">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</td>
+      <td class="num dim">${adFmt(p.ad)}</td>
       <td class="num dim">${p.ip}</td>
       <td>${p.order? p.order.nm+(p.order.mis?' <span class="warnbadge">⚠</span>':'') : '<span class="dim">—</span>'}</td></tr>`).join('')}
       </tbody></table>
@@ -949,7 +965,7 @@ function fillTpl(m){
   const t=$('al-t').value, o=m.orders[0], pc=o.pc||{pn:oPn(o), ad:''};
   const tp={
     exp:`[한국 가상컴] ${m.nm}님\n이용 중이신 ${pc.pn} 이 ${fmtD(o.end)} 만료됩니다.\n연장하지 않으시면 자료가 초기화되니 미리 연장해 주세요.\n\n연장하기: idckorea1.com/mypage`,
-    cred:`[한국 가상컴] ${m.nm}님\n요청하신 접속 정보를 다시 보내드립니다.\n문의번호: ${pc.pn}\n접속 주소: ${pc.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}\n비밀번호는 보안상 내 가상컴에서 확인해 주세요.`,
+    cred:`[한국 가상컴] ${m.nm}님\n요청하신 접속 정보를 다시 보내드립니다.\n문의번호: ${pc.pn}\n접속 주소: ${adFmt(pc.ad)}\n비밀번호는 보안상 내 가상컴에서 확인해 주세요.`,
     down:`[한국 가상컴] ${m.nm}님\n${pc.pn} 접속 장애가 복구되었습니다.\n중단된 기간만큼 이용 기간을 연장해 드렸습니다.\n불편을 드려 죄송합니다.`,
     free:''
   };
@@ -1133,7 +1149,7 @@ function openPc(key,edit){
       <span class="k">사양</span><span class="v">${specTx(p)} · ${p.spec.core} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
       <span class="k">그래픽</span><span class="v">${p.spec.gpu}</span>
       <span class="k">공인IP</span><span class="v num">${p.ip}</span>
-      <span class="k">애니 번호</span><span class="v num">${p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')}</span>
+      <span class="k">애니 번호</span><span class="v num">${adFmt(p.ad)}</span>
       <span class="k">애니 비번</span><span class="v pwrow">
         <span class="mask" id="dr-pw">••••••</span>
         <button class="btn btn-o btn-sm" id="dr-pwbtn" data-pn="${p.pn||p.ad}">보기</button></span>
@@ -1204,7 +1220,7 @@ function openOrd(no){
   const pnTx  = oPn(o);
   const locTx = p ? locStr(p) : 'PC 미배정';
   const sp    = (p && p.spec) || SPECS.find(s=>s.id===o.specId) || {n:'—',ram:0,ssd:0};
-  const adTx  = (p && p.ad) ? p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3') : '배정 후 발급됩니다';
+  const adTx  = (p && p.ad) ? adFmt(p.ad) : '배정 후 발급됩니다';
   $('drawer').innerHTML=`
   <div class="hd"><b>${o.no}</b><span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span>
     <button class="x" data-close>✕</button></div>
@@ -1779,7 +1795,7 @@ document.addEventListener('click',async e=>{
       setTimeout(()=>{cp2.textContent='📋 고객 전달용 복사 (위치 제외)'},2000); return; }
     const txt='[한국 가상컴] '+o.nm+'님의 가상컴 안내\n'
       +'문의번호: '+p.pn+'\n'
-      +'접속 주소: '+p.ad.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3')+'\n'
+      +'접속 주소: '+adFmt(p.ad)+'\n'
       +'비밀번호: '+(pw||'미등록')+'\n'
       +'이용 기간: '+fmtD(o.start)+' ~ '+fmtD(o.end)+'\n'
       +'문의: 카카오톡 채널 「한국 가상컴」 또는 010-8446-8710';
