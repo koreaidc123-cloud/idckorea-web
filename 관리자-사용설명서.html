@@ -1,0 +1,137 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>관리자 사용설명서 — 한국 가상컴</title>
+<style>
+:root{--ink:#0B0E14;--ink2:#3D4757;--ink3:#6B7686;--line:#E3E7EE;--red:#E2233C;--bg:#F6F8FB}
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+ font:15.5px/1.75 -apple-system,'Malgun Gothic','맑은 고딕',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.wrap{max-width:900px;margin:0 auto;padding:38px 26px 90px;background:#fff;
+ box-shadow:0 0 0 1px var(--line)}
+h1{font-size:29px;margin:0 0 6px;letter-spacing:-.5px}
+h1+p{color:var(--ink3);margin:0 0 26px}
+h2{font-size:21px;margin:44px 0 14px;padding:11px 15px;background:var(--ink);color:#fff;border-radius:9px}
+h3{font-size:17px;margin:26px 0 9px;padding-left:11px;border-left:4px solid var(--red)}
+h4{font-size:15px;margin:18px 0 7px;color:var(--ink2)}
+p{margin:9px 0}
+ul,ol{margin:9px 0;padding-left:22px}
+li{margin:5px 0}
+code{background:#EEF1F6;border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;
+ font:13.5px/1.5 Consolas,monospace;white-space:nowrap}
+pre{background:var(--ink);color:#D6DEEA;border-radius:9px;padding:15px 17px;overflow:auto;
+ font:13.5px/1.85 Consolas,monospace}
+table{width:100%;border-collapse:collapse;margin:13px 0;font-size:14.5px}
+th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:#F1F4F9;font-weight:800;white-space:nowrap}
+tr:nth-child(even) td{background:#FAFBFD}
+blockquote{margin:13px 0;padding:12px 15px;background:#FFF8E6;border-left:4px solid #E08B00;
+ border-radius:0 9px 9px 0;color:#7A5200;font-size:14.5px}
+hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+strong{font-weight:800}
+@media print{
+  body{background:#fff}
+  .wrap{box-shadow:none;max-width:none;padding:0 8mm}
+  h2{background:#111 !important;color:#fff !important}
+  h2,h3{break-after:avoid}
+  table,blockquote,pre{break-inside:avoid}
+}
+</style></head><body><div class="wrap">
+<h1>한국 가상컴 관리자 사용설명서</h1>
+<p>주소 : https://idckorea-dusky.vercel.app/admin</p>
+<p>접속하면 <strong>관리자 코드</strong>를 묻습니다. 대표님께 받으세요.</p>
+<blockquote>화면은 <strong>30초마다 저절로 새로고침</strong>됩니다. 다른 사람이 바꾼 내용도 30초 안에 보입니다.<br>왼쪽 아래에 <code>실서버 연동중 / PC ○대 · 시각</code> 이 떠 있으면 서버와 잘 붙어 있는 것입니다.</blockquote>
+<hr>
+<h2>0. 제일 먼저 외울 것 세 가지</h2>
+<h3>① PC 상태 6가지</h3>
+<table><thead><tr><th>상태</th><th>뜻</th><th>고객 화면</th></tr></thead><tbody><tr><td><strong>미등록</strong></td><td>신호는 오는데 품번이 아직 없음</td><td>안 보임</td></tr><tr><td><strong>미검증</strong></td><td>품번은 받았고, 접속 확인 전</td><td>안 보임</td></tr><tr><td><strong>임대 가능</strong></td><td>팔 수 있음</td><td><strong>보임 · 구매 가능</strong></td></tr><tr><td><strong>임대중</strong></td><td>고객이 쓰는 중</td><td>보임 · 구매 불가</td></tr><tr><td><strong>점검중</strong></td><td>우리가 일부러 뺌</td><td>보임 · 구매 불가</td></tr><tr><td><strong>다운</strong></td><td>신호가 끊김 (꺼졌거나 인터넷 문제)</td><td>보임 · 구매 불가</td></tr></tbody></table>
+<p><strong>임대 가능만 팔립니다.</strong> 나머지는 고객이 결제할 수 없습니다.</p>
+<h3>② PC 한 대가 팔리기까지</h3>
+<pre>미등록 → [품번 부여] → 미검증 → [접속 확인 완료] → 임대 가능 → 팔림</pre>
+<h3>③ ★ 가장 중요한 규칙 — 납품 먼저, 기록 즉시</h3>
+<p>스마트스토어·전화로 PC를 납품하셨으면 <strong>그 즉시</strong> 시스템에 기록하세요.</p>
+<p>기록을 안 하면 시스템은 그 PC를 여전히 <code>임대 가능</code>으로 봅니다.</p>
+<p>홈페이지 고객이 결제하면 <strong>같은 PC가 두 사람에게 팔립니다.</strong></p>
+<p>두 분이 같은 애니데스크 번호로 동시에 접속하게 됩니다.</p>
+<p><strong>둘 중 하나만 하시면 됩니다 (10초):</strong></p>
+<ul><li>고객 정보를 아는 경우 → 랙맵에서 그 칸 클릭 → <code>👤 이 PC에 고객 배정</code></li><li>고객 정보가 아직 없는 경우 → <code>점검으로 전환</code> (판매 목록에서 즉시 빠짐)</li></ul>
+<hr>
+<h2>1. 📊 대시보드</h2>
+<p>들어오면 처음 뜨는 화면입니다. <strong>숫자만 보는 곳</strong>입니다.</p>
+<ul><li>전체 보유 / 임대중 / 임대 가능 / 다운 / 미등록·미검증 / 이용중 주문액</li></ul>
+<p><strong>빨간 점이 떠 있으면</strong> 손볼 게 있다는 뜻입니다. → <code>오늘 할 일</code>로 가세요.</p>
+<hr>
+<h2>2. 📦 미등록 PC</h2>
+<p>현장에서 <code>PC등록</code> 프로그램을 돌린 PC가 여기 올라옵니다.</p>
+<h3>등록 대기</h3>
+<table><thead><tr><th>칸</th><th>할 일</th></tr></thead><tbody><tr><td><strong>자리 (랙-층-자리)</strong></td><td>실제 꽂힌 자리를 적습니다. 예: <code>5</code> - <code>4</code> - <code>14</code></td></tr><tr><td><strong>품번</strong></td><td>자동으로 빈 번호를 제안합니다. 그대로 두셔도 됩니다</td></tr><tr><td><code>저장 · 품번 부여</code></td><td>누르면 <strong>미검증</strong>으로 넘어갑니다</td></tr><tr><td>🗑</td><td>목록에서 지웁니다</td></tr></tbody></table>
+<blockquote>자리를 안 적으면 랙맵에 안 나와서 나중에 어디 꽂혔는지 못 찾습니다. 꼭 적으세요.<br>이미 다른 PC가 있는 자리는 저장이 안 됩니다.</blockquote>
+<h3>🔎 대장에서 사라진 PC (노란 상자)</h3>
+<p>PC는 멀쩡히 켜져 있는데 대장에서만 없어진 경우입니다.</p>
+<ul><li><strong>마지막 신호</strong> 칸을 보세요</li><li><code>신호 오는 중 · ○초 전</code> (빨강) → 지금 살아있는 PC</li><li><code>○분 전 · 멈춤</code> → 이미 다시 등록된 옛 기록. 지워도 됩니다</li><li>살릴 때는 <strong>애니데스크 번호 [복사]</strong> → 그 번호로 원격 접속 → <code>PC등록</code> 다시 실행</li></ul>
+<blockquote>🗑으로 지우면 <strong>숨김 목록</strong>에 들어가서, 그 PC가 계속 신호를 보내도 다시 안 나타납니다.<br>되돌리려면 화면 위쪽 <code>다시 보이기</code>를 누르세요.</blockquote>
+<hr>
+<h2>3. 🔍 검증 대기</h2>
+<p><strong>품번은 받았지만 아직 못 파는 PC</strong>들입니다. ← <strong>여기 숫자가 있으면 그만큼 돈을 못 벌고 있는 겁니다.</strong></p>
+<ol><li><code>비밀번호 [보기]</code> 를 눌러 애니데스크 비밀번호를 확인</li><li><strong>다른 PC에서 실제로 애니데스크 접속</strong> 해봅니다</li><li>잘 되면 → <code>접속 확인 완료 → 판매</code> → 즉시 고객 화면에 뜹니다</li><li>안 되면 → <code>접속 실패 → 점검</code></li></ol>
+<blockquote>비밀번호를 볼 때마다 <strong>누가 언제 봤는지 기록</strong>이 남습니다. 정상입니다.</blockquote>
+<hr>
+<h2>4. ✅ 오늘 할 일</h2>
+<p><strong>매일 아침 여기부터 보세요.</strong> 급한 것만 모아 놓은 화면입니다.</p>
+<table><thead><tr><th>항목</th><th>뜻</th><th>조치</th></tr></thead><tbody><tr><td>🔌 <strong>랙 장애 의심</strong></td><td>한 층 여러 대가 동시에 죽음</td><td><strong>PC가 아니라 허브·회선 문제</strong>. 랙 전원·랜선 먼저 확인</td></tr><tr><td>⏰ <strong>내일까지 만료</strong></td><td>곧 끝나는 고객</td><td>연장 확인 전화</td></tr><tr><td>⚡ <strong>전원 부팅 필요</strong></td><td>신호 끊긴 PC</td><td>현장 확인 또는 원격 재부팅</td></tr><tr><td>🔧 <strong>점검중</strong></td><td>처리 후 판매 전환 대기</td><td>고쳤으면 <code>점검 완료 → 판매</code></td></tr></tbody></table>
+<hr>
+<h2>5. 🗄️ 랙맵</h2>
+<p>서버실 · 랙 · 층 · 자리를 그림으로 봅니다. <strong>현장에서 PC를 찾을 때</strong> 쓰는 화면입니다.</p>
+<ul><li><strong>칸을 누르면</strong> 그 PC 상세가 열립니다</li><li>칸 색이 곧 상태입니다 (화면 아래에도 같은 안내가 있습니다)</li></ul>
+<table><thead><tr><th>색</th><th>상태</th></tr></thead><tbody><tr><td>🟩 초록</td><td>임대 가능</td></tr><tr><td>🟦 파랑</td><td>임대중</td></tr><tr><td>🟥 <strong>빨강 (깜빡임)</strong></td><td><strong>다운 — 제일 급합니다</strong></td></tr><tr><td>🟧 주황</td><td>점검중</td></tr><tr><td>⬜ 회색</td><td>미검증</td></tr><tr><td>🟪 보라</td><td>미등록</td></tr><tr><td>⬜ 흰색</td><td>빈 자리</td></tr></tbody></table>
+<h3>칸을 눌렀을 때 (PC 상세)</h3>
+<table><thead><tr><th>버튼</th><th>언제 나오나</th></tr></thead><tbody><tr><td>👤 <strong>이 PC에 고객 배정</strong></td><td>임대 가능일 때 — 스마트스토어·전화 주문을 여기서 바로 등록</td></tr><tr><td>🧾 <strong>주문 상세 — 연장·해지·이전</strong></td><td>임대중일 때 — 누르면 주문 화면으로 바로 넘어감</td></tr><tr><td>✏️ 정보 수정 · 자리 변경</td><td>언제나</td></tr><tr><td>↻ <strong>원격 재부팅</strong></td><td>살아있는 PC — 누르면 최대 2분 뒤 재부팅</td></tr><tr><td>🗑 대장에서 빼기</td><td>잘못 등록한 PC</td></tr></tbody></table>
+<blockquote><strong>원격 재부팅</strong>은 <code>⏳ 재부팅 대기중</code>으로 바뀝니다. 그 PC가 2분마다 보내는 신호에<br>답할 때 명령이 전달되므로 <strong>최대 2분</strong> 걸립니다. 쓰는 분이 있으면 안내창이 뜨고 60초 뒤 꺼집니다.</blockquote>
+<hr>
+<h2>6. 🖥️ PC 관리</h2>
+<p>전체 PC를 표로 봅니다. <strong>찾을 때</strong> 쓰는 화면입니다.</p>
+<ul><li>위쪽에서 <strong>서버실 / 상태 / 사양</strong>으로 거를 수 있습니다</li><li>검색창에 <strong>품번 · 위치 · 애니데스크 번호</strong> 아무거나 넣으면 찾습니다 (예: <code>Y-042</code>, <code>영태리 5-4-1</code>)</li><li>줄을 누르면 랙맵과 <strong>똑같은 PC 상세</strong>가 열립니다</li></ul>
+<hr>
+<h2>7. 👤 회원 관리</h2>
+<p>가입한 고객 명부입니다. 회원 · 연락처 · 가입경로 · 이용 PC · 누적 결제 · 최근 만료.</p>
+<ul><li>줄을 누르면 그분이 쓰는 PC와 지난 주문이 다 보입니다</li></ul>
+<hr>
+<h2>8. 🧾 주문 · 고객</h2>
+<p><strong>돈과 관련된 모든 것</strong>이 여기 있습니다.</p>
+<p>검색창에 <strong>이름 · 전화 · 주문번호 · 품번 · 입금자명</strong> 아무거나 넣으면 찾습니다.</p>
+<h3>주문을 누르면</h3>
+<table><thead><tr><th>항목</th><th>설명</th></tr></thead><tbody><tr><td><strong>신원 — 넷이 다를 수 있습니다</strong></td><td>① 회원 ② 결제자 ③ 이용자 ④ 연락처. <strong>다르면 화면이 경고합니다</strong></td></tr><tr><td><strong>고객이 받은 접속 정보</strong></td><td>고객에게 나간 것과 똑같은 내용</td></tr><tr><td><strong>환불 계산</strong></td><td>규정대로 자동 계산 (아래 참고)</td></tr></tbody></table>
+<h3>버튼</h3>
+<table><thead><tr><th>버튼</th><th>설명</th></tr></thead><tbody><tr><td>📋 <strong>고객 전달용 복사 (위치 제외)</strong></td><td>접속 정보를 복사합니다. <strong>서버실 위치는 절대 안 들어갑니다</strong></td></tr><tr><td><strong>30일 연장</strong></td><td>기간을 늘립니다</td></tr><tr><td>👤 고객 정보 수정</td><td>이름 · 연락처 오타 수정</td></tr><tr><td>🧾 <strong>세금계산서 요청</strong></td><td>아래 설명 참고</td></tr><tr><td><strong>해지 · 환불</strong></td><td>환불 처리</td></tr></tbody></table>
+<h3>💰 환불 규정 (자동 계산됩니다)</h3>
+<ul><li><strong>7일 이내</strong> — 초기 세팅비 5,000원 + 쓰신 기간을 뺀 나머지 환불</li><li><strong>7일 이후</strong> — 환불 불가</li></ul>
+<p>화면이 계산해서 보여줍니다. 다른 금액을 넣으면 <strong>그 사실이 기록에 남습니다.</strong></p>
+<h3>🧾 세금계산서 버튼은 "발행"이 아니라 "접수 메모"입니다</h3>
+<ul><li>이 버튼은 <strong>사업자등록번호를 받아 적어두는 것</strong>입니다. 자동 발행이 아닙니다</li><li><strong>발행은 대표님이 홈택스에서</strong> 하십니다</li><li><strong>카드 결제 고객에게는 발행하면 안 됩니다</strong> — 카드매출전표가 이미 증빙이라 이중발행 금지</li><li><strong>계좌이체·가상계좌</strong> 고객이 요청할 때만 이 버튼으로 접수하세요</li></ul>
+<hr>
+<h2>9. 🔔 알림 발송</h2>
+<p>만료가 다가온 고객 목록입니다. 품번 · 회원 · 연락처 · 가입 · 만료일.</p>
+<blockquote><strong>지금은 실제 발송이 안 됩니다.</strong> 문자 서비스(알리고) 연동 전이라 안내창만 뜹니다.<br>연동되면 알림톡이 먼저 가고, 실패하면 문자로 자동 전환됩니다.<br><strong>그때까지는 이 목록을 보고 직접 전화</strong>하시면 됩니다.</blockquote>
+<hr>
+<h2>10. 🔎 통합검색</h2>
+<p><strong>뭐든 한 번에 찾는 곳</strong>입니다. 어느 화면인지 모를 때 여기서 찾으세요.</p>
+<p>품번 · 이름 · 전화번호 · 주문번호 · 애니데스크 번호 전부 됩니다.</p>
+<hr>
+<h2>11. ⚙️ 설정</h2>
+<ul><li><strong>초기 세팅비</strong> (환불 계산에 쓰임, 기본 5,000원)</li><li><strong>다운 판정 시간</strong> (몇 초 신호가 없으면 다운으로 볼지)</li><li><strong>만료 알림 시점</strong> (며칠 전에 알릴지)</li><li><strong>장기 할인율</strong> (60일 · 90일)</li></ul>
+<blockquote><strong>바꾸면 고객 화면과 환불 금액에 바로 영향</strong>이 갑니다. 대표님과 상의 후 바꾸세요.</blockquote>
+<hr>
+<h2>🚨 이럴 땐 이렇게</h2>
+<table><thead><tr><th>상황</th><th>조치</th></tr></thead><tbody><tr><td>고객이 "접속이 안 돼요"</td><td><code>통합검색</code>에 이름/전화 → 주문 열기 → PC가 <strong>다운</strong>인지 확인 → 맞으면 <code>↻ 원격 재부팅</code></td></tr><tr><td>한 층 여러 대가 동시에 죽음</td><td><strong>PC 문제가 아닙니다.</strong> 랙 허브·회선 확인</td></tr><tr><td>스마트스토어로 팔았다</td><td><strong>즉시</strong> 랙맵 → 그 칸 → <code>👤 이 PC에 고객 배정</code></td></tr><tr><td>고객 정보를 아직 모름</td><td>일단 <code>점검으로 전환</code> — 판매에서 빠집니다</td></tr><tr><td>접속 정보를 다시 보내야 함</td><td>주문 열기 → <code>📋 고객 전달용 복사</code></td></tr><tr><td>PC를 바꿔줘야 함</td><td>주문 열기 → <code>PC 이전</code></td></tr><tr><td>검증 대기에 PC가 쌓여 있음</td><td><strong>돈을 못 벌고 있는 상태.</strong> 접속 확인 후 판매 전환</td></tr></tbody></table>
+<hr>
+<h2>⛔ 절대 하면 안 되는 것</h2>
+<ol><li><strong>서버실 이름(파주·금촌·영태리·등원리)을 고객에게 알려주지 않습니다.</strong></li></ol>
+<p>   고객에게는 품번의 알파벳(K · Y · D)만 보입니다.</p>
+<p>   <code>고객 전달용 복사</code>를 쓰면 위치가 자동으로 빠지니 <strong>꼭 그 버튼을 쓰세요.</strong></p>
+<ol><li><strong>애니데스크 비밀번호를 아무 데나 붙여넣지 않습니다.</strong> 열람 기록이 남습니다.</li></ol>
+<ol><li><strong>「윈도우 10 Pro 정품」 이라는 표현을 쓰지 않습니다.</strong></li></ol>
+<ol><li><strong>납품하고 기록을 안 남기지 않습니다.</strong> (중복 판매의 유일한 원인)</li></ol>
+<hr>
+<h2>아직 준비 중인 것 (2026-08-20 기준)</h2>
+<table><thead><tr><th>기능</th><th>상태</th></tr></thead><tbody><tr><td>문자 · 알림톡 발송</td><td>알리고 가입 · 발신번호 심사 중</td></tr><tr><td>카카오 로그인</td><td>키 등록 대기</td></tr><tr><td>실제 카드 결제</td><td>토스페이먼츠 심사 중 (금요일 전 예정)</td></tr></tbody></table>
+<p>이 셋은 연동되면 <strong>화면은 그대로</strong>이고 동작만 진짜로 바뀝니다.</p>
+</div></body></html>
