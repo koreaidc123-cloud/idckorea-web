@@ -187,6 +187,82 @@ module.exports = async (req, res) => {
     }
   }
 
+  /* ── 연락처 등록 (인증번호 받기) ─────────────────────────────
+     구글은 전화번호를 안 주고, 카카오도 사업자 등록 전에는 못 받습니다.
+     그래서 가입 때 번호를 직접 받는데, 전에는 그 번호가 브라우저에만
+     저장되고 서버로는 오지 않았습니다. 그래서 결제 때마다
+     "연락처 형식이 올바르지 않습니다" 로 막혔습니다 (정환님 확인 2026-08-20).
+
+     알리고 키(ALIGO_*)가 등록돼 있으면 → 진짜 인증번호 문자를 보냅니다.
+     아직이면 → direct:true 를 돌려주고, 번호 형식만 확인하고 저장합니다.
+     키를 넣는 순간부터 자동으로 진짜 인증으로 바뀝니다. */
+  if (what === 'phone-code') {
+    const sms = require('./_sms');
+    const phone = String((req.body || {}).phone || '').replace(/[^\d]/g, '');
+    if (!/^01[016789]\d{7,8}$/.test(phone)) {
+      return res.status(400).json({ error: '연락처를 정확히 입력해 주세요 (010-0000-0000)' });
+    }
+    if (!sms.ready()) return res.status(200).json({ ok: true, direct: true });
+
+    /* 6자리 코드를 만들어 5분간 보관합니다. 시도는 5번까지 받습니다. */
+    const code = String(crypto.randomInt(100000, 1000000));
+    try {
+      await sb('settings', {
+        method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+        body: [{ k: 'otp:' + memberId,
+                 v: JSON.stringify({ c: code, ph: phone, exp: Date.now() + 5 * 60000, n: 0 }) }],
+      });
+    } catch (e) {
+      return res.status(500).json({ error: '인증번호를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요' });
+    }
+    const sent = await sms.send(phone, `[한국 가상컴] 인증번호 ${code} 를 입력해 주세요. (5분 안에)`);
+    if (!sent) return res.status(502).json({ error: '문자를 보내지 못했습니다. 번호를 확인하고 다시 시도해 주세요' });
+    return res.status(200).json({ ok: true, direct: false });
+  }
+
+  /* ── 연락처 저장 ── */
+  if (what === 'phone') {
+    const sms = require('./_sms');
+    const b2 = req.body || {};
+    const phone = String(b2.phone || '').replace(/[^\d]/g, '');
+    if (!/^01[016789]\d{7,8}$/.test(phone)) {
+      return res.status(400).json({ error: '연락처를 정확히 입력해 주세요 (010-0000-0000)' });
+    }
+
+    if (sms.ready()) {
+      /* 문자 인증이 켜져 있으면 코드가 맞아야만 저장합니다 */
+      const code = String(b2.code || '').trim();
+      let saved = null;
+      try {
+        const r = await sb('settings', { query: `?select=v&k=eq.${encodeURIComponent('otp:' + memberId)}&limit=1` });
+        saved = r && r[0] ? JSON.parse(r[0].v) : null;
+      } catch (e) {}
+      if (!saved || saved.exp < Date.now()) {
+        return res.status(400).json({ error: '인증번호가 만료됐습니다. [인증번호 받기] 를 다시 눌러 주세요' });
+      }
+      if (saved.n >= 5) return res.status(429).json({ error: '너무 많이 틀렸습니다. 인증번호를 다시 받아 주세요' });
+      if (saved.c !== code || saved.ph !== phone) {
+        try {
+          saved.n = (saved.n || 0) + 1;
+          await sb('settings', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+            body: [{ k: 'otp:' + memberId, v: JSON.stringify(saved) }] });
+        } catch (e) {}
+        return res.status(400).json({ error: '인증번호가 맞지 않습니다' });
+      }
+      /* 통과 — 코드는 한 번 쓰고 버립니다 */
+      try { await sb('settings', { method: 'DELETE', query: `?k=eq.${encodeURIComponent('otp:' + memberId)}`, prefer: 'return=minimal' }); } catch (e) {}
+    }
+
+    const pretty = phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+    try {
+      await sb('members', { method: 'PATCH', prefer: 'return=minimal',
+        query: `?id=eq.${memberId}`, body: { phone: pretty } });
+    } catch (e) {
+      return res.status(500).json({ error: '연락처를 저장하지 못했습니다' });
+    }
+    return res.status(200).json({ ok: true, phone: pretty });
+  }
+
   /* ── 내 PC 의 비밀번호 (내 것만) ── */
   if (what === 'secret') {
     const pn = String((req.query && req.query.pn) || '').toUpperCase().trim();

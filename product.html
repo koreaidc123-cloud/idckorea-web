@@ -435,6 +435,20 @@ async function startPay(){
   /* 결제 전 로그인 필수 — 결제자·이용자 식별과 접속정보 전달의 전제 */
   let U=null; try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
   if(!U){ if(confirm('결제하시려면 로그인이 필요합니다.\\n카카오·구글로 3초면 됩니다.\\n\\n지금 로그인하시겠습니까?')) location.href='login.html?next=product.html'; return; }
+  /* 연락처가 서버에 없는 회원 — 예전 가입 흐름이 번호를 브라우저에만
+     저장하고 서버로 안 보내던 시절의 회원입니다. 여기서 한 번 받아
+     저장합니다. 안 그러면 서버가 주문을 거부합니다("연락처 형식이…"). */
+  if(!U.phone){
+    const ph=(prompt('접속 정보를 문자로 보내드릴 연락처를 입력해 주세요.\\n(예: 010-0000-0000)')||'').trim();
+    if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){ if(ph)alert('연락처 형식이 올바르지 않습니다.'); return; }
+    try{
+      const rp=await fetch('/api/customer?do=phone',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph})});
+      const dp=await rp.json().catch(()=>({}));
+      if(!rp.ok){ alert(dp.error||'연락처를 저장하지 못했습니다. 다시 로그인해 주세요.'); return; }
+      U.phone=dp.phone; localStorage.setItem('kvc-user',JSON.stringify(U));
+    }catch(e){ alert('서버에 연결하지 못했습니다.'); return; }
+  }
   const m=TM.find(t=>t.d===S.d);
   const base=Math.round(BASE*S.d/30), tot=base-Math.round(base*m.o/100);
 

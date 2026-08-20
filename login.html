@@ -425,18 +425,60 @@ document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=
   if(k==='kakao'){ kakaoLogin(); return; }
   if(k==='google'){ googleLogin(); return; }
 }));
-/* 문자 인증 — 구글 가입자만 필요 (카카오는 검증된 번호를 받음) */
-$('send').addEventListener('click',()=>{
+/* 문자 인증 — 전화번호를 안 준 소셜 가입자용 (구글 전부 · 카카오 일부)
+
+   ★ 전에는 여기가 통째로 가짜였습니다.
+     [인증번호 받기]는 안내창만 띄우고, [확인]은 아무 6자리나 통과시키고,
+     번호는 브라우저에만 저장돼 서버로는 가지 않았습니다.
+     그래서 구글 회원은 서버에 연락처가 빈 채로 남아, 결제 때마다
+     "연락처 형식이 올바르지 않습니다" 로 막혔습니다.
+
+   이제 서버(do=phone-code / do=phone)로 갑니다.
+     · 알리고 키가 등록돼 있으면 → 진짜 인증번호 문자
+     · 아직이면 → 서버가 direct 라고 답하고, 번호 확인 후 바로 저장
+   키를 넣는 순간부터 자동으로 진짜 인증으로 바뀝니다. */
+window._phSaved='';
+$('send').addEventListener('click',async()=>{
   const ph=$('ph').value.trim();
   if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){alert('연락처를 정확히 입력해 주세요. (010-0000-0000)');return}
-  $('codewrap').hidden=false; $('send').textContent='다시 받기';
-  alert('실서비스에서는 여기서 인증번호 문자가 발송됩니다.\n(문자 발송 연동 후 실제 번호로 전송)');
+  $('send').disabled=true;
+  try{
+    const r=await fetch('/api/customer?do=phone-code',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph})});
+    const d=await r.json().catch(()=>({}));
+    $('send').disabled=false;
+    if(!r.ok){alert(d.error||'인증번호를 보내지 못했습니다');return}
+    if(d.direct){
+      /* 문자 연동 전 — 번호만 확인하고 바로 저장합니다 */
+      const r2=await fetch('/api/customer?do=phone',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph})});
+      const d2=await r2.json().catch(()=>({}));
+      if(!r2.ok){alert(d2.error||'연락처를 저장하지 못했습니다');return}
+      window._phSaved=d2.phone;
+      $('codewrap').hidden=true;
+      $('cmsg').textContent='✓ 연락처가 등록되었습니다. 약관에 동의하시면 끝납니다.';
+      $('cmsg').classList.add('ok'); check(); return;
+    }
+    $('codewrap').hidden=false; $('send').textContent='다시 받기';
+    $('cmsg').textContent='인증번호 문자를 보냈습니다. 5분 안에 입력해 주세요.';
+    $('cmsg').classList.remove('ok');
+  }catch(e){ $('send').disabled=false; alert('서버에 연결하지 못했습니다'); }
 });
-$('ok').addEventListener('click',()=>{
-  if(!/^\d{6}$/.test($('code').value.trim())){
+$('ok').addEventListener('click',async()=>{
+  const ph=$('ph').value.trim(), code=$('code').value.trim();
+  if(!/^\d{6}$/.test(code)){
     $('cmsg').textContent='6자리 숫자를 입력해 주세요.'; $('cmsg').classList.remove('ok'); return;
   }
-  $('cmsg').textContent='✓ 확인되었습니다.'; $('cmsg').classList.add('ok'); check();
+  $('ok').disabled=true;
+  try{
+    const r=await fetch('/api/customer?do=phone',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:ph,code})});
+    const d=await r.json().catch(()=>({}));
+    $('ok').disabled=false;
+    if(!r.ok){ $('cmsg').textContent=d.error||'인증에 실패했습니다'; $('cmsg').classList.remove('ok'); return; }
+    window._phSaved=d.phone;
+    $('cmsg').textContent='✓ 확인되었습니다.'; $('cmsg').classList.add('ok'); check();
+  }catch(e){ $('ok').disabled=false; $('cmsg').textContent='서버에 연결하지 못했습니다'; $('cmsg').classList.remove('ok'); }
 });
 /* 동의 */
 $('all').addEventListener('change',e=>{
@@ -451,11 +493,12 @@ $('join').addEventListener('click',()=>{
   const u=window._pending;
   if(!u){ alert('먼저 카카오 또는 구글로 인증해 주세요.'); return; }
   if(!u.phone){
-    if(!$('cmsg').classList.contains('ok')){
+    if(!$('cmsg').classList.contains('ok') || !window._phSaved){
       alert('연락처 인증을 완료해 주세요.\n접속 정보를 문자로 보내드리려면 번호 확인이 필요합니다.');
       return;
     }
-    u.phone=$('ph').value.trim();
+    /* 서버가 저장하고 돌려준 번호를 씁니다 — 화면 입력값이 아니라 */
+    u.phone=window._phSaved;
   }
   u.marketing = !!document.querySelector('.agree input:not(.need):not(#all)').checked;
   /* 회원 명부에 올린다 — 다음 로그인부터는 약관 단계 없이 바로 들어온다 */
