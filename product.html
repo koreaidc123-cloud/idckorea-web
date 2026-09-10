@@ -424,8 +424,77 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
    환경변수가 없을 때만 아래 샌드박스 키로 돕니다 (실결제 불가). */
 const TOSS_CK=(window.KVC_AUTH&&window.KVC_AUTH.TOSS_CLIENT_KEY)
   || 'test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq';
-/* 이 페이지가 파는 상품 번호 — api/_price.js 의 번호와 같아야 합니다 (5 = 라이젠 3700X) */
-const SPEC_ID=5;
+
+/* ═══ 이 페이지가 파는 상품 ═══════════════════════════════════════
+
+   ★ 2026-09-10 오픈 점검에서 잡은 구멍
+     목록(live)에서 어떤 PC 를 골라도 이 페이지는 무조건
+     라이젠 3700X · 65,000원이었습니다. 2200G(40,000원)를 골라 넘어와도
+     화면과 결제가 전부 3700X 로 바뀌어, 판매 가능 59대 중 45대는
+     사실상 온라인으로 살 수 없었습니다.
+
+   이제 주소의 ?g=상품번호 를 읽어 그 상품으로 팝니다.
+     product.html          → 라이젠 3700X (기존 그대로)
+     product.html?g=2      → 라이젠 2200G~2400G · 40,000원
+     product.html?g=4&pc=Y-010 → 라이젠 1700 + 고른 PC 우선 배정
+
+   번호·가격은 서버 가격표(api/_price.js)·목록(live.html)과 같아야 합니다.
+   결제 금액 자체는 어차피 서버가 정하므로(order-create), 여기 값을
+   조작해도 돈은 못 속입니다 — 화면 표시용입니다. */
+const PRODUCTS={
+  1:{n:'인텔 I5 4690',        cpu:'Intel Core i5-4690',       core:'4코어',        ram:'8GB', ssd:'120GB',gpu:'GTX 750 ~ 750TI',            list:90000, p:40000,img:'img/p1-i5.jpg'},
+  2:{n:'라이젠 2200G~2400G',  cpu:'AMD Ryzen 2200G~2400G',    core:'4코어',        ram:'8GB', ssd:'120GB',gpu:'VEGA 내장그래픽',             list:90000, p:40000,img:'img/p2-2200.jpg'},
+  3:{n:'라이젠 5600G~5700G',  cpu:'AMD Ryzen 5600G~5700G',    core:'6~8코어',      ram:'32GB',ssd:'240GB',gpu:'내장그래픽 (추가 가능)',       list:120000,p:55000,img:'img/p6-5700.jpg'},
+  4:{n:'라이젠 1700',         cpu:'AMD Ryzen 7 1700',         core:'8코어 16스레드',ram:'32GB',ssd:'240GB',gpu:'GTX 1050TI 4G ~ 1060 3G·6G',list:140000,p:60000,img:'img/p5-1700.jpg'},
+  5:{n:'라이젠 3700X',        cpu:'AMD Ryzen 7 3700X',        core:'8코어 16스레드',ram:'32GB',ssd:'480GB',gpu:'GTX 1050TI 4G ~ 1060 3G·6G',list:160000,p:65000,img:'img/p7-3700x.jpg'},
+};
+const _q=new URLSearchParams(location.search);
+const SPEC_ID=PRODUCTS[_q.get('g')]? Number(_q.get('g')) : 5;
+/* ★ 이름을 P 로 하면 안 됩니다 — 아래쪽에 결제수단 목록이 이미
+   const P 로 선언돼 있어, 같은 이름을 또 선언하면 이 스크립트가 통째로
+   죽어 결제 버튼까지 전부 멈춥니다. (실제로 나서 잡은 사고입니다) */
+const PROD=PRODUCTS[SPEC_ID];
+window.KVC_P=PROD; window.KVC_SPEC=SPEC_ID;           // 아래쪽 스크립트도 씁니다
+/* 목록에서 고른 PC — 결제 후 이 PC 를 먼저 배정해 봅니다.
+   이미 팔렸으면 같은 상품의 다른 PC 로 배정됩니다 (서버가 판단). */
+const PC_PICK=/^[KYD]-\d{3}$/.test((_q.get('pc')||'').toUpperCase())
+  ? _q.get('pc').toUpperCase() : '';
+
+/* 3700X 가 아닌 상품이면 화면의 이름·사양·가격·사진을 갈아끼웁니다.
+   (검색엔진용 meta 는 기본 상품인 3700X 그대로 둡니다 — 이 주소로
+    직접 들어오는 사람은 3700X 를 보고 온 사람이기 때문입니다) */
+(function(){
+  if(SPEC_ID!==5){
+    document.querySelector('.pt-h').textContent=PROD.n+' 가상컴 솔루션';
+    const crumb=document.querySelector('.crumb');
+    crumb.innerHTML=crumb.innerHTML.replace(/›([^›]*)$/, '› '+PROD.n);
+    const img=document.getElementById('big');
+    img.src=PROD.img; img.alt=PROD.n+' 가상컴';
+    const rows=document.querySelectorAll('.sp .v');
+    if(rows.length>=4){
+      rows[0].innerHTML=PROD.cpu+' <em>'+PROD.core+'</em>';
+      rows[1].textContent=PROD.ram;
+      rows[2].textContent=PROD.ssd;
+      rows[3].textContent=PROD.gpu;
+    }
+    const ps=document.querySelector('.sp.money .v s'), pb=document.querySelector('.sp.money .v b');
+    if(ps) ps.textContent=PROD.list.toLocaleString('ko-KR')+'원';
+    if(pb) pb.textContent=PROD.p.toLocaleString('ko-KR')+'원';
+    const pct=document.querySelector('.sp.money .v i');
+    if(pct) pct.textContent=Math.round((1-PROD.p/PROD.list)*100)+'%';
+    const sl=document.querySelector('.stk .l');
+    if(sl) sl.innerHTML='<b>'+PROD.n+' '+PROD.core.split(' ')[0]+'</b><span>'
+      +PROD.ram+' · SSD '+PROD.ssd+' · '+PROD.gpu+' · 개별 공인IP</span>';
+  }
+  if(PC_PICK){
+    const h=document.querySelector('.pt-h');
+    const c=document.createElement('div');
+    c.style.cssText='display:inline-block;margin:8px 0 0;padding:5px 12px;background:#EAF7F0;'
+      +'color:#0B7A46;border-radius:99px;font-size:13px;font-weight:800';
+    c.textContent='✓ 선택하신 PC: '+PC_PICK+' — 결제 후 이 PC 로 배정해 드립니다';
+    h.after(c);
+  }
+})();
 let _pay=null;
 function tossPay(){
   if(!_pay)_pay=TossPayments(TOSS_CK).payment({customerKey:'GUEST-'+Math.random().toString(36).slice(2,12)});
@@ -456,21 +525,23 @@ async function startPay(){
      주문번호와 금액을 서버가 정해야 금액을 고쳐서 결제하는 것을 막을 수 있습니다.
      서버 함수가 아직 없으면 예전처럼 화면에서 만든 번호로 진행합니다(테스트 결제). */
   let orderId='KVC'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*900+100);
-  let orderName='라이젠 3700X 가상컴 '+m.n, amt=tot;
+  let orderName=PROD.n+' 가상컴 '+m.n, amt=tot;
   try{
     const r=await fetch('/api/order-create',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({specId:SPEC_ID, days:S.d, name:U.name, phone:U.phone,
                            via:U.via, socialId:U.kakaoId||U.googleId||'', email:U.email||''})});
     if(r.ok){ const d=await r.json(); orderId=d.orderId; orderName=d.orderName; amt=d.amount; }
-    else if(r.status===400){ alert((await r.json()).error||'주문을 만들지 못했습니다.'); return; }
+    else if(r.status===400||r.status===409){ alert((await r.json()).error||'주문을 만들지 못했습니다.'); return; }
   }catch(e){}
 
   sessionStorage.setItem('kvc-last-order',JSON.stringify(
-    {orderId,name:'라이젠 3700X 8코어',days:S.d,amt,pm:S.p}));
+    {orderId,name:PROD.n+' '+PROD.core,days:S.d,amt,pm:S.p}));
+  /* 목록에서 고른 PC 가 있으면 성공 주소에 실어 보냅니다.
+     결제 승인 때 서버가 이 PC 를 먼저 배정해 봅니다. */
   const common={
     amount:{currency:'KRW',value:amt},
     orderId, orderName,
-    successUrl:location.origin+'/success.html',
+    successUrl:location.origin+'/success.html'+(PC_PICK?'?pc='+PC_PICK:''),
     failUrl:location.origin+'/fail.html',
   };
   try{
@@ -504,7 +575,8 @@ const P=[
  {id:'kk',n:'카카오페이',t:'<b>결제 즉시</b> 개통됩니다. 접속 정보는 카카오톡으로도 보내드립니다.'},
  {id:'nv',n:'네이버페이',t:'<b>결제 즉시</b> 개통됩니다. 네이버 포인트도 그대로 적립됩니다.'},
 ];
-const BASE=65000, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
+/* 상품이 주소(?g=)로 정해지므로 기준가도 그 상품 것을 씁니다 */
+const BASE=PROD.p, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
 let S={d:30,p:'vb'};
 
 function terms(){$('terms').innerHTML=TM.map(t=>
@@ -517,7 +589,7 @@ function pays(){$('pays').innerHTML=P.map(p=>
 function calc(){
  const m=TM.find(t=>t.d===S.d);
  const base=Math.round(BASE*S.d/30), dc=Math.round(base*m.o/100), tot=base-dc;
- $('s-t').textContent=`라이젠 3700X · ${m.n}`;
+ $('s-t').textContent=`${PROD.n} · ${m.n}`;
  $('s-b').textContent=w(base)+'원';
  $('s-dn').textContent=m.o?`장기 할인 ${m.o}%`:'장기 할인';
  $('s-d').textContent=dc?'−'+w(dc)+'원':'0원';

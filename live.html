@@ -465,6 +465,13 @@ function stick(){
   $('ss').textContent=`${g.cpu} · 램 ${g.ram}GB · SSD ${x.ssd}GB · ${gpuOf(x)} · ${x.ip?`공인IP ${x.ip}`:'개별 공인IP'}`;
   $('tm').innerHTML=TM.map(t=>`<button data-t="${t.d}" class="${term===t.d?'on':''}">${t.n}${t.o?` −${t.o}%`:''}</button>`).join('');
   $('sp').textContent=w(tot)+'원';
+  /* ★ 고른 PC 의 상품과 품번을 결제 페이지로 넘깁니다.
+     전에는 링크가 product.html 고정이라, 2200G(40,000원)를 골라도
+     결제 페이지는 무조건 3700X · 65,000원이었습니다.
+     상품이 없는 PC(g 없음)는 아예 못 넘어가게 막습니다. */
+  const go=$('sgo');
+  if(g.g){ go.href='product.html?g='+g.g+'&pc='+encodeURIComponent(x.id); go.style.pointerEvents=''; go.style.opacity=''; }
+  else   { go.removeAttribute('href'); go.style.pointerEvents='none'; go.style.opacity='.45'; }
   $('stk').classList.add('on');
 }
 document.addEventListener('click',e=>{

@@ -116,7 +116,26 @@ module.exports = async (req, res) => {
       query: `?select=pn,anydesk,room,rack,fl,slot&status=eq.ok&online=is.true` +
              `&last_beat=gte.${fresh}` +
              `&spec_id=eq.${Number(order.spec_id)}&order=updated_at.asc&limit=5`,
-    });
+    }) || [];
+
+    /* ★ 고객이 목록에서 "이 PC" 를 골라 결제한 경우 — 그 PC 를 맨 앞에 둡니다.
+       (live → product → 결제 성공 주소를 타고 온 wantPn)
+       · 같은 상품(spec_id)인지 서버가 다시 확인합니다 — 주소를 조작해
+         비싼 상품의 PC 를 싼 값에 가져가는 것을 막습니다.
+       · 그 사이 팔렸으면 아래 후보 반복문이 자연스럽게 다음 PC 로 넘어갑니다. */
+    const wantPn = String((req.body || {}).wantPn || '').toUpperCase().trim();
+    if (/^[KYD]-\d{3}$/.test(wantPn) && !cand.some(c => c.pn === wantPn)) {
+      try {
+        const want = await sb('pcs', {
+          query: `?select=pn,anydesk,room,rack,fl,slot&pn=eq.${encodeURIComponent(wantPn)}` +
+                 `&status=eq.ok&online=is.true&last_beat=gte.${fresh}` +
+                 `&spec_id=eq.${Number(order.spec_id)}&limit=1`,
+        });
+        if (want && want[0]) cand.unshift(want[0]);
+      } catch (e) {}
+    } else if (cand.some(c => c.pn === wantPn)) {
+      cand.sort((a, b) => (a.pn === wantPn ? -1 : b.pn === wantPn ? 1 : 0));
+    }
 
     /* ★ 실제로 잡히는 PC 가 나올 때까지 다음 후보로 넘어갑니다.
        status=eq.ok 를 조건으로 건 PATCH 는 이미 남이 가져간 PC 를

@@ -145,10 +145,14 @@ document.addEventListener('click',e=>{
 });
 
 const paymentKey=q.get('paymentKey'), orderId=q.get('orderId'), amount=q.get('amount');
+/* 목록에서 고른 PC — 결제 페이지가 성공 주소에 실어 보낸 것입니다.
+   서버가 이 PC 를 먼저 배정해 봅니다. 이미 팔렸으면 같은 상품의
+   다른 PC 로 배정되므로 값이 이상해도 위험하지 않습니다. */
+const wantPn=(q.get('pc')||'').toUpperCase();
 if(!paymentKey||!orderId||!amount){ fail('잘못된 접근입니다','결제 정보가 없습니다.'); }
 else{
   fetch('/api/toss-confirm',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({paymentKey,orderId,amount})})
+    body:JSON.stringify({paymentKey,orderId,amount,wantPn})})
   .then(r=>r.json())
   .then(d=>{
     if(d.status==='DONE') done(d);

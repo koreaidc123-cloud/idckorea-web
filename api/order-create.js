@@ -44,6 +44,23 @@ module.exports = async (req, res) => {
   }
 
   try {
+    /* ★ 매진 확인 — 결제창을 열기 전에 지금 배정 가능한 PC 가 있는지 봅니다.
+       이걸 안 보면 재고 0 인 상품도 결제가 되고, 돈은 받았는데 배정할
+       PC 가 없어 "결제 완료·미배정" 이 쌓입니다 (지금 인텔 i5 가 0대).
+       결제 승인(toss-confirm)과 같은 기준(살아있고 임대 가능)으로 봅니다. */
+    const freshSec = Number(process.env.KVC_ASSIGN_FRESH_SEC || 420);
+    const fresh = new Date(Date.now() - freshSec * 1000).toISOString();
+    const stock = await sb('pcs', {
+      query: `?select=pn&status=eq.ok&online=is.true&last_beat=gte.${fresh}` +
+             `&spec_id=eq.${q.specId}&limit=1`,
+    });
+    if (!stock || !stock[0]) {
+      return res.status(409).json({
+        error: '죄송합니다. 이 사양은 지금 모두 임대중입니다.\n' +
+               '다른 사양을 골라 주시거나, 카톡 상담으로 입고 알림을 요청해 주세요.',
+      });
+    }
+
     /* 회원 찾기 — 없으면 만듭니다 (전화번호가 고객 식별의 기준입니다) */
     let memberId = null;
     if (b.via && b.socialId) {
