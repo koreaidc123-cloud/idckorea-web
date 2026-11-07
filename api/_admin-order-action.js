@@ -180,14 +180,37 @@ module.exports = async (req, res) => {
            [초기화 대기(wipe)] 로 넘어갔으면 자료를 지우는 중이거나 지울 PC 라서
            연장으로 되살리지 않습니다. 그대로 연장하면 주문은 이용중인데 PC 는
            초기화 대기로 남아, 초기화 뒤 다른 손님에게 또 팔릴 수 있습니다. */
+      /* ★ PC 부터 잡고 나서 주문을 고칩니다 (Codex T-0179 — 경쟁 상태).
+           예전 순서(상태 확인 → 주문 연장 → PC 바꾸기)는 그 사이 만료 정리가 유예(hold)를
+           초기화 대기(wipe)로 바꾸면, 주문은 이용중인데 PC 는 초기화 대기로 남았습니다.
+           이제 ok·hold 일 때만 바뀌는 조건부 PATCH 로 먼저 rent 로 잡고, 바뀐 줄을 받아 확인합니다.
+           못 잡았으면 지금 상태를 다시 보고, 초기화 대기면 주문은 건드리지 않고 돌려보냅니다.
+           (ok 는 db/08 을 돌리기 전 옛 정리 방식으로 바로 풀린 PC 입니다) */
+      const wipeErr = () => res.status(409).json({
+        error: `${order.pn} 은 반납 유예가 끝나 [초기화 대기] 로 넘어간 PC 입니다.\n`
+             + `자료가 지워졌을 수 있어 그대로 연장하지 않습니다.\n`
+             + `빈 PC 로 [수동 주문 등록] 을 해 주세요.`,
+      });
+      let grabbedFrom = null;          // 잡기 전 상태 (주문 저장이 실패하면 되돌릴 때 씀)
       if (order.pn) {
-        const pr = await sb('pcs', { query: `?select=status&pn=eq.${encodeURIComponent(order.pn)}&limit=1` });
-        if (pr && pr[0] && pr[0].status === 'wipe') {
-          return res.status(409).json({
-            error: `${order.pn} 은 반납 유예가 끝나 [초기화 대기] 로 넘어간 PC 입니다.\n`
-                 + `자료가 지워졌을 수 있어 그대로 연장하지 않습니다.\n`
-                 + `빈 PC 로 [수동 주문 등록] 을 해 주세요.`,
-          });
+        const pq = `?pn=eq.${encodeURIComponent(order.pn)}`;
+        const pr = await sb('pcs', { query: `${pq}&select=status&limit=1` });
+        const before = pr && pr[0] ? pr[0].status : null;
+        if (before === 'wipe') return wipeErr();
+        if (before === 'ok' || before === 'hold') {
+          const got = await sb('pcs', { method: 'PATCH', prefer: 'return=representation',
+            query: `${pq}&status=eq.${before}&select=pn`,
+            body: { status: 'rent', updated_at: now.toISOString() } });
+          if (got && got[0]) grabbedFrom = before;
+          else {
+            /* 그 사이 상태가 바뀌었습니다 — 다시 보고 판단합니다 */
+            const pr2 = await sb('pcs', { query: `${pq}&select=status&limit=1` });
+            const st2 = pr2 && pr2[0] ? pr2[0].status : null;
+            if (st2 === 'wipe') return wipeErr();
+            if (st2 !== 'rent') {
+              return res.status(409).json({ error: `${order.pn} 의 상태가 방금 바뀌었습니다 (${st2}). 새로고침 후 다시 해 주세요` });
+            }
+          }
         }
       }
 
@@ -197,23 +220,25 @@ module.exports = async (req, res) => {
       const newEnd = new Date(base + days * DAY);
       const addAmt = Math.round(Number(b.amount) || 0);
 
-      await sb('orders', {
-        method: 'PATCH', prefer: 'return=minimal',
-        query: `?order_id=eq.${encodeURIComponent(no)}`,
-        body: {
-          days: Number(order.days) + days,
-          amount: Number(order.amount) + addAmt,
-          ends_at: newEnd.toISOString(),
-          status: 'assigned',
-        },
-      });
-      /* 만료돼서 반납했던 PC 라면 다시 임대중으로.
-         반납 유예(hold) 중인 PC 도 같이 — 손님 자료가 남아 있는 그 PC 를 그대로 돌려드립니다.
-         (ok 는 db/08 을 돌리기 전 옛 정리 방식으로 바로 풀린 PC 입니다) */
-      if (order.pn) {
-        await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
-          query: `?pn=eq.${encodeURIComponent(order.pn)}&status=in.(ok,hold)`,
-          body: { status: 'rent', updated_at: now.toISOString() } });
+      try {
+        await sb('orders', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?order_id=eq.${encodeURIComponent(no)}`,
+          body: {
+            days: Number(order.days) + days,
+            amount: Number(order.amount) + addAmt,
+            ends_at: newEnd.toISOString(),
+            status: 'assigned',
+          },
+        });
+      } catch (e) {
+        /* 주문을 못 고쳤으면 잡아 둔 PC 를 원래 상태로 되돌립니다 */
+        if (grabbedFrom) {
+          try { await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
+            query: `?pn=eq.${encodeURIComponent(order.pn)}&status=eq.rent`,
+            body: { status: grabbedFrom, updated_at: new Date().toISOString() } }); } catch (e2) {}
+        }
+        throw e;
       }
       await log(order.pn, `연장 ${days}일 · ${addAmt.toLocaleString('ko-KR')}원 · ${str(b.payMethod, 30) || '수동'}`);
       return res.status(200).json({ ok: true, endsAt: newEnd.toISOString(), days: Number(order.days) + days });

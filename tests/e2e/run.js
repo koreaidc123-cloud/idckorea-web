@@ -575,6 +575,9 @@ async function main() {
     const diff = Math.round((Date.parse(orderOf(o.order_id).ends_at) - endBefore) / 86400000);
     ok(diff === 30, '만료일이 ' + diff + '일 늘어남');
     ok(orderOf(o.order_id).amount === 130000, '금액 ' + orderOf(o.order_id).amount);
+    /* 화면이 서버에서 다시 받아올 때까지 기다립니다. 안 기다리면 연장 뒤의 [닫기] 가
+       다음 시험(A7)이 연 주문 상세를 닫아 버려 버튼이 "화면 밖" 이 됩니다 (가끔 실패하던 원인) */
+    await ap.waitForFunction(no => { const x = ORDERS.find(y => y.no === no); return x && x.days === 60; }, o.order_id, { timeout: 8000 });
     S.manualOrder = o.order_id;
     ok(!ap.xss.length, 'XSS 실행됨');
   });
@@ -760,6 +763,9 @@ async function main() {
     let r = await apiIn(ap, '/api/admin?do=pc-update', { key: 'Y-010', status: 'ok' });
     ok(r.status === 409 && /비밀번호/.test(r.d.error), '비밀번호 없이 판매로 응답 ' + r.status + ' ' + JSON.stringify(r.d));
     ok(pcOf('Y-010').status === 'wipe', '거절했는데 상태가 바뀜');
+    /* 점검을 거쳐 [점검 완료 → 판매] 로 우회하는 길도 막혀야 함 (Codex T-0179) */
+    r = await apiIn(ap, '/api/admin?do=pc-update', { key: 'Y-010', status: 'fix' });
+    ok(r.status === 409 && pcOf('Y-010').status === 'wipe', '초기화 대기 → 점검 우회 응답 ' + r.status);
     await ap.reload(); await adminReady(ap);
     await ap.evaluate(() => openPc('Y-010'));
     ok(/초기화 대기/.test(await drawerText(ap)), 'PC 상세에 초기화 대기 표시 없음');
@@ -849,7 +855,8 @@ async function main() {
     const shown = await ap.textContent('#ord-refund');
     const q = await apiIn(ap, '/api/admin?do=order-action', { no: S.waitOrder, act: 'quote' });
     ok(q.status === 200 && shown.replace(/[^\d]/g, '') === String(q.d.quote.refund), `화면 ${shown} ≠ 서버 ${q.d && q.d.quote.refund}`);
-    ok(q.d.price30 === 60000, '30일 가격(1700) ' + q.d.price30);
+    const want30 = require('../../api/_price').quote(orderOf(S.waitOrder).spec_id, 30).amount;
+    ok(q.d.price30 === want30, `30일 가격 ${q.d.price30} ≠ 가격표 ${want30}`);
     ok(!/mypage/.test(await ap.content()), 'admin 에 mypage 연장 안내가 남아 있음');
   });
 
@@ -865,6 +872,8 @@ async function main() {
         payer_name: '옛손님' + i, user_name: '옛손님' + i, user_phone: null, canceled_at: null, refund_amt: null,
         refund_why: null, created_at: new Date(base).toISOString(), refund_state: null, refund_done_at: null });
     }
+    /* 가장 오래된 한 건은 "직접 송금 대기 환불" — 2000건 밖이어도 빠지면 안 됨 */
+    Object.assign(extra[0], { status: 'refunded', refund_amt: 10000, refund_state: 'manual_pending' });
     db().orders.push(...extra);
     try {
       const r = await apiIn(ap, '/api/admin?do=orders&all=1');
@@ -874,8 +883,12 @@ async function main() {
       ok(JSON.stringify(activeDb) === JSON.stringify(activeApi), `이용중 주문이 잘림: DB ${activeDb.length} · 화면 ${activeApi.length}`);
       ok(r.d.historyCut === true, 'historyCut 이 ' + r.d.historyCut);
       const hist = r.d.orders.filter(o => !['paid', 'assigned', 'ready'].includes(o.st));
-      ok(hist.length === 2000, '지난 주문 ' + hist.length + '건');
-      ok(hist.some(o => o.no === 'OLD03099') && !hist.some(o => o.no === 'OLD00000'), '최근 것부터 받지 않음');
+      /* 최근 2000건 + (2000건 밖이라도) 직접 송금 대기 환불은 따로 끝까지 */
+      const owed = db().orders.filter(o => o.refund_state === 'manual_pending').map(o => o.order_id);
+      ok(hist.length >= 2000 && hist.length <= 2000 + owed.length, '지난 주문 ' + hist.length + '건');
+      ok(owed.every(id => r.d.orders.some(o => o.no === id)), '직접 송금 대기 환불이 목록에서 빠짐');
+      ok(hist.some(o => o.no === 'OLD03099') && !hist.some(o => o.no === 'OLD00001'), '최근 것부터 받지 않음');
+      ok(hist.some(o => o.no === 'OLD00000'), '2000건 밖 직접 송금 대기 환불이 빠짐');
       await ap.reload(); await adminReady(ap);
       await ap.evaluate(() => openPc('Y-008'));
       ok(/오래된 기록은 생략됨/.test(await drawerText(ap)), 'PC 상세에 "오래된 기록은 생략됨" 없음');

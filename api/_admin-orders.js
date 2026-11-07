@@ -35,7 +35,8 @@ module.exports = async (req, res) => {
          ① 진행중(결제 대기·결제완료·이용중) — 개수 제한 없이 전부 (1000건씩 여러 번)
          ② 끝난 것(만료·환불·취소) — 최근 것부터 2000건까지만. 넘으면 historyCut=true
        ※ Supabase 는 한 번에 최대 1000줄만 주므로 1000건씩 끊어 받습니다. */
-    const fetchAll = async (q, max) => {
+    /* max 를 안 주면 마지막 페이지까지 끝까지 받습니다 (진행중 주문은 절대 자르지 않음 — Codex T-0179) */
+    const fetchAll = async (q, max = Infinity) => {
       const out = [];
       for (let off = 0; off < max; off += 1000) {
         const n = Math.min(1000, max - off);
@@ -49,23 +50,30 @@ module.exports = async (req, res) => {
     /* 환불 송금 추적 칸(refund_state·refund_done_at)은 db/08 SQL 을 돌려야 생깁니다.
        없으면 그 칸만 빼고 다시 받습니다 — 목록 전체가 안 나오면 안 되므로. */
     let refundCols = true;
-    const load = async (c) => {
+    const load = async (c, withRefund) => {
       const active = await fetchAll(
-        `?select=${c}&status=in.(paid,assigned,ready)&order=ends_at.asc.nullslast,order_id.asc`, 100000);
+        `?select=${c}&status=in.(paid,assigned,ready)&order=ends_at.asc.nullslast,order_id.asc`);
+      /* 1건 더 받아 봐서, 정말 2000건을 넘을 때만 "생략됨" 이라고 합니다 (딱 2000건이면 생략 아님) */
       const hist = all ? await fetchAll(
-        `?select=${c}&status=in.(expired,refunded,canceled)&order=ends_at.desc.nullslast,order_id.asc`, HIST_MAX) : [];
-      return { active, hist };
+        `?select=${c}&status=in.(expired,refunded,canceled)&order=ends_at.desc.nullslast,order_id.asc`, HIST_MAX + 1) : [];
+      /* ★ 직접 송금 대기 환불은 오래됐어도 끝까지 받습니다. 2000건 밖으로 밀려
+           [오늘 할 일] 에서 사라지면 고객에게 돈을 안 보낸 채 잊게 됩니다 (Codex T-0179) */
+      const owed = withRefund ? await fetchAll(
+        `?select=${c}&status=in.(refunded,canceled)&refund_state=eq.manual_pending&order=order_id.asc`) : [];
+      return { active, hist, owed };
     };
     let got;
     try {
-      got = await load(cols + ',refund_state,refund_done_at');
+      got = await load(cols + ',refund_state,refund_done_at', true);
     } catch (e) {
       if (!missingCol(e, 'refund_')) throw e;
       refundCols = false;
-      got = await load(cols);
+      got = await load(cols, false);
     }
-    const historyCut = got.hist.length >= HIST_MAX;
-    const rows = got.active.concat(got.hist);
+    const historyCut = got.hist.length > HIST_MAX;
+    const hist = got.hist.slice(0, HIST_MAX);
+    const seen = new Set(got.active.concat(hist).map(o => o.order_id));
+    const rows = got.active.concat(hist, got.owed.filter(o => !seen.has(o.order_id)));
 
     const now = Date.now();
     const orders = (rows || []).map(o => {

@@ -240,8 +240,9 @@ function rpc(name, body) {
     const holdDays = hs && /^\d{1,3}$/.test(hs.v) ? Number(hs.v) : 3;
     const stamp = new Date(now).toISOString();
     for (const o of expired) {
-      const busy = DB.orders.some(x => x !== o && x.pn === o.pn && ['assigned', 'paid'].includes(x.status) &&
-        !(x.status === 'assigned' && x.ends_at && Date.parse(x.ends_at) < now));
+      /* 08 과 같게 — 결제완료(paid)는 날짜와 상관없이 쓰는 중 */
+      const busy = DB.orders.some(x => x !== o && x.pn === o.pn && (x.status === 'paid' ||
+        (x.status === 'assigned' && !(x.ends_at && Date.parse(x.ends_at) < now))));
       const pc = DB.pcs.find(p => p.pn === o.pn);
       if (pc && pc.status === 'rent' && !busy) {
         if (v08) Object.assign(pc, { status: 'hold', hold_until: new Date(now + holdDays * 86400000).toISOString(), updated_at: stamp });

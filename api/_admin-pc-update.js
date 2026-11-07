@@ -209,6 +209,15 @@ module.exports = async (req, res) => {
        화면의 체크리스트(윈도우 초기화 · 계정·파일 정리 · 비밀번호 교체)를 건너뛰고
        버튼만 눌러도 여기서 막힙니다. */
     const fromReturn = cur.status === 'wipe' || cur.status === 'hold';
+    /* ★ 반납 PC 는 다른 상태(점검·미검증 등)를 거쳐 판매로 가는 길을 막습니다.
+       예전 검토(Codex T-0179)에서 wipe → fix → [점검 완료 → 판매] 로 비밀번호 교체를
+       건너뛸 수 있다고 나왔습니다. 반납 PC 는 유예 → 초기화 대기 → (비밀번호) 판매 만 됩니다. */
+    if (fromReturn && st !== cur.status && !['wipe', 'ok'].includes(st)) {
+      return res.status(409).json({
+        error: '반납된 PC(유예·초기화 대기)는 다른 상태로 바꿀 수 없습니다.\n'
+             + '[초기화 완료 → 판매로] 로 초기화와 비밀번호 교체를 먼저 해 주세요.',
+      });
+    }
     if (st === 'ok' && fromReturn) {
       if (!(b.pw !== undefined && String(b.pw).trim().length >= 4)) {
         return res.status(409).json({
@@ -217,11 +226,17 @@ module.exports = async (req, res) => {
         });
       }
       /* 그 PC 를 아직 쓰는(기간이 남은) 주문이 있으면 판매로 돌리지 않습니다 — 한 PC 를 두 분이 쓰게 됩니다 */
+      /* 조건을 DB 에 맡겨 한 건이라도 있으면 막습니다 (앞 5건만 보고 판단하면 놓칠 수 있음 — Codex T-0179)
+         결제완료(paid) · 기간이 남은 이용중 · 끝나는 날이 비어 있는 이용중 */
       try {
-        const busy = await sb('orders', {
-          query: `?select=order_id,ends_at,status&pn=eq.${encodeURIComponent(key)}&status=in.(assigned,paid)&limit=5`,
-        });
-        const live = (busy || []).find(o => o.status === 'paid' || !o.ends_at || Date.parse(o.ends_at) >= Date.now());
+        const pnQ = `pn=eq.${encodeURIComponent(key)}`;
+        const nowIso = new Date().toISOString();
+        const hits = await Promise.all([
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.paid&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.assigned&ends_at=gte.${nowIso}&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.assigned&ends_at=is.null&limit=1` }),
+        ]);
+        const live = hits.map(h => h && h[0]).find(Boolean);
         if (live) {
           return res.status(409).json({ error: `${key} 은 아직 주문(${live.order_id})이 쓰고 있어 판매로 돌릴 수 없습니다` });
         }

@@ -51,7 +51,7 @@ insert into settings (k, v) values ('hold_days', '3')
   on conflict (k) do nothing;
 
 -- ── 3. 만료 정리 함수 바꿔 끼우기 ─────────────────────────────
--- 07-만료정리.sql 의 함수와 같고, 바뀐 곳은 ★ 표시한 두 곳뿐입니다.
+-- 07-만료정리.sql 의 함수와 같고, 바뀐 곳은 ★ 표시한 세 곳뿐입니다.
 --   · 결제완료(paid) 주문은 여전히 절대 자동 만료하지 않습니다.
 --   · 같은 PC 를 지금 쓰는 다른 주문이 있으면 여전히 건드리지 않습니다.
 create index if not exists orders_expire_idx on orders (status, ends_at);
@@ -88,10 +88,13 @@ begin
    where status = 'rent'
      and pn in (select pn from orders
                  where status = 'assigned' and ends_at < now() and pn is not null)
-     -- 같은 PC 를 지금 쓰는(아직 안 끝난) 다른 주문이 있으면 건드리지 않습니다
+     -- 같은 PC 를 지금 쓰는 다른 주문이 있으면 건드리지 않습니다.
+     -- ★ 결제완료(paid)는 끝나는 날과 상관없이 항상 "쓰는 중" 으로 봅니다
+     --   (07 은 paid 도 끝나는 날로 걸러서, 날짜가 지난 paid 주문의 PC 가 풀릴 수 있었습니다 — Codex T-0179)
      and pn not in (select pn from orders
-                     where status in ('assigned', 'paid') and pn is not null
-                       and (ends_at is null or ends_at >= now()));
+                     where pn is not null
+                       and (status = 'paid'
+                            or (status = 'assigned' and (ends_at is null or ends_at >= now()))));
 
   -- ② 주문을 만료로 표시합니다.
   update orders set status = 'expired'
