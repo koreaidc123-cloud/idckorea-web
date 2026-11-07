@@ -273,6 +273,12 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
    auth-config.js 에 앱 키를 넣으면 진짜 카카오·구글 창이 뜬다.
    키가 없으면 무엇을 어디서 받아야 하는지 화면으로 안내한다. */
 const CFG=window.KVC_AUTH||{};
+/* ★ 2026-11-08 — 키가 없는 로그인 버튼은 숨깁니다.
+   예전에는 버튼이 보이고, 누르면 관리자용 설정 안내가 고객에게 떴습니다. */
+document.addEventListener('DOMContentLoaded',()=>{
+  if(!CFG.KAKAO_JS_KEY) document.querySelectorAll('.so-kk').forEach(b=>b.style.display='none');
+  if(!CFG.GOOGLE_CLIENT_ID) document.querySelectorAll('.so-gg,[data-go="google"],[data-up="google"]').forEach(b=>b.style.display='none');
+});
 /* 돌아갈 곳은 우리 사이트 안의 페이지만 받습니다 (예: product.html?g=3&pc=Y-001).
    아무 주소나 받으면 남의 사이트나 javascript: 로 보내는 데 악용될 수 있습니다. */
 const _next=new URLSearchParams(location.search).get('next')||'';
@@ -320,12 +326,9 @@ function needKey(which){
   const box=document.createElement('div');
   box.style.cssText='position:fixed;inset:0;z-index:999;background:rgba(8,11,18,.9);display:grid;place-items:center;padding:22px';
   box.innerHTML=`<div style="width:min(520px,100%);background:#fff;border-radius:16px;padding:28px 26px;line-height:1.75">
-    <b style="font-size:18px;letter-spacing:-.04em">${which} 로그인 키가 아직 등록되지 않았습니다</b>
+    <b style="font-size:18px;letter-spacing:-.04em">지금은 ${which} 로그인을 쓸 수 없습니다</b>
     <p style="margin-top:10px;font-size:14px;color:#6B7381">
-      실제 로그인을 켜려면 <b style="color:#0B0E14">auth-config.js</b> 파일에 앱 키 한 줄만 넣으면 됩니다.<br>
-      ${which==='카카오'
-        ? 'developers.kakao.com → 내 애플리케이션 → 앱 만들기 → <b>JavaScript 키</b> 복사'
-        : 'console.cloud.google.com → 사용자 인증 정보 → OAuth 클라이언트 ID(웹) → <b>클라이언트 ID</b> 복사'}
+      다른 로그인 방법을 이용하시거나, 카카오톡 상담으로 말씀해 주시면 바로 도와드리겠습니다.
     </p>
     <div style="margin-top:16px;display:flex;gap:8px">
       <button id="kx" style="flex:1;height:46px;border:0;border-radius:9px;background:#E2233C;color:#fff;font-weight:700;font-size:15px;cursor:pointer">확인</button>
