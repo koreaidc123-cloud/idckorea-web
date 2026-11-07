@@ -38,8 +38,8 @@
 --  3) 토큰과 chat id 를 Supabase 금고(Vault)에 넣기 — 둘 중 편한 방법 하나
 --     [방법 A · 권장] Supabase 대시보드 → 왼쪽 Project Settings(또는 Integrations) → Vault
 --        → [Add new secret]
---          Name: kvc_tg_token   Secret: 1)의 토큰
---          Name: kvc_tg_chat    Secret: 2)의 숫자
+--          Name 칸 kvc_tg_token  →  Secret 칸에 1)의 토큰
+--          Name 칸 kvc_tg_chat   →  Secret 칸에 2)의 숫자
 --     [방법 B] SQL Editor → New query 에 아래 두 줄을 붙이고 '여기에…' 만 바꿔 [Run]
 --          select vault.create_secret('여기에_봇_토큰', 'kvc_tg_token', '한국가상컴 텔레그램 봇 토큰');
 --          select vault.create_secret('여기에_chat_id', 'kvc_tg_chat',  '한국가상컴 텔레그램 대화방');
