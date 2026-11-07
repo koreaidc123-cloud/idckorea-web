@@ -93,7 +93,9 @@ module.exports = async (req, res) => {
       if (Array.isArray(h)) hidden = h;
     } catch (e) {}
     const unregShown = (unreg || []).filter(u => !hidden.includes(u.hw_id));
-    const downSec = Number(set.down_sec || 180);
+    /* 300초보다 짧게 저장돼 있어도 300 으로 씁니다 — 신호가 2분마다 와서
+       한 번만 늦어도 다운으로 보이면 안 됩니다 (_admin-settings.js 참고) */
+    const downSec = Math.max(300, Number(set.down_sec) || 300);
     const now = Date.now();
 
     const pcs = (rows || []).map(p => {

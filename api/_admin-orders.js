@@ -60,6 +60,8 @@ module.exports = async (req, res) => {
         end: o.ends_at,
         left: ends === null ? null : Math.ceil((ends - now) / DAY),
         paidAt: o.paid_at,
+        /* 결제 대기(ready) 주문을 "최근 24시간" 것만 보여주려고 언제 만들어졌는지 같이 줍니다 */
+        createdAt: o.created_at || null,
         canceledAt: o.canceled_at,
         refundAmt: o.refund_amt,
         refundWhy: o.refund_why,

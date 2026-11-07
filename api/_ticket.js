@@ -35,8 +35,11 @@ function readTicket(req) {
   const [id, exp, sig] = parts;
   if (Number(exp) < Date.now()) return null;
   const want = crypto.createHmac('sha256', signKey()).update(`${id}.${exp}`).digest('hex');
-  if (want.length !== sig.length) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
+  /* 바이트 길이로 비교합니다 — 서명 칸에 한글 같은 글자가 섞여 오면 글자 수는
+     같아도 바이트 수가 달라 timingSafeEqual 이 오류(500)를 냈습니다 */
+  const a = Buffer.from(want), b = Buffer.from(sig);
+  if (a.length !== b.length) return null;
+  if (!crypto.timingSafeEqual(a, b)) return null;
   return id;
 }
 

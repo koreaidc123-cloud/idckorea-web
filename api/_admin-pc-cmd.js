@@ -60,6 +60,37 @@ module.exports = async (req, res) => {
       }
     }
 
+    /* ── 취소 ─────────────────────────────────────────────────
+       ★ 2026-11-07 — 예전엔 cmd 칸에 'cancel' 이라는 새 명령을 적었습니다.
+         그러면 걸려 있던 reboot 가 덮여 사라지기는 하지만, 다음 신호 때
+         랙PC 가 'cancel' 을 받아 "shutdown /a" 를 쓸데없이 실행했습니다.
+         그리고 이미 reboot 를 받아간 뒤라면, 신호가 2분 간격이라 cancel 이
+         도착하기 전에 PC 는 이미 꺼집니다 (20~60초 뒤 재부팅).
+         그래서 "아직 안 받아간 명령을 지우는 것" 이 진짜 취소입니다.
+         칸을 비우면(null) beat 함수가 명령을 안 내려보냅니다 (db/06-B 참고).
+         ※ 랙PC 프로그램(kvc-agent.ps1)은 그대로 둡니다 — 'cancel' 을 받아도 안전합니다. */
+    if (cmd === 'cancel') {
+      if (!p.cmd) {
+        return res.status(409).json({
+          error: `${pn} 에 걸려 있는 명령이 없습니다.\n` +
+                 `이미 그 PC 가 받아갔다면 취소할 수 없습니다 (20~60초 뒤 다시 켜집니다).`,
+        });
+      }
+      const cleared = await sb('pcs', {
+        method: 'PATCH', prefer: 'return=representation',
+        query: `?pn=eq.${encodeURIComponent(pn)}&cmd=not.is.null&select=pn`,
+        body: { cmd: null, cmd_at: null, cmd_by: null },
+      });
+      if (!(cleared && cleared[0])) {
+        return res.status(409).json({ error: `${pn} 이 방금 명령을 받아갔습니다. 취소할 수 없습니다.` });
+      }
+      try {
+        await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+          body: [{ pn, act: `${ALLOWED[p.cmd] || p.cmd} 요청 취소`, who: '관리자' }] });
+      } catch (e) {}
+      return res.status(200).json({ ok: true, pn, cmd: null, label: ALLOWED.cancel });
+    }
+
     const now = new Date().toISOString();
     await sb('pcs', {
       method: 'PATCH', prefer: 'return=minimal',

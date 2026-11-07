@@ -1,9 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════
    관리자 로그인
 
-   지금 admin.html 은 화면에서 숫자 4개(4060)만 맞으면 열립니다.
-   그건 "남이 실수로 못 들어오게" 하는 정도이지, 잠금장치가 아닙니다.
-   ─ 브라우저 소스를 열면 그 숫자가 그대로 보이기 때문입니다.
+   예전 admin.html 은 이 서버가 응답을 못 하면 화면에 적힌 숫자(4060)로 열렸습니다.
+   브라우저 소스를 열면 그 숫자가 그대로 보이니 잠금장치가 아니었습니다.
+   2026-11-07 그 길을 없앴습니다 — 이제 이 서버가 "맞다" 할 때만 열립니다.
+
+   POST /api/admin-login              { pw }   로그인 (출입증 쿠키 발급)
+   POST /api/admin-login?do=logout             로그아웃 (출입증 쿠키 지움)
 
    그래서 진짜 열쇠는 서버에만 둡니다.
      Vercel 환경변수  KVC_ADMIN_PW      관리자 비밀번호 (길게)
@@ -34,7 +37,20 @@ function verify(req) {
   if (!exp || !sig) return false;
   if (Number(exp) < Date.now()) return false;
   const want = crypto.createHmac('sha256', kv.signKey()).update(exp).digest('hex');
-  return want.length === sig.length && crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig));
+  /* 글자 수가 같아도 한글 같은 글자가 섞이면 바이트 수가 달라 timingSafeEqual 이
+     오류를 냅니다. 바이트로 바꾼 뒤 길이를 비교합니다. */
+  const a = Buffer.from(want), b = Buffer.from(sig);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/* 비밀번호 비교 — 두 값을 각각 sha256 으로 바꿔(항상 32바이트) 비교합니다.
+   ★ 2026-11-07 — 예전엔 글자 수만 같으면 바로 timingSafeEqual 에 넣었는데,
+     한글처럼 한 글자가 여러 바이트인 값을 넣으면 길이가 달라 오류(500)가 났고,
+     그 시도는 "틀린 횟수" 에도 안 세졌습니다 (자동 대입 잠금을 피해 갈 수 있었음).
+     이제 길이가 늘 같아서 오류가 날 수 없고, 틀리면 무조건 셉니다. */
+function samePw(got, want) {
+  const h = s => crypto.createHash('sha256').update(String(s), 'utf8').digest();
+  return crypto.timingSafeEqual(h(got), h(want));
 }
 
 /* ── 자동 대입 막기 ────────────────────────────────────────────
@@ -56,6 +72,14 @@ function whoHash(req) {
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  res.setHeader('Cache-Control', 'no-store');
+
+  /* ── 로그아웃 — 출입증 쿠키를 바로 만료시킵니다 (Max-Age=0) ──
+     설정이 안 돼 있어도 지우는 건 항상 됩니다. */
+  if (String((req.query && req.query.do) || '') === 'logout') {
+    res.setHeader('Set-Cookie', 'kvc_adm=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
+    return res.status(200).json({ ok: true });
+  }
 
   const pw = process.env.KVC_ADMIN_PW || '';
   if (!pw || !kv.ready()) {
@@ -82,8 +106,7 @@ module.exports = async (req, res) => {
   }
 
   const got = String((req.body || {}).pw || '');
-  const ok = got.length === pw.length &&
-    crypto.timingSafeEqual(Buffer.from(got.padEnd(pw.length)), Buffer.from(pw));
+  const ok = samePw(got, pw);
 
   /* 비밀번호가 틀리면 왜 틀렸는지 알려주지 않습니다 (자동 대입 공격 대비) */
   if (!ok) {

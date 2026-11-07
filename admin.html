@@ -297,8 +297,9 @@ a{color:inherit;text-decoration:none}
       </g></svg>
       한국 가상컴 관리자
     </div>
-    <p>관리자 코드를 입력해 주세요</p>
-    <input type="password" id="gate-pw" maxlength="8" autocomplete="off">
+    <p id="gate-msg">관리자 비밀번호를 입력해 주세요</p>
+    <!-- 글자 수 제한을 뺐습니다 — 예전엔 8자까지만 들어가 긴 비밀번호로 로그인이 안 됐습니다 -->
+    <input type="password" id="gate-pw" autocomplete="current-password">
     <button id="gate-go">들어가기</button>
     <div class="err" id="gate-err"></div>
   </div>
@@ -329,6 +330,8 @@ a{color:inherit;text-decoration:none}
     <a href="#find" data-v="find"><i>🔎</i><span>통합검색</span></a>
     <a href="#set" data-v="set"><i>⚙️</i><span>설정</span></a>
   </nav>
+  <!-- 로그아웃 — 다른 사람과 같이 쓰는 PC 에서 관리자 화면을 닫을 때 -->
+  <div class="nav" style="flex:none;padding-top:0"><a href="#" id="adm-logout"><i>🚪</i><span>로그아웃</span></a></div>
   <div class="ft" id="ftstate">불러오는 중…</div>
 </aside>
 
@@ -360,6 +363,15 @@ const adFmt=s=>{
   return out.join(' ');
 };
 const $=id=>document.getElementById(id);
+
+/* ★ 화면에 글자를 끼워 넣을 때는 반드시 esc() 를 거칩니다 (2026-11-07 점검).
+   고객 이름·연락처·메모·사양 같은 값은 고객이나 랙PC 가 보낸 글자입니다.
+   그대로 innerHTML 에 넣으면, 이름 칸에 <img onerror=…> 같은 걸 적어 결제한
+   사람이 관리자 화면에서 마음대로 프로그램을 돌릴 수 있습니다 (관리자 출입증으로!).
+   esc() 는 < > & " ' 다섯 글자를 "글자 그대로 보이게" 바꿔서 그 길을 막습니다.
+   보통 이름·숫자는 하나도 안 바뀌므로 화면은 그대로입니다. */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
 const ROOMS=[
  {k:'K',name:'금촌', racks:7},
@@ -393,18 +405,27 @@ const PMS=['가상계좌','신용카드','카카오페이','네이버페이','�
 const ORDERS=[];
 let ono=2600;
 
-/* 설정 — 하드코딩 금지, 관리자에서 수정 (localStorage) */
-const DEFSET={setup:5000, downSec:60, notiDay:5, off60:3, off90:5};
+/* 설정 — 진짜 값은 서버(settings 표)에 있고, 로그인하면 그 값으로 덮어씁니다.
+   ★ 다운 판정 기본값을 60 → 300초로 맞췄습니다 (2026-11-07).
+     랙PC 신호는 2분(120초)마다 오므로 60초면 멀쩡한 PC 도 다운으로 보입니다.
+     서버도 300초 아래로는 저장을 받지 않습니다 (_admin-settings.js).
+   ★ 할인율(60일 3% · 90일 5%)은 여기 두지 않습니다. 실제 결제 금액은
+     api/_price.js 에 고정돼 있어서, 화면에서 바꿔도 결제에는 반영되지 않았습니다. */
+const DEFSET={setup:5000, downSec:300, notiDay:5};
+const OFF_FIXED={30:0, 60:3, 90:5};   // api/_price.js 의 OFF 와 같은 값 (바꾸려면 두 곳 다)
 let SET=Object.assign({},DEFSET);
 try{ SET=Object.assign({},DEFSET,JSON.parse(localStorage.getItem('kvc-set')||'{}')) }catch(e){}
 
-/* 랙 구성 — 하드코딩 금지.
-   랙마다 층수가 다를 수 있고, 층마다 자리 수도 다를 수 있다 (예: 7·7·7·5).
-   배열 = 층별 자리 수, [0]번이 1층. 관리자에서 추가·수정하면 즉시 반영·보존된다. */
+/* 랙 구성 — 서버실 기본 배치(ROOMS) + 실제로 꽂힌 PC 위치로만 만듭니다.
+   배열 = 층별 자리 수, [0]번이 1층.
+   ★ 예전에는 랙맵에서 [랙 추가 · 층 추가] 로 구조를 고칠 수 있었는데,
+     그 값은 이 브라우저에만 저장되고 30초마다 서버 값으로 덮여 "저장이 안 되는"
+     것처럼 보였습니다. 서버(api/_rooms.js)는 그 구조를 모르니 저장도 거부됐습니다.
+     헷갈리지 않게 편집 화면을 뺐습니다 (2026-11-07).
+     랙을 늘리실 때는 api/_rooms.js 의 racks 와 위 ROOMS 를 같이 고칩니다. */
 function defRacks(){const o={};for(const r of ROOMS){o[r.k]=Array.from({length:r.racks},()=>[SLOTS,SLOTS,SLOTS,SLOTS])}return o}
 let RACKS=defRacks();
-try{const s=JSON.parse(localStorage.getItem('kvc-racks')||'null');if(s&&s.K&&s.Y&&s.D)RACKS=s}catch(e){}
-const saveRacks=()=>localStorage.setItem('kvc-racks',JSON.stringify(RACKS));
+try{ localStorage.removeItem('kvc-racks') }catch(e){}   // 예전 편집값이 남아 있으면 치웁니다
 
 /* ═══ 랙 구조 = 서버실 기본 배치 + 거기를 벗어난 PC 만큼만 확장 ═══
    전에는 랙 수·층수·자리수를 브라우저에 따로 저장했습니다. 그래서
@@ -505,7 +526,7 @@ function vDash(){
     <div class="card kpi"><span class="l">전체 보유</span><b class="num">${w(PCS.length)}대</b>
       <span class="sub">K ${seq.K} · Y ${seq.Y} · D ${seq.D}</span></div>
     <div class="card kpi"><span class="l">임대중</span><b class="num">${w(cnt('rent'))}대</b>
-      <span class="sub">가동률 ${Math.round(cnt('rent')/PCS.length*100)}%</span></div>
+      <span class="sub">가동률 ${Math.round(cnt('rent')/(PCS.length||1)*100)}%</span></div>
     <div class="card kpi"><span class="l">임대 가능</span><b class="num" style="color:var(--gr)">${w(cnt('ok'))}대</b>
       <span class="sub">홈페이지 노출 중</span></div>
     <div class="card kpi ${cnt('down')?'crit':''}"><span class="l">다운</span><b class="num">${cnt('down')}대</b>
@@ -519,8 +540,8 @@ function vDash(){
     <div class="card">
       <div class="sec-h"><h3>🚨 임대중 PC 다운 — 최우선</h3><span class="cnt">${rentDown.length}</span></div>
       <div class="sec-b">${rentDown.length? `<table class="tbl"><tbody>`+rentDown.map(p=>`
-        <tr data-pc="${p.pn}"><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
-        <td>${p.order.nm} <span class="dim">${p.order.ph}</span></td>
+        <tr data-pc="${esc(p.pn)}"><td class="pn">${esc(p.pn)}</td><td class="dim">${esc(locStr(p))}</td>
+        <td>${esc(p.order.nm)} <span class="dim">${esc(p.order.ph)}</span></td>
         <td>${stTag(p)}</td></tr>`).join('')+`</tbody></table>`
         : `<div class="empty2"><b>다운된 임대중 PC가 없습니다</b>모든 고객 PC가 정상 신호를 보내고 있습니다.</div>`}
       </div>
@@ -529,7 +550,7 @@ function vDash(){
       <div class="sec-h"><h3>⏳ 만료 임박 (D-${SET.notiDay} 이내)</h3><span class="cnt">${exp.length}</span>
         <div class="r"><a class="btn btn-o btn-sm" href="#noti">알림 발송 →</a></div></div>
       <div class="sec-b"><table class="tbl"><tbody>${exp.slice(0,8).map(o=>`
-        <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
+        <tr data-ord="${esc(o.no)}"><td class="pn">${esc(oPn(o))}</td><td>${esc(o.nm)}</td>
         <td class="dim">${fmtD(o.end)} 만료</td>
         <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b></td></tr>`).join('')}
       </tbody></table></div>
@@ -540,9 +561,9 @@ function vDash(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>사양</th><th>회원</th><th>결제</th><th>기간</th><th>금액</th><th></th></tr></thead>
       <tbody>${ORDERS.slice().sort(()=>0).slice(0,7).map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':oPn(o)}</td>
-      <td>${oSpec(o)}</td><td>${o.nm}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
-      <td class="dim">${o.pm}</td><td class="dim num">${o.days}일</td>
+      <tr data-ord="${esc(o.no)}"><td class="dim num">${esc(o.no)}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':esc(oPn(o))}</td>
+      <td>${esc(oSpec(o))}</td><td>${esc(o.nm)}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
+      <td class="dim">${esc(o.pm)}</td><td class="dim num">${o.days}일</td>
       <td class="num"><b>${w(o.amt)}원</b></td>
       <td class="dim">D-${o.left}</td></tr>`).join('')}</tbody></table></div>
   </div>`;
@@ -578,11 +599,11 @@ function vNew(){
         <thead><tr><th>원래 품번</th><th>애니데스크 번호 (여기로 접속)</th><th>사양</th><th>IP</th>
           <th>마지막 신호</th><th></th></tr></thead>
         <tbody>${lost.map(p=>`<tr>
-          <td class="pn" style="color:#8A6100">${p.claimedPn}</td>
+          <td class="pn" style="color:#8A6100">${esc(p.claimedPn)}</td>
           <td><b class="num" style="font-size:16px">${adFmt((p.ad||''))}</b>
-            ${p.ad?`<button class="btn btn-o btn-sm" data-copy="${p.ad}" style="margin-left:8px">복사</button>`:''}</td>
-          <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
-          <td class="num dim">${p.ip||'—'}</td>
+            ${p.ad?`<button class="btn btn-o btn-sm" data-copy="${esc(p.ad)}" style="margin-left:8px">복사</button>`:''}</td>
+          <td class="dim">${esc(specTx(p))} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+          <td class="num dim">${esc(p.ip||'—')}</td>
           ${(()=>{ /* 아직 신호가 오는지, 이미 끝난 옛 기록인지 구분해 줍니다.
                       5분 넘게 조용하면 그 PC 는 이미 되살아났거나 꺼진 것이라
                       지워도 다시 안 올라옵니다. */
@@ -592,7 +613,7 @@ function vNew(){
             const m=Math.round(s/60);
             return `<td class="dim">${m<60?m+'분 전':Math.round(m/60)+'시간 전'} · 멈춤`
                  +`<br><span style="font-size:11px">지우면 다시 안 올라옵니다</span></td>`;})()}
-          <td><button class="btn btn-o btn-sm" data-delnew="${p.ad}"
+          <td><button class="btn btn-o btn-sm" data-delnew="${esc(p.ad)}"
             style="color:var(--red);border-color:#F7CDD3" title="목록에서 지우기">🗑</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`;})()}
@@ -615,22 +636,22 @@ function vNew(){
       <thead><tr><th>서버실</th><th>자리 (랙-층-자리)</th><th>애니데스크 번호</th>
         <th>자동 수집 사양</th><th>비번</th><th>품번</th><th></th></tr></thead>
       <tbody>${wait.map(p=>`<tr>
-        <td class="pn">${p.roomName||p.room}</td>
+        <td class="pn">${esc(p.roomName||p.room)}</td>
         <td style="white-space:nowrap">
           <input type="number" min="1" max="99" value="${p.rack||''}" placeholder="랙"
-            data-for="${p.ad}" data-loc="rack" style="${ns}"> -
+            data-for="${esc(p.ad)}" data-loc="rack" style="${ns}"> -
           <input type="number" min="1" max="99" value="${p.fl||''}" placeholder="층"
-            data-for="${p.ad}" data-loc="fl" style="${ns}"> -
+            data-for="${esc(p.ad)}" data-loc="fl" style="${ns}"> -
           <input type="number" min="1" max="99" value="${p.slot||''}" placeholder="자리"
-            data-for="${p.ad}" data-loc="slot" style="${ns}"></td>
+            data-for="${esc(p.ad)}" data-loc="slot" style="${ns}"></td>
         <td class="num">${adFmt((p.ad||''))}</td>
-        <td class="dim">${specTx(p)} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
+        <td class="dim">${esc(specTx(p))} · 램${p.spec.ram}G · SSD${p.spec.ssd}G</td>
         <td><span class="tag t-ok"><i></i>입력됨</span></td>
-        <td><input value="${sug[p.ad]}" data-pnin="${p.ad}"
+        <td><input value="${esc(sug[p.ad])}" data-pnin="${esc(p.ad)}"
           style="width:90px;height:32px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-weight:800"></td>
         <td style="white-space:nowrap">
-          <button class="btn btn-b btn-sm" data-assign="${p.ad}">저장 · 품번 부여</button>
-          <button class="btn btn-o btn-sm" data-delnew="${p.ad}"
+          <button class="btn btn-b btn-sm" data-assign="${esc(p.ad)}">저장 · 품번 부여</button>
+          <button class="btn btn-o btn-sm" data-delnew="${esc(p.ad)}"
             style="color:var(--red);border-color:#F7CDD3;margin-left:6px" title="목록에서 지우기">🗑</button></td>
       </tr>`).join('')}
       </tbody></table>`
@@ -655,14 +676,14 @@ function vVerify(){
     <div class="sec-b">${list.length? `<table class="tbl">
       <thead><tr><th>품번</th><th>위치</th><th>사양</th><th>애니데스크</th><th>비밀번호</th><th></th></tr></thead>
       <tbody>${list.map(p=>`
-      <tr><td class="pn">${p.pn}</td><td class="dim">${locStr(p)}</td>
-      <td class="dim">${specTx(p)}</td>
+      <tr><td class="pn">${esc(p.pn)}</td><td class="dim">${esc(locStr(p))}</td>
+      <td class="dim">${esc(specTx(p))}</td>
       <td class="num">${adFmt(p.ad)}</td>
-      <td><span class="mask" data-pwm="${p.pn}">••••••</span>
-        <button class="btn btn-o btn-sm" data-pwshow="${p.pn}">보기</button></td>
+      <td><span class="mask" data-pwm="${esc(p.pn)}">••••••</span>
+        <button class="btn btn-o btn-sm" data-pwshow="${esc(p.pn)}">보기</button></td>
       <td style="display:flex;gap:6px">
-        <button class="btn btn-g btn-sm" data-verok="${p.pn}">접속 확인 완료 → 판매</button>
-        <button class="btn btn-o btn-sm" data-verfail="${p.pn}">접속 실패 → 점검</button></td></tr>`).join('')}
+        <button class="btn btn-g btn-sm" data-verok="${esc(p.pn)}">접속 확인 완료 → 판매</button>
+        <button class="btn btn-o btn-sm" data-verfail="${esc(p.pn)}">접속 실패 → 점검</button></td></tr>`).join('')}
       </tbody></table>`
       : `<div class="empty2"><b>검증 대기 PC가 없습니다</b></div>`}
     </div>
@@ -689,8 +710,8 @@ function vToday(){
     <div class="sec-h"><h3>💳 결제 완료 · PC 배정 대기 — 가장 먼저</h3><span class="cnt">${wait.length}</span>
       <div class="r"><span class="dim" style="font-size:12px">줄을 눌러 [PC 배정] 하세요</span></div></div>
     <div class="sec-b"><table class="tbl"><tbody>${wait.map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td>${o.nm}</td>
-      <td class="dim num">${o.ph}</td><td class="dim">${oSpec(o)} · ${o.days}일</td>
+      <tr data-ord="${esc(o.no)}"><td class="dim num">${esc(o.no)}</td><td>${esc(o.nm)}</td>
+      <td class="dim num">${esc(o.ph)}</td><td class="dim">${esc(oSpec(o))} · ${o.days}일</td>
       <td><span class="warnbadge">배정 대기</span></td></tr>`).join('')}</tbody></table></div>
   </div>`:''}
   <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
@@ -698,17 +719,17 @@ function vToday(){
       <div class="sec-h"><h3>🔌 랙 장애 의심 — 허브·회선 먼저 확인</h3><span class="cnt">${hub.length}</span></div>
       <div class="sec-b">${hub.length? hub.map(([k,l])=>`
         <div style="padding:12px 18px;border-bottom:1px solid var(--line2)">
-          <b style="color:var(--red)">${k}</b> — 같은 층에서 <b>${l.length}대</b> 동시 무신호
+          <b style="color:var(--red)">${esc(k)}</b> — 같은 층에서 <b>${l.length}대</b> 동시 무신호
           <div class="dim" style="font-size:12.5px">개별 고장이 아니라 층 랜허브·회선 문제일 가능성이 높습니다.
-          포함: ${l.map(p=>p.pn).join(' · ')}</div>
+          포함: ${esc(l.map(p=>p.pn).join(' · '))}</div>
         </div>`).join('')
         : '<div class="empty2"><b>층 단위 장애 없음</b></div>'}</div>
     </div>
     <div class="card">
       <div class="sec-h"><h3>⏰ 내일까지 만료 — 연장 확인 전화</h3><span class="cnt">${d1.length}</span></div>
       <div class="sec-b"><table class="tbl"><tbody>${d1.slice(0,8).map(o=>`
-        <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
-        <td class="dim num">${o.ph}</td><td><b style="color:var(--red)">D-${o.left}</b></td></tr>`).join('')
+        <tr data-ord="${esc(o.no)}"><td class="pn">${esc(oPn(o))}</td><td>${esc(o.nm)}</td>
+        <td class="dim num">${esc(o.ph)}</td><td><b style="color:var(--red)">D-${o.left}</b></td></tr>`).join('')
         ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
     </div>
   </div>
@@ -718,23 +739,23 @@ function vToday(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>위치</th><th>품번</th><th>구분</th><th>고객</th><th>비고</th></tr></thead>
       <tbody>${rentFirst.map(p=>`
-      <tr data-pc="${p.pn}"><td class="pn">${locStr(p)}</td><td>${p.pn}</td>
+      <tr data-pc="${esc(p.pn)}"><td class="pn">${esc(locStr(p))}</td><td>${esc(p.pn)}</td>
       <td>${p.order?'<span class="warnbadge">임대중 ⚡</span>':'<span class="dim">재고</span>'}</td>
-      <td>${p.order? p.order.nm+' <span class="dim">'+p.order.ph+'</span>':'—'}</td>
-      <td class="dim">${hubKeys.has(p.pn)?'랙 장애 의심에 포함':''}</td></tr>`).join('')
+      <td>${p.order? esc(p.order.nm)+' <span class="dim">'+esc(p.order.ph)+'</span>':'—'}</td>
+      <td class="dim">${hubKeys.has(p.pn)?'랙 장애 의심에 포함':''}${p.memo?(hubKeys.has(p.pn)?' · ':'')+'메모: '+esc(p.memo):''}</td></tr>`).join('')
       ||'<tr><td class="dim" style="padding:20px">다운된 PC가 없습니다</td></tr>'}</tbody></table></div>
   </div>
   <div class="card">
     <div class="sec-h"><h3>🔧 점검중 — 처리 후 판매 전환</h3><span class="cnt">${fix.length}</span></div>
     <div class="sec-b"><table class="tbl"><tbody>${fix.slice(0,10).map(p=>`
-      <tr data-pc="${p.pn}"><td class="pn">${locStr(p)}</td><td>${p.pn}</td>
-      <td class="dim">${specTx(p)}</td><td>${p.memo||'<span class="dim">메모 없음</span>'}</td></tr>`).join('')
+      <tr data-pc="${esc(p.pn)}"><td class="pn">${esc(locStr(p))}</td><td>${esc(p.pn)}</td>
+      <td class="dim">${esc(specTx(p))}</td><td>${p.memo?esc(p.memo):'<span class="dim">메모 없음</span>'}</td></tr>`).join('')
       ||'<tr><td class="dim" style="padding:20px">없음</td></tr>'}</tbody></table></div>
   </div>`;
 }
 
-/* ═══════════════ 화면: 랙맵 (구조 편집 포함) ═══════════════ */
-let RSEL={room:'Y',rack:1,edit:false};
+/* ═══════════════ 화면: 랙맵 ═══════════════ */
+let RSEL={room:'Y',rack:1};
 function vRack(){
   const r=ROOMS.find(x=>x.k===RSEL.room);
   const cfgList=RACKS[r.k];
@@ -753,8 +774,7 @@ function vRack(){
     </div>`};
   const rackBtns=cfgList.map((c,i)=>{
     const n=i+1, down=inRoom.some(p=>p.rack===n&&p.st==='down');
-    return `<button class="rackbtn ${RSEL.rack===n?'on':''}" data-rack="${n}">${n}번 랙${down?'<span class="d"></span>':''}</button>`}).join('')
-    +`<button class="rackbtn" data-rkadd style="border-style:dashed;color:var(--blue)">＋ 랙 추가</button>`;
+    return `<button class="rackbtn ${RSEL.rack===n?'on':''}" data-rack="${n}">${n}번 랙${down?'<span class="d"></span>':''}</button>`}).join('');
   /* 층은 위에서부터 높은 층 → 1층이 맨 아래 · 자리는 오른쪽 끝이 1번 */
   let map='';
   for(let fl=cfg.length;fl>=1;fl--){
@@ -763,43 +783,18 @@ function vRack(){
     for(let slot=sc;slot>=1;slot--){
       const p=inRack.find(x=>x.fl===fl&&x.slot===slot);
       cells += p
-        ? `<div class="slot s-${p.st}" data-pc="${p.pn||p.ad}" title="${p.pn||'미등록'} · ${ST[p.st]}">${slot}</div>`
+        ? `<div class="slot s-${p.st}" data-pc="${esc(p.pn||p.ad)}" title="${esc(p.pn||'미등록')} · ${ST[p.st]}">${slot}</div>`
         : `<div class="slot s-empty" title="빈 자리">${slot}</div>`;
     }
     map+=`<div class="floor"><span class="fl">${fl}층</span><div class="slots">${cells}</div>
       <span class="flcnt num">${inRack.filter(x=>x.fl===fl).length}/${sc}</span></div>`;
   }
-  /* 구조 편집 패널 */
-  const canDel=inRack.length===0 && RSEL.rack===cfgList.length && cfgList.length>1;
-  const edit=!RSEL.edit?'':`
-  <div class="editpanel">
-    <div class="ep-h"><b>${r.name} ${RSEL.rack}번 랙 구조 수정</b>
-      <span>층마다 자리 수가 달라도 됩니다 (예: 7·7·7·5) · 이미 PC가 있는 자리보다 줄일 수 없습니다</span></div>
-    ${cfg.map((sc,i)=>{const fl=i+1, mx=floorMaxSlot(r.k,RSEL.rack,fl), used=inRack.filter(x=>x.fl===fl).length;
-      return `<div class="ep-row"><b>${fl}층</b>
-        <input type="number" min="${Math.max(mx,1)}" max="30" value="${sc}" data-flslot="${fl}">
-        <span>자리 · 사용중 ${used}대${mx?` · 최대 점유 자리 ${mx}번`:''}</span>
-        ${fl===cfg.length&&cfg.length>1? (used===0
-          ? `<button class="btn btn-o btn-sm" data-flrm>맨 위층 제거</button>`
-          : `<span class="ep-dim">PC가 있어 제거 불가</span>`):''}
-      </div>`}).reverse().join('')}
-    <div class="ep-acts">
-      <button class="btn btn-o btn-sm" data-fladd>＋ 층 추가 (맨 위)</button>
-      <button class="btn btn-b btn-sm" data-rksave>구조 저장</button>
-      ${canDel? `<button class="btn btn-o btn-sm" data-rkdel style="color:var(--red);border-color:#F7CDD3">이 랙 삭제</button>`
-        : `<span class="ep-dim">랙 삭제는 비어 있는 마지막 번호 랙만 가능합니다</span>`}
-      <span id="ep-msg" style="color:var(--gr);font-weight:700;font-size:12.5px"></span>
-    </div>
-  </div>`;
   return `
   <div class="top"><h1>랙맵</h1>
-    <span class="live">칸을 누르면 PC 상세 · 랙 구조는 여기서 직접 추가·수정합니다</span>
-    <div class="sp"><button class="btn ${RSEL.edit?'btn-b':'btn-o'} btn-sm" data-rkedit>
-      ${RSEL.edit?'편집 닫기':'🛠 이 랙 구조 수정'}</button></div></div>
+    <span class="live">칸을 누르면 PC 상세 · 랙 구조는 서버에 정해져 있습니다 (바꾸실 땐 개발 담당에게)</span></div>
   <div class="grid rooms3" style="margin-bottom:14px">${ROOMS.map(roomCard).join('')}</div>
   <div class="card">
     <div class="rackrow">${rackBtns}</div>
-    ${edit}
     <div class="rackmap">${map}</div>
     <div class="dirnote">▶ 자리 번호는 <b>오른쪽 끝이 1번</b>입니다 (랙 정면 기준) · 1층이 맨 아래</div>
     <div class="legend">
@@ -834,17 +829,17 @@ function vPcs(){
       <select data-f="room"><option value="">서버실 전체</option>${ROOMS.map(r=>`<option value="${r.k}" ${PF.room===r.k?'selected':''}>${r.name} (${r.k})</option>`).join('')}</select>
       <select data-f="st"><option value="">상태 전체</option>${Object.keys(ST).map(k=>`<option value="${k}" ${PF.st===k?'selected':''}>${ST[k]}</option>`).join('')}</select>
       <select data-f="sp"><option value="">사양 전체</option>${SPECS.map(s=>`<option value="${s.id}" ${PF.sp==String(s.id)?'selected':''}>${s.n}</option>`).join('')}</select>
-      <input class="grow" data-f="q" value="${PF.q}" placeholder="품번 · 위치 · 애니데스크 번호 검색  (예: Y-042, 영태리 5-4-1)">
+      <input class="grow" data-f="q" value="${esc(PF.q)}" placeholder="품번 · 위치 · 애니데스크 번호 검색  (예: Y-042, 영태리 5-4-1)">
     </div>
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>품번</th><th>위치</th><th>상태</th><th>사양</th><th>애니데스크</th><th>공인IP</th><th>고객</th></tr></thead>
       <tbody>${V.map(p=>`
-      <tr data-pc="${p.pn||p.ad}"><td class="pn">${p.pn||'<span class="dim">미등록</span>'}</td>
-      <td class="dim">${locStr(p)}</td><td>${stTag(p)}</td>
-      <td class="dim">${specTx(p)}</td>
+      <tr data-pc="${esc(p.pn||p.ad)}"><td class="pn">${p.pn?esc(p.pn):'<span class="dim">미등록</span>'}</td>
+      <td class="dim">${esc(locStr(p))}</td><td>${stTag(p)}</td>
+      <td class="dim">${esc(specTx(p))}</td>
       <td class="num dim">${adFmt(p.ad)}</td>
-      <td class="num dim">${p.ip}</td>
-      <td>${p.order? p.order.nm+(p.order.mis?' <span class="warnbadge">⚠</span>':'') : '<span class="dim">—</span>'}</td></tr>`).join('')}
+      <td class="num dim">${esc(p.ip)}</td>
+      <td>${p.order? esc(p.order.nm)+(p.order.mis?' <span class="warnbadge">⚠</span>':'') : '<span class="dim">—</span>'}</td></tr>`).join('')}
       </tbody></table>
       <div class="pager2">
         <button data-pg="${PF.pg-1}" ${PF.pg===1?'disabled':''}>‹</button>${pgs}
@@ -861,8 +856,9 @@ function vPcs(){
 function membersOf(){
   const map=new Map();
   ORDERS.forEach(o=>{
-    const key=o.ph;
-    if(!map.has(key)) map.set(key,{nm:o.nm,ph:o.ph,via:o.via,orders:[],pcs:[],amt:0,joined:null});
+    /* 연락처가 빈 주문끼리 한 사람으로 뭉치지 않게, 그때는 이름으로 묶습니다 */
+    const key=o.ph||('이름:'+(o.nm||''));
+    if(!map.has(key)) map.set(key,{key,nm:o.nm||'',ph:o.ph||'',via:o.via,orders:[],pcs:[],amt:0,joined:null});
     const m=map.get(key);
     m.orders.push(o); if(o.pc) m.pcs.push(o.pc); m.amt+=o.amt;
     if(!m.joined||o.start<m.joined) m.joined=o.start;
@@ -877,7 +873,7 @@ function vMembers(){
   const q=(MF.q||'').trim();
   const MEMBERS=membersOf();
   let L=MEMBERS.filter(m=>!q||m.nm.includes(q)||m.ph.replace(/-/g,'').includes(q.replace(/-/g,''))
-    ||m.pcs.some(p=>p.pn.toLowerCase().includes(q.toLowerCase())));
+    ||m.pcs.some(p=>(p.pn||'').toLowerCase().includes(q.toLowerCase())));
   if(MF.via) L=L.filter(m=>m.via===MF.via);
   if(MF.risk) L=L.filter(m=>m.orders.some(o=>o.left<=SET.notiDay));
   const PER=25, last=Math.max(1,Math.ceil(L.length/PER));
@@ -900,7 +896,7 @@ function vMembers(){
   </div>
   <div class="card">
     <div class="fbar">
-      <input class="grow" data-mf="q" value="${MF.q||''}" placeholder="이름 · 연락처 · 품번으로 검색">
+      <input class="grow" data-mf="q" value="${esc(MF.q||'')}" placeholder="이름 · 연락처 · 품번으로 검색">
       <select data-mf="via"><option value="">가입경로 전체</option>
         <option value="kakao" ${MF.via==='kakao'?'selected':''}>카카오</option>
         <option value="google" ${MF.via==='google'?'selected':''}>구글</option>
@@ -911,14 +907,14 @@ function vMembers(){
       <thead><tr><th>회원</th><th>연락처</th><th>가입</th><th>이용 PC</th><th>누적 결제</th><th>최근 만료</th><th></th></tr></thead>
       <tbody>${V.map(m=>{
         const soon=Math.min(...m.orders.map(o=>o.left));
-        return `<tr data-mem="${m.ph}">
-        <td class="pn">${m.nm}${m.mis?' <span class="warnbadge">⚠</span>':''}</td>
-        <td class="num dim">${m.ph}</td>
+        return `<tr data-mem="${esc(m.key)}">
+        <td class="pn">${esc(m.nm)}${m.mis?' <span class="warnbadge">⚠</span>':''}</td>
+        <td class="num dim">${esc(m.ph)}</td>
         <td><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span></td>
-        <td>${m.pcs.length}대 <span class="dim">${m.pcs.slice(0,2).map(p=>p.pn).join(', ')}${m.pcs.length>2?' 외':''}</span></td>
+        <td>${m.pcs.length}대 <span class="dim">${esc(m.pcs.slice(0,2).map(p=>p.pn).join(', '))}${m.pcs.length>2?' 외':''}</span></td>
         <td class="num"><b>${w(m.amt)}원</b></td>
         <td><b style="color:${soon<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${soon}</b></td>
-        <td><button class="btn btn-b btn-sm" data-send="${m.ph}">알림 보내기</button></td></tr>`}).join('')}
+        <td><button class="btn btn-b btn-sm" data-send="${esc(m.key)}">알림 보내기</button></td></tr>`}).join('')}
       </tbody></table>
       <div class="pager2"><button data-mpg="${MF.pg-1}" ${MF.pg===1?'disabled':''}>‹</button>${pgs}
         <button data-mpg="${MF.pg+1}" ${MF.pg===last?'disabled':''}>›</button></div>
@@ -927,14 +923,14 @@ function vMembers(){
 }
 
 /* 회원 상세 */
-function openMem(ph){
-  const m=membersOf().find(x=>x.ph===ph); if(!m)return;
+function openMem(key){
+  const m=membersOf().find(x=>x.key===key); if(!m)return;
   $('drawer').innerHTML=`
-  <div class="hd"><b>${m.nm}</b><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span>
+  <div class="hd"><b>${esc(m.nm)}</b><span class="tag ${m.via==='kakao'?'t-ok':'t-unv'}"><i></i>${viaLabel(m.via)}</span>
     <button class="x" data-close>✕</button></div>
   <div class="bd">
     <div class="kv">
-      <span class="k">연락처</span><span class="v big num">${m.ph}</span>
+      <span class="k">연락처</span><span class="v big num">${esc(m.ph)}</span>
       <span class="k">가입 경로</span><span class="v">${viaLabel(m.via)}
         ${m.via==='kakao'?'<span class="dim">· 카톡 문의 시 자동 식별됨</span>'
           :'<span class="dim">· 문의 시 품번으로 확인 필요</span>'}</span>
@@ -945,8 +941,8 @@ function openMem(ph){
       문의가 다른 이름으로 올 수 있습니다.</div>`:''}
     <div class="blockttl">이용 중인 PC</div>
     <table class="tbl"><tbody>${m.orders.map(o=>`
-      <tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td>
-      <td class="dim">${oSpec(o)}</td>
+      <tr data-ord="${esc(o.no)}"><td class="pn">${esc(oPn(o))}</td>
+      <td class="dim">${esc(oSpec(o))}</td>
       <td><b style="color:${o.left<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${o.left}</b></td>
       <td class="num">${w(o.amt)}원</td></tr>`).join('')}</tbody></table>
     <div class="blockttl">알림 보내기</div>
@@ -963,7 +959,7 @@ function openMem(ph){
       발송 업체를 정하기 전이라, 지금은 이 내용을 복사해 카카오톡·문자로 직접 보내십니다.</div>
   </div>
   <div class="dracts">
-    <button class="btn btn-b" data-dosend="${m.ph}">문구 복사</button>
+    <button class="btn btn-b" data-dosend="${esc(m.key)}">문구 복사</button>
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
@@ -985,8 +981,9 @@ function fillTpl(m){
 let OF={q:'',pg:1};
 let MF={q:'',via:'',risk:false,pg:1};
 function vOrders(){
-  let L=ORDERS.filter(o=>!OF.q||o.nm.includes(OF.q)||o.no.includes(OF.q)
-    ||oPn(o).toLowerCase().includes(OF.q)||o.ph.replace(/-/g,'').includes(OF.q.replace(/-/g,''))
+  /* 이름·연락처가 빈 주문(null)이 섞여도 검색이 멈추지 않게 (o.nm||'') 로 씁니다 */
+  let L=ORDERS.filter(o=>!OF.q||(o.nm||'').includes(OF.q)||(o.no||'').includes(OF.q)
+    ||oPn(o).toLowerCase().includes(OF.q)||(o.ph||'').replace(/-/g,'').includes(OF.q.replace(/-/g,''))
     ||(o.userNm&&o.userNm.includes(OF.q))||(o.depositor&&o.depositor.includes(OF.q)));
   const PER=30, last=Math.max(1,Math.ceil(L.length/PER));
   if(OF.pg>last)OF.pg=last;
@@ -997,17 +994,27 @@ function vOrders(){
   return `
   <div class="top"><h1>주문 · 고객</h1><span class="live">이용중 <b class="num">${ORDERS.length}</b>건 · 명의 다름 <b class="num">${ORDERS.filter(o=>o.mis).length}</b>건</span>
     <div class="sp"><button class="btn btn-r btn-sm" data-manual>＋ 수동 주문 등록 (스마트스토어)</button></div></div>
+  ${/* 결제 대기 — 아직 돈이 안 들어온 주문. 이용중 숫자에는 세지 않고 여기만 따로 보여줍니다 */''}
+  ${PENDING.length? `<div class="card" style="margin-bottom:14px;background:#FAFBFE">
+    <div class="sec-h"><h3>⌛ 결제 대기</h3><span class="cnt">${PENDING.length}</span>
+      <div class="r"><span class="dim" style="font-size:12px">가상계좌 입금 대기 · 24시간 안에 결제창만 연 주문 — 이용중 숫자에는 안 들어갑니다</span></div></div>
+    <div class="sec-b"><table class="tbl"><tbody>${PENDING.map(o=>`
+      <tr style="cursor:default"><td class="dim num">${esc(o.no)}</td><td>${esc(o.nm)}</td>
+      <td class="dim num">${esc(o.ph)}</td><td class="dim">${esc(oSpec(o))} · ${o.days}일 · ${w(o.amt||0)}원</td>
+      <td><span class="tag t-unv"><i></i>${o.pm==='가상계좌'?'입금 대기':'결제 미완료'}</span></td>
+      <td class="dim">${o.createdAt?o.createdAt.toLocaleString('ko-KR'):''}</td></tr>`).join('')}</tbody></table></div>
+  </div>`:''}
   <div class="card">
-    <div class="fbar"><input class="grow" data-of="q" value="${OF.q}"
+    <div class="fbar"><input class="grow" data-of="q" value="${esc(OF.q)}"
       placeholder="이름 · 전화 · 주문번호 · 품번 · 입금자명 어느 것으로든 검색"></div>
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>회원(결제자)</th><th>실제 이용자</th><th>가입</th><th>결제</th><th>기간</th><th>만료</th></tr></thead>
       <tbody>${V.map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':oPn(o)}</td>
-      <td>${o.nm}<div class="dim">${o.ph}</div></td>
-      <td>${o.mis? o.userNm+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
-      <td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
-      <td class="dim">${o.pm}${o.card?'<div class="dim">'+o.card+'</div>':''}${o.depositor?'<div class="dim">입금 '+o.depositor+'</div>':''}</td>
+      <tr data-ord="${esc(o.no)}"><td class="dim num">${esc(o.no)}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':esc(oPn(o))}</td>
+      <td>${esc(o.nm)}<div class="dim">${esc(o.ph)}</div></td>
+      <td>${o.mis? esc(o.userNm)+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
+      <td class="dim">${viaLabel(o.via)}</td>
+      <td class="dim">${esc(o.pm)}${o.card?'<div class="dim">'+esc(o.card)+'</div>':''}${o.depositor?'<div class="dim">입금 '+esc(o.depositor)+'</div>':''}</td>
       <td class="dim num">${o.days}일</td>
       <td><b style="color:${o.left<=SET.notiDay?'var(--red)':'var(--ink2)'}">D-${o.left}</b>
         <div class="dim">${fmtD(o.end)}</div></td></tr>`).join('')}
@@ -1032,10 +1039,10 @@ function vNoti(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>품번</th><th>회원</th><th>연락처</th><th>가입</th><th>만료</th><th>안내 문구</th></tr></thead>
       <tbody>${exp.map(o=>
-        `<tr data-ord="${o.no}"><td class="pn">${oPn(o)}</td><td>${o.nm}</td>
-        <td class="num dim">${o.ph}</td><td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
+        `<tr data-ord="${esc(o.no)}"><td class="pn">${esc(oPn(o))}</td><td>${esc(o.nm)}</td>
+        <td class="num dim">${esc(o.ph)}</td><td class="dim">${viaLabel(o.via)}</td>
         <td><b style="color:${o.left<=2?'var(--red)':'var(--org)'}">D-${o.left}</b> <span class="dim">${fmtD(o.end)}</span></td>
-        <td><button class="btn btn-b btn-sm" data-noti1="${o.no}">문구 복사</button></td></tr>`).join('')}
+        <td><button class="btn btn-b btn-sm" data-noti1="${esc(o.no)}">문구 복사</button></td></tr>`).join('')}
       </tbody></table></div>
   </div>
   <div class="card" style="margin-top:14px"><div class="sec-b pad"
@@ -1056,24 +1063,26 @@ function vFind(){
   if(q.length>=2){
     pcHits=PCS.filter(p=>(p.pn||'').toLowerCase().includes(q)||p.ad.includes(qp)
       ||locStr(p).includes(q)||p.ip.includes(q)).slice(0,8);
-    ordHits=ORDERS.filter(o=>o.nm.includes(FQ)||o.userNm.includes(FQ)
+    /* ★ 이용자 이름(userNm)이 비어 있는 주문이 하나라도 있으면 .includes 에서
+       화면 전체가 멈췄습니다 (2026-11-07 점검). 빈 값은 '' 로 바꿔 비교합니다. */
+    ordHits=ORDERS.filter(o=>(o.nm||'').includes(FQ)||(o.userNm||'').includes(FQ)
       ||(o.payer&&o.payer.includes(FQ))||(o.depositor&&o.depositor.includes(FQ))
-      ||o.ph.replace(/-/g,'').includes(qp)||(o.card&&o.card.includes(FQ))
-      ||o.no.includes(q)).slice(0,8);
+      ||(o.ph||'').replace(/-/g,'').includes(qp)||(o.card&&o.card.includes(FQ))
+      ||(o.no||'').toLowerCase().includes(q)).slice(0,8);
   }
   return `
   <div class="top"><h1>통합검색</h1>
     <span class="live">이름 · 전화 · 품번 · 애니번호 · 입금자명 · 카드 뒷자리 · 위치 — 어느 단서로도 찾습니다</span></div>
-  <div class="bigsearch"><input id="findq" value="${FQ}" placeholder="예: 김민준 · 010-1234 · Y-042 · 영태리 5-4-1 · 1042">
+  <div class="bigsearch"><input id="findq" value="${esc(FQ)}" placeholder="예: 김민준 · 010-1234 · Y-042 · 영태리 5-4-1 · 1042">
     <button class="btn btn-r" id="findgo" style="height:50px;padding:0 24px">검색</button></div>
   ${q.length<2? `<div class="card"><div class="empty2"><b>두 글자 이상 입력하세요</b>고객이 어떤 이름으로 문의해도, 품번 하나만 알아도 찾을 수 있습니다.</div></div>`:`
   <div class="hitgrp"><div class="gt">PC (${pcHits.length})</div>
-    ${pcHits.map(p=>`<div class="hit" data-pc="${p.pn||p.ad}"><b>${p.pn||'미등록'}</b>
-      <span class="dim">${locStr(p)} · ${specTx(p)} · 애니 ${p.ad}</span>${stTag(p)}</div>`).join('')
+    ${pcHits.map(p=>`<div class="hit" data-pc="${esc(p.pn||p.ad)}"><b>${esc(p.pn||'미등록')}</b>
+      <span class="dim">${esc(locStr(p))} · ${esc(specTx(p))} · 애니 ${esc(p.ad)}</span>${stTag(p)}</div>`).join('')
       ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 PC 없음</span></div>'}</div>
   <div class="hitgrp"><div class="gt">주문 · 고객 (${ordHits.length})</div>
-    ${ordHits.map(o=>`<div class="hit" data-ord="${o.no}"><b>${o.nm}</b>
-      <span class="dim">${o.no} · ${oPn(o)} · ${o.pm}${o.mis?' · 이용자 '+o.userNm:''}</span>
+    ${ordHits.map(o=>`<div class="hit" data-ord="${esc(o.no)}"><b>${esc(o.nm)}</b>
+      <span class="dim">${esc(o.no)} · ${esc(oPn(o))} · ${esc(o.pm)}${o.mis?' · 이용자 '+esc(o.userNm):''}</span>
       <span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span></div>`).join('')
       ||'<div class="hit" style="cursor:default"><span class="dim">일치하는 주문 없음</span></div>'}</div>`}`;
 }
@@ -1084,15 +1093,17 @@ function vSet(){
   <div class="top"><h1>설정</h1><span class="live">설정값은 하드코딩하지 않습니다 — 여기서 바꾸면 즉시 반영됩니다</span></div>
   <div class="card">
     <div class="setrow"><div class="sl"><b>초기 세팅비</b><span>환불 계산 시 차감되는 금액</span></div>
-      <input type="number" data-set="setup" value="${SET.setup}"></div>
-    <div class="setrow"><div class="sl"><b>다운 판정 시간 (초)</b><span>신호가 이 시간 끊기면 다운으로 표시</span></div>
-      <input type="number" data-set="downSec" value="${SET.downSec}"></div>
+      <input type="number" min="0" data-set="setup" value="${SET.setup}"></div>
+    <div class="setrow"><div class="sl"><b>다운 판정 시간 (초)</b><span>신호가 이 시간 끊기면 다운으로 표시 ·
+      <b style="display:inline;font-size:12.5px">300초 이상</b> (랙PC 신호가 2분마다 와서, 한 번만 늦어도 다운으로 보이지 않게)</span></div>
+      <input type="number" min="300" max="3600" data-set="downSec" value="${SET.downSec}"></div>
     <div class="setrow"><div class="sl"><b>만료 알림 시점 (D-일)</b><span>만료 며칠 전에 연장 알림을 보낼지</span></div>
-      <input type="number" data-set="notiDay" value="${SET.notiDay}"></div>
-    <div class="setrow"><div class="sl"><b>60일 결제 할인율 (%)</b></div>
-      <input type="number" data-set="off60" value="${SET.off60}"></div>
-    <div class="setrow"><div class="sl"><b>90일 결제 할인율 (%)</b></div>
-      <input type="number" data-set="off90" value="${SET.off90}"></div>
+      <input type="number" min="1" max="30" data-set="notiDay" value="${SET.notiDay}"></div>
+    ${/* 할인율은 바꿀 수 있는 척하지 않습니다 — 실제 결제는 api/_price.js 의 고정값으로 계산됩니다 */''}
+    <div class="setrow"><div class="sl"><b>장기 결제 할인율</b>
+      <span>참고용 — 실제 결제 할인율은 고정(60일 3%, 90일 5%)입니다.
+        바꾸시려면 개발 담당이 api/_price.js 와 product.html 을 같이 고쳐야 합니다.</span></div>
+      <div style="text-align:right;font-weight:800;color:var(--ink3)">60일 ${OFF_FIXED[60]}% · 90일 ${OFF_FIXED[90]}%</div></div>
   </div>
   <div style="margin-top:12px;display:flex;gap:8px">
     <button class="btn btn-b" id="set-save">저장</button>
@@ -1125,10 +1136,10 @@ function openPc(key,edit){
     <div class="blockttl">✏️ 정보 수정</div>
     <div class="kv">
       <span class="k">품번</span><span class="v">
-        <input id="e-pn" value="${p.pn||''}" placeholder="Y-042"
+        <input id="e-pn" value="${esc(p.pn||'')}" placeholder="Y-042"
           style="width:110px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-weight:800"></span>
       <span class="k">애니 번호</span><span class="v">
-        <input id="e-ad" value="${p.ad}" placeholder="숫자만"
+        <input id="e-ad" value="${esc(p.ad)}" placeholder="숫자만"
           style="width:150px;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px" class="num"></span>
       <span class="k">애니 비번</span><span class="v">
         <input id="e-pw" value="" placeholder="변경할 때만 입력"
@@ -1142,80 +1153,86 @@ function openPc(key,edit){
         <input id="e-slot" type="number" min="1" value="${p.slot}" style="width:52px;height:34px;border:1px solid var(--line);border-radius:8px;text-align:center">
         <span class="dim" style="font-size:11.5px">랙-층-자리</span></span>
       <span class="k">메모</span><span class="v">
-        <input id="e-memo" value="${p.memo||''}" placeholder="관리용 메모 (고객에게 안 보임)"
+        <input id="e-memo" value="${esc(p.memo||'')}" placeholder="관리용 메모 (고객에게 안 보임)"
           style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px"></span>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:6px">
-      <button class="btn btn-b btn-sm" data-savepc="${key}">저장</button>
-      <button class="btn btn-o btn-sm" data-editpc="${key}" data-off="1">취소</button>
+      <button class="btn btn-b btn-sm" data-savepc="${esc(key)}">저장</button>
+      <button class="btn btn-o btn-sm" data-editpc="${esc(key)}" data-off="1">취소</button>
       <span id="e-msg" style="align-self:center;font-size:12.5px;color:var(--red);font-weight:700"></span>
     </div>`;
   $('drawer').innerHTML=`
-  <div class="hd"><b>${p.pn||'미등록 PC'}</b>${stTag(p)}<button class="x" data-close>✕</button></div>
+  <div class="hd"><b>${esc(p.pn||'미등록 PC')}</b>${stTag(p)}<button class="x" data-close>✕</button></div>
   <div class="bd">
     <div class="kv">
-      <span class="k">위치</span><span class="v big">${locStr(p)}</span>
+      <span class="k">위치</span><span class="v big">${esc(locStr(p))}</span>
       <span class="k">상태</span><span class="v">${ST[p.st]} <span class="dim num">· 마지막 신호 ${p.st==='down'?'끊김':p.beat+'초 전'}</span></span>
-      <span class="k">사양</span><span class="v">${specTx(p)} · ${p.spec.core} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
-      <span class="k">그래픽</span><span class="v">${p.spec.gpu}</span>
-      <span class="k">공인IP</span><span class="v num">${p.ip}</span>
+      <span class="k">사양</span><span class="v">${esc(specTx(p))} · ${esc(p.spec.core)} · 램 ${p.spec.ram}GB · SSD ${p.spec.ssd}GB</span>
+      <span class="k">그래픽</span><span class="v">${esc(p.spec.gpu)}</span>
+      <span class="k">공인IP</span><span class="v num">${esc(p.ip)}</span>
       <span class="k">애니 번호</span><span class="v num">${adFmt(p.ad)}</span>
       <span class="k">애니 비번</span><span class="v pwrow">
         <span class="mask" id="dr-pw">••••••</span>
-        <button class="btn btn-o btn-sm" id="dr-pwbtn" data-pn="${p.pn||p.ad}">보기</button></span>
-      ${p.memo?`<span class="k">메모</span><span class="v">${p.memo}</span>`:''}
+        <button class="btn btn-o btn-sm" id="dr-pwbtn" data-pn="${esc(p.pn||p.ad)}">보기</button></span>
+      ${p.memo?`<span class="k">메모</span><span class="v">${esc(p.memo)}</span>`:''}
     </div>
     ${editForm}
     ${o? `<div class="blockttl">이 PC를 쓰는 사람</div>
     <div class="kv">
-      <span class="k">회원</span><span class="v">${o.nm} <span class="dim">${o.via==='kakao'?'카카오':'구글'} 가입</span></span>
-      <span class="k">연락처</span><span class="v num">${o.ph}</span>
-      <span class="k">결제</span><span class="v">${o.pm}${o.card?' · '+o.card:''}${o.depositor?' · 입금자 '+o.depositor:''}</span>
-      <span class="k">이용자</span><span class="v">${o.mis? o.userNm+' · '+(o.userPh||'') : '본인'}</span>
+      <span class="k">회원</span><span class="v">${esc(o.nm)} <span class="dim">${viaLabel(o.via)} 가입</span></span>
+      <span class="k">연락처</span><span class="v num">${esc(o.ph)}</span>
+      <span class="k">결제</span><span class="v">${esc(o.pm)}${o.card?' · '+esc(o.card):''}${o.depositor?' · 입금자 '+esc(o.depositor):''}</span>
+      <span class="k">이용자</span><span class="v">${o.mis? esc(o.userNm)+' · '+esc(o.userPh||'') : '본인'}</span>
       <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)} (D-${o.left})</span>
     </div>
     ${o.mis? `<div class="mismatch"><b>⚠ 결제자와 이용자가 다릅니다.</b><br>
-      문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다.</div>`:''}`
+      문의가 <b>${esc(o.userNm)}</b> 이름으로 올 수 있습니다.</div>`:''}`
     : `<div class="blockttl">임대 정보</div><div class="kv"><span class="k">고객</span><span class="v dim">현재 임대중이 아닙니다</span></div>`}
     ${(()=>{const past=p.pn?pastOf(p.pn):[];
       if(!past.length) return '';
       const 상태={expired:'기간 만료',refunded:'환불',canceled:'취소'};
       return `<div class="blockttl">예전에 쓰던 분 (${past.length}건)</div>
       <div class="tbl2">${past.slice(0,8).map(o=>
-        `<div class="tr2"><b>${o.nm}</b><span class="num">${o.ph||''}</span>
+        `<div class="tr2"><b>${esc(o.nm)}</b><span class="num">${esc(o.ph||'')}</span>
          <span class="num dim">${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
-         <span class="dim">${상태[o.st]||o.st}${o.refundAmt?' '+w(o.refundAmt)+'원':''}</span></div>`).join('')}
+         <span class="dim">${esc(상태[o.st]||o.st)}${o.refundAmt?' '+w(o.refundAmt)+'원':''}</span></div>`).join('')}
       </div>`;})()}
     <div class="blockttl">변경 · 열람 기록 (최근 6건)</div>
-    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>v.t+' — '+(v.act||'열람')).join('<br>')||'기록 없음'}</div>
+    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>esc(v.t+' — '+(v.act||'열람'))).join('<br>')||'기록 없음'}</div>
   </div>
   <div class="dracts">
     ${/* 임대 가능한 PC 는 여기서 바로 고객을 붙일 수 있어야 합니다.
           스마트스토어·전화로 들어온 주문이 대부분이라, 랙맵에서 초록 칸을
           누른 그 자리에서 배정이 끝나야 합니다. */''}
-    ${p.st==='ok'? `<button class="btn btn-r" data-pcassign="${p.pn}">👤 이 PC 에 고객 배정</button>`:''}
+    ${p.st==='ok'? `<button class="btn btn-r" data-pcassign="${esc(p.pn)}">👤 이 PC 에 고객 배정</button>`:''}
     ${/* 임대중인 PC 는 여기서 주문으로 바로 넘어가 연장·해지를 합니다.
           전에는 임대 정보가 보이기만 하고, 고치려면 [주문·고객] 화면에서
           그 고객을 다시 찾아야 했습니다 (정환님 지적 2026-08-20). */''}
-    ${o? `<button class="btn btn-o" data-openord="${o.no}"
+    ${o? `<button class="btn btn-o" data-openord="${esc(o.no)}"
       style="color:var(--blue);border-color:#BFD3F7">🧾 주문 상세 — 연장 · 해지 · 이전</button>`:''}
-    ${edit?'':`<button class="btn btn-o" data-editpc="${key}">✏️ 정보 수정 · 자리 변경</button>`}
-    ${p.st==='unv'? `<button class="btn btn-g" data-verok="${p.pn}">접속 확인 완료 → 판매</button>`:''}
-    ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${p.pn}">점검으로 전환</button>`:''}
-    ${p.st==='fix'? `<button class="btn btn-g" data-took="${p.pn}">점검 완료 → 판매</button>`:''}
-    ${p.st==='down'? `<button class="btn btn-r" style="pointer-events:none">⚡ 현장 확인 필요 — ${locStr(p)}</button>`:''}
+    ${edit?'':`<button class="btn btn-o" data-editpc="${esc(key)}">✏️ 정보 수정 · 자리 변경</button>`}
+    ${p.st==='unv'? `<button class="btn btn-g" data-verok="${esc(p.pn)}">접속 확인 완료 → 판매</button>`:''}
+    ${p.st==='ok'? `<button class="btn btn-o" data-tofix="${esc(p.pn)}">점검으로 전환</button>`:''}
+    ${p.st==='fix'? `<button class="btn btn-g" data-took="${esc(p.pn)}">점검 완료 → 판매</button>`:''}
+    ${p.st==='down'? `<button class="btn btn-r" style="pointer-events:none">⚡ 현장 확인 필요 — ${esc(locStr(p))}</button>`:''}
+    ${/* 다운 PC — 재부팅 버튼을 숨기기만 하면 "설명서엔 있는데 버튼이 없다" 가 됩니다.
+          왜 못 하는지 버튼 자리에 적어 둡니다. 재부팅 명령은 그 PC 가 보내는 신호에
+          실어 보내는데, 신호가 끊긴 PC 는 명령을 받아갈 길이 없습니다. */''}
+    ${p.pn&&p.st==='down'? `<button class="btn btn-o" disabled title="꺼져 있거나 인터넷이 끊긴 PC 는 원격 명령을 받을 수 없습니다"
+      style="color:var(--ink4)">↻ 원격 재부팅 불가 — 신호가 끊긴 PC 는 명령을 못 받습니다 (현장에서 전원)</button>`:''}
     ${p.pn&&p.st!=='down'? (p.cmd
       ? `<button class="btn btn-o" disabled
            style="color:#E08B00;border-color:#F6DFA8;background:#FFF8E6">
-           ⏳ ${({reboot:'재부팅',cancel:'재부팅 취소'})[p.cmd]||p.cmd} 대기중 — 다음 신호에 실행됩니다</button>`
-      : `<button class="btn btn-o" data-reboot="${p.pn}"
+           ⏳ ${esc(({reboot:'재부팅',cancel:'재부팅 취소'})[p.cmd]||p.cmd)} 대기중 — 다음 신호에 실행됩니다</button>
+         ${p.cmd==='reboot'? `<button class="btn btn-o" data-rbcancel="${esc(p.pn)}">재부팅 요청 취소</button>`:''}`
+      : `<button class="btn btn-o" data-reboot="${esc(p.pn)}"
            style="color:#E08B00;border-color:#F6DFA8">↻ 원격 재부팅</button>`):''}
-    ${p.pn? `<button class="btn btn-o" data-delpc="${p.pn}"
+    ${p.pn? `<button class="btn btn-o" data-delpc="${esc(p.pn)}"
       style="color:var(--red);border-color:#F7CDD3">🗑 대장에서 빼기</button>`
       /* 품번이 아직 없는 PC(미등록)도 여기서 뺄 수 있어야 합니다.
          전에는 이 버튼이 품번 있는 PC 에만 나와서, 미등록 PC 를 지우려면
          [미등록 PC] 화면으로 되돌아가는 길밖에 없었습니다. */
-      : `<button class="btn btn-o" data-delnew="${p.ad}"
+      : `<button class="btn btn-o" data-delnew="${esc(p.ad)}"
       style="color:var(--red);border-color:#F7CDD3">🗑 목록에서 지우기</button>`}
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
@@ -1232,27 +1249,27 @@ function openOrd(no){
   const sp    = (p && p.spec) || SPECS.find(s=>s.id===o.specId) || {n:'—',ram:0,ssd:0};
   const adTx  = (p && p.ad) ? adFmt(p.ad) : '배정 후 발급됩니다';
   $('drawer').innerHTML=`
-  <div class="hd"><b>${o.no}</b><span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span>
+  <div class="hd"><b>${esc(o.no)}</b><span class="tag ${o.left<=SET.notiDay?'t-down':'t-rent'}"><i></i>D-${o.left}</span>
     <button class="x" data-close>✕</button></div>
   <div class="bd">
     <div class="kv">
-      <span class="k">품번</span><span class="v big">${pnTx} <span class="dim" style="font-size:12px">${locTx}</span></span>
-      <span class="k">사양</span><span class="v">${sp.n} · 램 ${sp.ram}GB · SSD ${sp.ssd}GB</span>
+      <span class="k">품번</span><span class="v big">${esc(pnTx)} <span class="dim" style="font-size:12px">${esc(locTx)}</span></span>
+      <span class="k">사양</span><span class="v">${esc(sp.n)} · 램 ${sp.ram}GB · SSD ${sp.ssd}GB</span>
       <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
-      <span class="k">금액</span><span class="v num"><b>${w(o.amt)}원</b> <span class="dim">${o.pm}</span></span>
+      <span class="k">금액</span><span class="v num"><b>${w(o.amt)}원</b> <span class="dim">${esc(o.pm)}</span></span>
     </div>
     <div class="blockttl">신원 — 넷이 다를 수 있습니다</div>
     <div class="kv">
-      <span class="k">① 회원</span><span class="v">${o.nm} <span class="dim">${o.via==='kakao'?'카카오 (카톡 문의 자동매칭)':'구글 (문의번호로 식별)'}</span></span>
-      <span class="k">② 결제자</span><span class="v">${o.card? o.card+' (카드사 제공)': o.depositor? '입금자 '+o.depositor : o.pm}</span>
-      <span class="k">③ 이용자</span><span class="v">${o.mis? o.userNm+' · '+(o.userPh||'연락처 미입력') : '본인과 동일'}</span>
-      <span class="k">연락처</span><span class="v num">${o.ph}</span>
+      <span class="k">① 회원</span><span class="v">${esc(o.nm)} <span class="dim">${o.via==='kakao'?'카카오 (카톡 문의 자동매칭)':viaLabel(o.via)+' (문의번호로 식별)'}</span></span>
+      <span class="k">② 결제자</span><span class="v">${o.card? esc(o.card)+' (카드사 제공)': o.depositor? '입금자 '+esc(o.depositor) : esc(o.pm)}</span>
+      <span class="k">③ 이용자</span><span class="v">${o.mis? esc(o.userNm)+' · '+esc(o.userPh||'연락처 미입력') : '본인과 동일'}</span>
+      <span class="k">연락처</span><span class="v num">${esc(o.ph)}</span>
     </div>
-    ${o.mis? `<div class="mismatch"><b>⚠ 명의 다름.</b> 문의가 <b>${o.userNm}</b> 이름으로 올 수 있습니다 —
+    ${o.mis? `<div class="mismatch"><b>⚠ 명의 다름.</b> 문의가 <b>${esc(o.userNm)}</b> 이름으로 올 수 있습니다 —
       어느 이름으로 검색해도 이 주문이 나옵니다.</div>`:''}
     <div class="blockttl">고객이 받은 접속 정보 (결제 직후 화면 + 문자)</div>
     <div class="credbox">
-      <div class="ch">📱 ${o.nm}님의 가상컴 — 문의번호 ${pnTx}</div>
+      <div class="ch">📱 ${esc(o.nm)}님의 가상컴 — 문의번호 ${esc(pnTx)}</div>
       <div class="cb">
         <div class="cr"><span>접속 주소</span><b class="num">${adTx}</b></div>
         <div class="cr"><span>비밀번호</span><b><span class="mask">••••••</span></b></div>
@@ -1274,14 +1291,17 @@ function openOrd(no){
   </div>
   <div class="dracts">
     ${/* 결제는 됐는데 PC 가 안 붙은 주문 — 여기서 바로 배정합니다 (2026-11-07) */''}
-    ${isWait(o)? `<button class="btn btn-r" data-assignpaid="${o.no}">🖥 PC 배정 (결제 완료 · 배정 대기)</button>`:''}
-    <button class="btn btn-b" data-copycust="${o.no}">📋 고객 전달용 복사 (위치 제외)</button>
-    <button class="btn btn-o" data-extend="${o.no}">30일 연장</button>
+    ${isWait(o)? `<button class="btn btn-r" data-assignpaid="${esc(o.no)}">🖥 PC 배정 (결제 완료 · 배정 대기)</button>`:''}
+    <button class="btn btn-b" data-copycust="${esc(o.no)}">📋 고객 전달용 복사 (위치 제외)</button>
+    ${isWait(o)?'':`<button class="btn btn-o" data-extend="${esc(o.no)}">30일 연장</button>`}
+    ${/* PC 이전 — 설명서에는 있는데 버튼이 없었습니다 (서버 act=move 는 이미 있음).
+          고장 난 PC 를 쓰던 고객을 같은 기간 그대로 다른 PC 로 옮깁니다. */''}
+    ${o.pn&&!isWait(o)? `<button class="btn btn-o" data-movepc="${esc(o.no)}">🔀 PC 이전</button>`:''}
     ${/* 서버에는 있는데 버튼이 없어 못 쓰던 것들입니다 */''}
-    <button class="btn btn-o" data-custedit="${o.no}">👤 고객 정보 수정</button>
-    <button class="btn btn-o" data-taxreq="${o.no}">
-      🧾 세금계산서 ${o.taxInvoice? `요청됨${o.bizNo?' · '+o.bizNo:''}` : '요청'}</button>
-    <button class="btn btn-o" data-cancelord="${o.no}"
+    <button class="btn btn-o" data-custedit="${esc(o.no)}">👤 고객 정보 수정</button>
+    <button class="btn btn-o" data-taxreq="${esc(o.no)}">
+      🧾 세금계산서 ${o.taxInvoice? `요청됨${o.bizNo?' · '+esc(o.bizNo):''}` : '요청'}</button>
+    <button class="btn btn-o" data-cancelord="${esc(o.no)}"
       style="color:var(--red);border-color:#F7CDD3">해지 · 환불</button>
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
@@ -1296,10 +1316,11 @@ function closeDrawer(){$('drawer').classList.remove('on');$('overlay').classList
    뒤늦게 아는 일도 흔합니다. 그때 여기서 고칩니다. */
 function openCust(no){
   const o=ORDERS.find(x=>x.no===no); if(!o)return;
-  const inp=(id,v,ph)=>`<input id="${id}" value="${(v||'').replace(/"/g,'&quot;')}" placeholder="${ph}"
+  /* " 만 바꾸던 것을 esc() 로 — & 나 ' 가 들어간 이름도 칸이 깨지지 않습니다 */
+  const inp=(id,v,ph)=>`<input id="${id}" value="${esc(v||'')}" placeholder="${ph}"
     style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px">`;
   $('drawer').innerHTML=`
-  <div class="hd"><b>고객 정보 수정</b><span class="dim" style="font-size:12px">${o.no} · ${oPn(o)}</span>
+  <div class="hd"><b>고객 정보 수정</b><span class="dim" style="font-size:12px">${esc(o.no)} · ${esc(oPn(o))}</span>
     <button class="x" data-close>✕</button></div>
   <div class="bd">
     <p class="dim" style="font-size:13px;margin-bottom:14px">
@@ -1318,7 +1339,7 @@ function openCust(no){
     <div id="c-msg" style="font-size:12.5px;color:var(--red);font-weight:700;min-height:18px;margin-top:10px"></div>
   </div>
   <div class="dracts">
-    <button class="btn btn-b" data-custsave="${o.no}">저장</button>
+    <button class="btn btn-b" data-custsave="${esc(o.no)}">저장</button>
     <button class="btn btn-o" data-close>취소</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
@@ -1328,7 +1349,15 @@ function openCust(no){
    랙맵에서 초록 칸을 눌러 바로 배정할 수 있어야 합니다 —
    예전에는 [주문·고객] 화면까지 가서 목록에서 그 PC 를 다시 찾아야 했습니다. */
 function openManual(pn){
-  const avail=PCS.filter(p=>p.st==='ok').slice(0,120);
+  /* ★ 2026-11-07 점검 — 예전엔 임대 가능 PC 를 앞에서 120대만 보여줬습니다.
+     랙맵에서 고른 PC 가 그 안에 없으면 목록 맨 앞 PC 가 "말없이" 골라져
+     엉뚱한 PC 가 고객에게 배정됐습니다.
+     이제 전부 보여주고, 미리 고른 PC 는 항상 목록에 넣습니다.
+     고른 PC 가 없으면 맨 위 "PC 를 골라 주세요" 가 선택돼 있어 저장이 안 됩니다. */
+  const avail=PCS.filter(p=>p.st==='ok'&&p.pn).sort((a,b)=>a.pn<b.pn?-1:1);
+  const pre=pn? PCS.find(p=>p.pn===pn) : null;
+  const preBad=pre && pre.st!=='ok';           // 고른 PC 가 지금 임대 가능이 아님
+  const opts=(pre&&preBad? [pre] : []).concat(avail);
   $('drawer').innerHTML=`
   <div class="hd"><b>수동 주문 등록</b><span class="tag t-fix"><i></i>스마트스토어 · 전화 주문</span>
     <button class="x" data-close>✕</button></div>
@@ -1338,16 +1367,18 @@ function openManual(pn){
     <div class="kv">
       <span class="k">PC 선택</span><span class="v">
         <select id="m-pc" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px">
-          ${avail.length? avail.map(p=>`<option value="${p.pn}" ${p.pn===pn?'selected':''}>${p.pn} — ${locStr(p)} — ${specTx(p)} (${w(p.spec.p)}원/30일)</option>`).join('')
-            : '<option value="">임대 가능한 PC 가 없습니다</option>'}
-        </select></span>
+          <option value="" ${pre?'':'selected'}>${avail.length?'— PC 를 골라 주세요 —':'임대 가능한 PC 가 없습니다'}</option>
+          ${opts.map(p=>`<option value="${esc(p.pn)}" ${p===pre?'selected':''}>${esc(p.pn)} — ${esc(locStr(p))} — ${esc(specTx(p))}${p.st!=='ok'?' ⚠ 지금 '+esc(ST[p.st]||p.st):' ('+w(p.spec.p)+'원/30일)'}</option>`).join('')}
+        </select>
+        ${preBad?`<div style="color:var(--red);font-size:12.5px;font-weight:700;margin-top:5px">
+          ${esc(pre.pn)} 은 지금 「${esc(ST[pre.st]||pre.st)}」 상태라 배정할 수 없습니다. 다른 PC 를 골라 주세요.</div>`:''}</span>
       <span class="k">고객명</span><span class="v">
         <input id="m-nm" placeholder="주문자 성함" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px"></span>
       <span class="k">연락처</span><span class="v">
         <input id="m-ph" placeholder="010-0000-0000" style="width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 11px"></span>
       <span class="k">기간</span><span class="v">
         <select id="m-days" style="height:38px;border:1px solid var(--line);border-radius:8px">
-          <option value="30">30일</option><option value="60">60일 (−${SET.off60}%)</option><option value="90">90일 (−${SET.off90}%)</option>
+          <option value="30">30일</option><option value="60">60일 (−${OFF_FIXED[60]}%)</option><option value="90">90일 (−${OFF_FIXED[90]}%)</option>
         </select></span>
       <span class="k">경로</span><span class="v">
         <select id="m-pm" style="height:38px;border:1px solid var(--line);border-radius:8px">
@@ -1433,46 +1464,9 @@ document.addEventListener('click',async e=>{
   if(od&&!t.closest('button')){openOrd(od.dataset.ord);return}
 
   const rm=t.closest('[data-room]');
-  if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;RSEL.edit=false;route();return}
+  if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;route();return}
   const rk=t.closest('[data-rack]');
   if(rk){RSEL.rack=+rk.dataset.rack;route();return}
-
-  /* ── 랙 구조 편집 ── */
-  if(t.closest('[data-rkedit]')){RSEL.edit=!RSEL.edit;route();return}
-  if(t.closest('[data-rkadd]')){
-    RACKS[RSEL.room].push([SLOTS,SLOTS,SLOTS,SLOTS]);
-    RSEL.rack=RACKS[RSEL.room].length; RSEL.edit=true;
-    saveRacks(); route(); return;
-  }
-  if(t.closest('[data-fladd]')){
-    RACKS[RSEL.room][RSEL.rack-1].push(SLOTS);
-    saveRacks(); route(); return;
-  }
-  if(t.closest('[data-flrm]')){
-    const c=RACKS[RSEL.room][RSEL.rack-1];
-    if(c.length<=1)return;
-    if(rackOcc(RSEL.room,RSEL.rack).some(p=>p.fl===c.length)){alert('맨 위층에 PC가 있어 제거할 수 없습니다.');return}
-    c.pop(); saveRacks(); route(); return;
-  }
-  if(t.closest('[data-rksave]')){
-    const c=RACKS[RSEL.room][RSEL.rack-1];
-    const inputs=document.querySelectorAll('[data-flslot]');
-    for(const inp of inputs){
-      const fl=+inp.dataset.flslot, v=parseInt(inp.value,10);
-      const mx=floorMaxSlot(RSEL.room,RSEL.rack,fl);
-      if(!(v>=1&&v<=30)){alert(fl+'층 자리 수는 1~30 사이여야 합니다.');return}
-      if(v<mx){alert(fl+'층에는 '+mx+'번 자리까지 PC가 있어 '+v+'자리로 줄일 수 없습니다.');return}
-    }
-    inputs.forEach(inp=>{c[+inp.dataset.flslot-1]=parseInt(inp.value,10)});
-    saveRacks(); RSEL.edit=false; route(); return;
-  }
-  if(t.closest('[data-rkdel]')){
-    if(rackOcc(RSEL.room,RSEL.rack).length){alert('PC가 있는 랙은 삭제할 수 없습니다.');return}
-    if(RSEL.rack!==RACKS[RSEL.room].length){alert('마지막 번호 랙만 삭제할 수 있습니다. (중간 랙을 지우면 뒤 랙들의 위치 표기가 전부 밀립니다)');return}
-    if(!confirm(RSEL.rack+'번 랙을 삭제할까요?'))return;
-    RACKS[RSEL.room].pop(); RSEL.rack=RACKS[RSEL.room].length; RSEL.edit=false;
-    saveRacks(); route(); return;
-  }
 
   const pg=t.closest('[data-pg]');
   if(pg&&!pg.disabled){PF.pg=+pg.dataset.pg;route();return}
@@ -1485,12 +1479,13 @@ document.addEventListener('click',async e=>{
   const asg=t.closest('[data-assign]');
   if(asg){
     const p=findPc(asg.dataset.assign); if(!p)return;
-    const inp=document.querySelector('[data-pnin="'+p.ad+'"]');
+    /* CSS.escape — 애니데스크 칸에 따옴표 같은 이상한 글자가 와도 찾기가 깨지지 않게 */
+    const inp=document.querySelector('[data-pnin="'+CSS.escape(p.ad)+'"]');
     const val=(inp&&inp.value.trim().toUpperCase())||'';
     if(!/^[KYD]-\d{3}$/.test(val)){alert('품번 형식은 K-001 · Y-042 · D-113 입니다.');return}
     if(PCS.some(x=>x.pn===val&&x!==p)){alert(val+' 은 이미 사용 중인 품번입니다.');return}
 
-    const num=n=>{const el=document.querySelector('[data-for="'+p.ad+'"][data-loc="'+n+'"]');
+    const num=n=>{const el=document.querySelector('[data-for="'+CSS.escape(p.ad)+'"][data-loc="'+n+'"]');
       return el?parseInt(el.value,10):NaN};
     const rack=num('rack'), fl=num('fl'), slot=num('slot');
     const done=[rack,fl,slot].every(v=>Number.isFinite(v)&&v>=1&&v<=99);
@@ -1590,10 +1585,12 @@ document.addEventListener('click',async e=>{
   if(t.closest('[data-mrisk]')){MF.risk=!MF.risk;MF.pg=1;route();return}
   const dosend=t.closest('[data-dosend]');
   if(dosend){
-    const m=membersOf().find(x=>x.ph===dosend.dataset.dosend);
+    const m=membersOf().find(x=>x.key===dosend.dataset.dosend); if(!m)return;
     const msg=$('al-msg').value.trim();
     if(!msg){alert('보낼 내용을 입력해 주세요.');return}
-    logView(m.pcs[0].pn,'안내 문구 복사 — '+m.nm+' ('+m.ph+')');
+    /* ★ 아직 PC 가 안 붙은 회원(배정 대기)은 m.pcs[0] 이 없어서 여기서 멈췄습니다.
+       PC 가 없으면 주문번호로 기록합니다. */
+    logView((m.pcs[0]&&m.pcs[0].pn)||m.orders[0].no,'안내 문구 복사 — '+m.nm+' ('+m.ph+')');
     (navigator.clipboard? navigator.clipboard.writeText(msg):Promise.reject())
       .then(()=>{dosend.textContent='✓ 복사됨';setTimeout(()=>{dosend.textContent='문구 복사'},1600)})
       .catch(()=>{prompt(m.nm+'님('+m.ph+') 에게 보낼 내용입니다. 복사해 주세요.',msg)});
@@ -1634,6 +1631,26 @@ document.addEventListener('click',async e=>{
         +`그동안 버튼이 「⏳ 재부팅 대기중」 으로 바뀝니다.\n`
         +`그 PC 가 명령을 받아가면 다시 원래대로 돌아옵니다.`);
     }catch(e){ rb.disabled=false; rb.textContent='↻ 원격 재부팅'; alert('서버에 연결하지 못했습니다'); }
+    return;
+  }
+
+  /* 재부팅 요청 취소 — 아직 그 PC 가 받아가기 전(대기중)일 때만 됩니다.
+     서버가 걸어둔 명령을 지웁니다. 이미 받아가 꺼지는 중이면 되돌릴 수 없습니다. */
+  const rc=t.closest('[data-rbcancel]');
+  if(rc){
+    const pn=rc.dataset.rbcancel, p=PCS.find(x=>x.pn===pn);
+    if(!confirm(pn+' 재부팅 요청을 취소할까요?')) return;
+    rc.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=pc-cmd',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({pn,cmd:'cancel'})});
+      const d=await r.json().catch(()=>({}));
+      rc.disabled=false;
+      if(!r.ok){ alert(d.error||'취소하지 못했습니다'); if(r.status===409&&p){p.cmd=null;openPc(pn);} return; }
+      logView(pn,'재부팅 요청 취소');
+      if(p) p.cmd=null;
+      openPc(pn);
+    }catch(e){ rc.disabled=false; alert('서버에 연결하지 못했습니다'); }
     return;
   }
 
@@ -1684,7 +1701,9 @@ document.addEventListener('click',async e=>{
        (화면만 바꾸면 30초 뒤 서버 값으로 되돌아가 "저장이 안 된다"가 됩니다) */
     sv.disabled=true; msg('저장하는 중…');
     const st = (pn && p.st==='new') ? 'unv' : undefined;
-    const r = await pcSave(p.pn||'', {pn, room, rack, fl, slot, anydesk:ad, pw, status:st, note:memo});
+    /* 메모는 실제로 바꿨을 때만 보냅니다 (안 보내면 서버가 그대로 둡니다) */
+    const r = await pcSave(p.pn||'', {pn, room, rack, fl, slot, anydesk:ad, pw, status:st,
+      note: memo!==(p.memo||'') ? memo : undefined});
     sv.disabled=false;
     if(!r.ok){ msg(r.error); return; }
 
@@ -1710,7 +1729,7 @@ document.addEventListener('click',async e=>{
   const ps=t.closest('[data-pwshow]');
   if(ps){
     const p=findPc(ps.dataset.pwshow); if(!p)return;
-    const m=document.querySelector('[data-pwm="'+ps.dataset.pwshow+'"]');
+    const m=document.querySelector('[data-pwm="'+CSS.escape(ps.dataset.pwshow)+'"]');
     ps.textContent='…'; ps.disabled=true;
     const pw=await getPw(p);
     if(pw===null){ ps.textContent='실패'; ps.disabled=false;
@@ -1753,35 +1772,36 @@ document.addEventListener('click',async e=>{
     if(nm.length<2){msg('고객명을 입력해 주세요');return}
     if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){msg('연락처 형식을 확인해 주세요 (010-0000-0000)');return}
     if(mis&&unm.length<2){msg('이용자 성함을 입력해 주세요');return}
-    const off=days===60?SET.off60:days===90?SET.off90:0;
+    /* 금액은 실제 결제와 같은 고정 할인율로 계산합니다 (api/_price.js 와 같은 값) */
+    const off=OFF_FIXED[days]||0;
     const amt=Math.round(p.spec.p*days/30*(100-off)/100);
-    const start=new Date(TODAY), end=new Date(TODAY); end.setDate(end.getDate()+days);
 
     /* ★ 서버에 먼저 등록합니다.
        스마트스토어·전화 주문이 여기로 들어옵니다. 서버에 남지 않으면
        고객 화면에서는 그 PC 가 계속 "임대 가능"으로 보입니다. */
-    if(LIVE){
-      const btn=t.closest('[data-mansave]');
-      btn.disabled=true; msg('등록하는 중…');
-      let r;
-      try{
-        const rs=await fetch('/api/admin?do=order-manual',{method:'POST',credentials:'same-origin',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({pn:p.pn, specId:p.spec.id, days, name:nm, phone:ph,
-            payMethod:pm, amount:amt,
-            payerName:nm, userName:mis?unm:nm, userPhone:mis?uph:ph})});
-        r=await rs.json().catch(()=>({}));
-        if(!rs.ok){ btn.disabled=false; msg(r.error||('등록 실패 ('+rs.status+')')); return; }
-      }catch(e){ btn.disabled=false; msg('서버에 연결하지 못했습니다'); return; }
-      btn.disabled=false;
-    }
-    const o={no:'2608-'+(ono++), pc:p, nm, ph, via:'manual', payer:nm,
-      userNm:mis?unm:nm, userPh:mis?uph:null, mis, pm,
-      card:null, depositor:pm==='가상계좌'?nm:null, days, amt, start, end, left:days};
-    ORDERS.push(o); ORDERS.sort((a,b)=>a.left-b.left);
-    p.st='rent'; p.order=o;
-    logView(p.pn,'수동 주문 등록 — '+nm+' ('+pm+')');
-    closeDrawer(); route(); openOrd(o.no); return;
+    if(!LIVE){ msg('서버에 연결된 상태에서만 등록할 수 있습니다'); return; }
+    const btn=t.closest('[data-mansave]');
+    btn.disabled=true; msg('등록하는 중…');
+    let r;
+    try{
+      const rs=await fetch('/api/admin?do=order-manual',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({pn:p.pn, specId:p.spec.id, days, name:nm, phone:ph,
+          payMethod:pm, amount:amt,
+          payerName:nm, userName:mis?unm:nm, userPhone:mis?uph:ph})});
+      r=await rs.json().catch(()=>({}));
+      if(!rs.ok){ btn.disabled=false; msg(r.error||('등록 실패 ('+rs.status+')')); return; }
+    }catch(e){ btn.disabled=false; msg('서버에 연결하지 못했습니다'); return; }
+    btn.disabled=false;
+    /* ★ 예전엔 서버가 준 주문번호를 버리고 화면에서 가짜 번호(2608-xxxx)를 만들었습니다.
+       그 번호로 [연장]·[해지] 를 누르면 서버가 "없는 주문번호" 라고 거절했습니다.
+       이제 서버 주문번호를 그대로 쓰고, 목록을 서버에서 다시 받아온 뒤 엽니다. */
+    logView(r.pn||p.pn,'수동 주문 등록 — '+nm+' ('+pm+') · '+r.orderId);
+    closeDrawer();
+    await syncLive();
+    if(ORDERS.some(x=>x.no===r.orderId)) openOrd(r.orderId);
+    else alert('등록되었습니다. 주문번호 '+r.orderId+'\n목록에 바로 안 보이면 잠시 뒤 새로고침해 주세요.');
+    return;
   }
   /* 고객 전달용 복사 — 위치는 절대 포함하지 않는다 */
   /* 애니데스크 번호 복사 — 버튼만 만들어 놓고 이 처리를 안 써서
@@ -1973,6 +1993,44 @@ document.addEventListener('click',async e=>{
     closeDrawer(); syncLive(); return;
   }
 
+  /* PC 이전 — 주문(기간·금액)은 그대로, 쓰는 PC 만 바꿉니다.
+     옮겨 갈 PC 는 [임대 가능] 이어야 하고, 서버가 그 PC 를 먼저 잡아서
+     두 주문이 한 PC 를 갖지 않게 합니다. 원래 PC 는 점검으로 보냅니다
+     (고장이라 옮기는 경우가 대부분이라서). */
+  const mv=t.closest('[data-movepc]');
+  if(mv){
+    const o=ORDERS.find(x=>x.no===mv.dataset.movepc); if(!o)return;
+    if(!LIVE){ alert('서버에 연결된 상태에서만 옮길 수 있습니다.'); return; }
+    const same=PCS.filter(p=>p.st==='ok'&&p.pn&&p.spec&&p.spec.id===o.specId).map(p=>p.pn).slice(0,8);
+    const toPn=prompt(o.nm+'님 · '+oPn(o)+' 을 다른 PC 로 옮깁니다.\n'
+      +'이용 기간·금액은 그대로이고, 접속 정보(애니데스크 번호·비밀번호)가 바뀝니다.\n\n'
+      +'옮겨 갈 품번을 적어 주세요 (예: Y-055)\n'
+      +(same.length?'같은 사양 임대 가능: '+same.join(', '):'같은 사양 임대 가능 PC 가 지금 없습니다'),'');
+    if(toPn===null) return;
+    const to=toPn.trim().toUpperCase();
+    if(!/^[KYD]-\d{3}$/.test(to)){ alert('품번 형식은 K-001 · Y-042 · D-113 입니다.'); return; }
+    const why=prompt('옮기는 이유를 적어 주세요 (기록에 남습니다)','PC 고장');
+    if(why===null) return;
+    const keepOk=confirm('원래 PC('+oPn(o)+')를 바로 판매 가능으로 돌릴까요?\n\n'
+      +'[확인] 판매 가능으로 · [취소] 점검으로 보냄 (고장이면 취소를 누르세요)');
+    mv.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({no:o.no, act:'move', toPn:to, why, oldStatus:keepOk?'ok':'fix'})});
+      const d=await r.json().catch(()=>({}));
+      mv.disabled=false;
+      if(!r.ok){ alert(d.error||'옮기지 못했습니다'); return; }
+      logView(to,'PC 이전 '+(d.from||'')+' → '+to+' · '+o.no);
+      alert((d.from||'')+' → '+to+' 이전 완료.\n\n'
+        +'새 접속 정보를 고객님께 알려 드려야 합니다.\n'
+        +'주문 상세의 [고객 전달용 복사] 로 새 정보를 복사하세요.');
+    }catch(e){ mv.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    closeDrawer(); await syncLive();
+    if(ORDERS.some(x=>x.no===o.no)) openOrd(o.no);
+    return;
+  }
+
   const ex=t.closest('[data-extend]');
   if(ex){
     const o=ORDERS.find(x=>x.no===ex.dataset.extend); if(!o)return;
@@ -2008,7 +2066,18 @@ document.addEventListener('click',async e=>{
 
   if(t.id==='set-save'){
     const next={};
-    document.querySelectorAll('[data-set]').forEach(i=>{next[i.dataset.set]=+i.value||DEFSET[i.dataset.set]});
+    /* ★ 예전엔 +i.value||기본값 이라서 0 을 넣으면 기본값으로 바뀌었습니다
+       (셋팅비 0원을 저장할 수 없었습니다). 비어 있을 때만 기본값을 씁니다. */
+    let bad='';
+    document.querySelectorAll('[data-set]').forEach(i=>{
+      const k=i.dataset.set, v=String(i.value).trim();
+      const n= v==='' ? DEFSET[k] : Number(v);
+      if(!Number.isFinite(n)) bad='숫자만 적어 주세요';
+      next[k]=n;
+    });
+    if(next.downSec<300) bad='다운 판정 시간은 300초 이상이어야 합니다 (랙PC 신호가 2분마다 옵니다)';
+    if(bad){ $('set-msg').style.color='var(--red)'; $('set-msg').textContent=bad; return; }
+    $('set-msg').style.color='';
     /* 서버에 저장해야 다른 PC 에서 열어도 같고, 서버의 다운 판정과도 어긋나지 않습니다 */
     if(LIVE){
       t.disabled=true; $('set-msg').textContent='저장하는 중…';
@@ -2025,8 +2094,15 @@ document.addEventListener('click',async e=>{
     $('set-msg').textContent='✓ 저장되었습니다'; setTimeout(()=>{const m=$('set-msg');if(m)m.textContent=''},1800);
     badges(); return;
   }
-  if(t.id==='set-reset'){SET=Object.assign({},DEFSET);localStorage.setItem('kvc-set',JSON.stringify(SET));route();return}
+  /* [기본값으로] 는 칸만 채웁니다. 예전엔 이 브라우저에만 바뀌고 서버는 그대로라
+     30초 뒤 원래 값으로 돌아갔습니다. 이제 [저장] 을 눌러야 서버에 반영됩니다. */
+  if(t.id==='set-reset'){
+    document.querySelectorAll('[data-set]').forEach(i=>{ if(DEFSET[i.dataset.set]!==undefined) i.value=DEFSET[i.dataset.set]; });
+    $('set-msg').style.color=''; $('set-msg').textContent='기본값을 채웠습니다 — [저장] 을 눌러야 적용됩니다';
+    return;
+  }
   if(t.id==='gate-go'){tryGate();return}
+  if(t.closest('#adm-logout')){ e.preventDefault(); adminLogout(); return; }
 });
 document.addEventListener('input',e=>{
   const f=e.target.closest('[data-f]');
@@ -2061,26 +2137,69 @@ document.addEventListener('keydown',e=>{
    서버에 관리자 비밀번호(KVC_ADMIN_PW)가 등록돼 있으면 그쪽으로 로그인합니다.
    로그인에 성공하면 서버가 8시간짜리 출입증 쿠키를 내려주고,
    그 쿠키가 있어야만 /api/pcs 가 실제 PC 정보를 내줍니다.
-   아직 등록 전이면 예전처럼 화면 코드(4060)로 열리고 목업으로 돕니다. */
+
+   ★ 2026-11-07 — 예전엔 로그인 서버가 응답을 못 하면 화면에 적힌 코드(4060)로
+     그냥 열렸습니다. 소스만 열어 보면 누구나 아는 숫자라 잠금이 아니었습니다.
+     이제 서버가 "맞다" 고 할 때만 열립니다. 서버가 안 되면 오류만 보여줍니다. */
 async function tryGate(){
+  /* 앞뒤 공백은 뺍니다 (휴대폰 자동완성이 붙이는 경우가 있어서 · 예전과 같은 동작) */
   const pw=$('gate-pw').value.trim();
+  if(!pw){ $('gate-err').textContent='비밀번호를 입력해 주세요'; return; }
   $('gate-err').textContent='확인 중…';
+  let r;
   try{
-    const r=await fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({pw})});
-    if(r.ok){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; syncLive(); return; }
-    /* 429 = 너무 여러 번 틀림 (자동 대입 방지). 서버가 알려주는 문구를 그대로 보여줍니다 */
-    if(r.status===401||r.status===429){
-      let m='비밀번호가 맞지 않습니다';
-      try{ const d=await r.json(); if(d&&d.error) m=d.error; }catch(e){}
-      $('gate-err').textContent=m; $('gate-pw').value='';
-      if(r.status!==429) $('gate-pw').focus();
-      return;
-    }
-  }catch(e){ /* 서버 함수가 아직 없거나 로컬에서 연 경우 → 아래 목업 코드로 */ }
-  if(pw==='4060'){ sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off'); $('gate-err').textContent=''; }
-  else{ $('gate-err').textContent='코드가 올바르지 않습니다'; $('gate-pw').value=''; $('gate-pw').focus(); }
+    r=await fetch('/api/admin-login',{method:'POST',headers:{'Content-Type':'application/json'},
+      credentials:'same-origin', body:JSON.stringify({pw})});
+  }catch(e){
+    $('gate-err').textContent='로그인 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.';
+    return;
+  }
+  if(r.ok){
+    sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off');
+    $('gate-err').textContent=''; $('gate-pw').value=''; $('gate-msg').textContent='관리자 비밀번호를 입력해 주세요';
+    LOADING=true; LOAD_ERR=''; syncLive(); return;
+  }
+  /* 401 = 틀림 · 429 = 너무 여러 번 틀림 (자동 대입 방지) · 503 = 서버 설정 안 됨.
+     서버가 알려주는 문구를 그대로 보여줍니다. 어떤 경우에도 화면을 열지 않습니다. */
+  let m = r.status===401 ? '비밀번호가 맞지 않습니다'
+        : r.status===503 ? '관리자 비밀번호가 서버에 아직 설정되지 않았습니다 (KVC_ADMIN_PW · KVC_SECRET)'
+        : '로그인 서버 오류입니다 (오류 '+r.status+'). 잠시 뒤 다시 시도해 주세요.';
+  try{ const d=await r.json(); if(d&&d.error&&r.status!==503) m=d.error; }catch(e){}
+  $('gate-err').textContent=m; $('gate-pw').value='';
+  if(r.status!==429) $('gate-pw').focus();
 }
+
+/* ── 로그인이 풀렸을 때 (8시간 출입증 만료 등) ───────────────────
+   ★ 예전엔 출입증이 만료돼도 이 탭에 "로그인했음" 표시(kvc-adm)가 남아
+     로그인 창이 다시 안 뜨고, "새로고침하세요" 만 나왔습니다. 새로고침해도
+     표시가 남아 있어 똑같았습니다.
+     이제 서버가 401(로그인 필요)을 주면 표시를 지우고 로그인 창을 다시 띄웁니다. */
+function authLost(){
+  if(sessionStorage.getItem('kvc-adm')!=='1' && !$('gate').classList.contains('off')) return;
+  sessionStorage.removeItem('kvc-adm');
+  closeDrawer();
+  $('gate-msg').textContent='로그인 시간이 끝났습니다. 비밀번호를 다시 입력해 주세요.';
+  $('gate-err').textContent='';
+  $('gate').classList.remove('off');
+  setTimeout(()=>$('gate-pw').focus(),50);
+}
+/* 관리자 API(/api/admin?...) 응답이 401 이면 어디서 불렀든 authLost() 로 보냅니다.
+   버튼마다 따로 확인하지 않아도 되게 fetch 를 한 번 감쌉니다. */
+const _fetch=window.fetch.bind(window);
+window.fetch=async(url,opt)=>{
+  const r=await _fetch(url,opt);
+  if(r.status===401 && /^\/api\/admin\?/.test(String(url))) authLost();
+  return r;
+};
+
+/* 로그아웃 — 서버가 출입증 쿠키를 지우고(Max-Age=0), 이 탭의 표시도 지웁니다 */
+async function adminLogout(){
+  if(!confirm('관리자 화면에서 로그아웃할까요?')) return;
+  try{ await _fetch('/api/admin-login?do=logout',{method:'POST',credentials:'same-origin'}); }catch(e){}
+  sessionStorage.removeItem('kvc-adm');
+  location.hash=''; location.reload();      // 화면에 남은 고객 정보까지 깨끗이 지웁니다
+}
+
 if(sessionStorage.getItem('kvc-adm')==='1')$('gate').classList.add('off');
 else setTimeout(()=>$('gate-pw').focus(),100);
 
@@ -2107,6 +2226,10 @@ function applyLive(d){
          고객 화면에는 상품명만 나가고, 관리자에서만 괄호로 덧붙입니다. */
       cpu:p.cpu||'',
       ad:p.anydesk||'', pw:'', ip:p.ip||'',
+      /* ★ 서버에 저장된 메모(note)를 받아 둡니다 (2026-11-07).
+         예전엔 안 받아서 수정 칸이 늘 비어 있었고, [저장] 을 누르면
+         빈 메모가 올라가 서버의 메모가 지워졌습니다. */
+      memo:p.note||'',
       beat:p.beatAge, live:p.live, inUse:p.in_use,
       /* 걸어둔 명령 — 그 PC 가 다음 신호를 보낼 때 받아가고 사라집니다.
          이게 없으면 재부팅을 눌러도 화면에 아무 흔적이 안 남습니다. */
@@ -2139,12 +2262,13 @@ function applyLive(d){
   RACKS=racksFromPCS();
   /* 운영 설정도 서버 값을 씁니다. 화면과 서버가 다른 값을 보면
      "관리자에는 정상인데 고객 화면에는 다운" 같은 어긋남이 생깁니다. */
+  /* ★ 0 도 올바른 값입니다 (셋팅비 0원). 예전엔 if(값) 이라 0 이면 무시됐습니다.
+     할인율(off60·off90)은 결제에 안 쓰이므로 더 읽지 않습니다 (OFF_FIXED 참고). */
   const s=d.settings||{};
-  if(s.setup_fee) SET.setup   = Number(s.setup_fee);
-  if(s.down_sec)  SET.downSec = Number(s.down_sec);
-  if(s.noti_day)  SET.notiDay = Number(s.noti_day);
-  if(s.off60)     SET.off60   = Number(s.off60);
-  if(s.off90)     SET.off90   = Number(s.off90);
+  const has=v=>v!==undefined&&v!==null&&v!==''&&Number.isFinite(Number(v));
+  if(has(s.setup_fee)) SET.setup   = Number(s.setup_fee);
+  if(has(s.down_sec))  SET.downSec = Math.max(300, Number(s.down_sec));
+  if(has(s.noti_day))  SET.notiDay = Number(s.noti_day);
   const ft=document.querySelector('.ft');
   if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
     +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';
@@ -2192,10 +2316,16 @@ async function pcSave(key, patch){
      전부 한 배열에 담으면 만료·환불된 주문까지 "이용중"으로 세어져
      대시보드 숫자와 매출이 틀어집니다. */
 const HISTORY=[];
-const ACTIVE_ST=['assigned','paid','ready'];
+/* ★ 'ready' 는 뺐습니다 (2026-11-07).
+     ready = 결제창만 열고 아직 돈이 안 들어온 주문입니다. 결제를 그만두고
+     나간 것도 전부 ready 로 남아서, 대시보드의 "이용중 주문"·주문액이 부풀었습니다.
+     'paid' (돈은 받았는데 PC 배정 대기) 는 꼭 보여야 하므로 그대로 둡니다.
+   PENDING = 결제 대기 중 볼 만한 것만 — 가상계좌 입금 대기, 또는 24시간 안에 연 결제창 */
+const ACTIVE_ST=['assigned','paid'];
+const PENDING=[];
 
 function applyOrders(d){
-  ORDERS.length=0; HISTORY.length=0;
+  ORDERS.length=0; HISTORY.length=0; PENDING.length=0;
   const byPn={}; for(const p of PCS) if(p.pn) byPn[p.pn]=p;
   for(const p of PCS) p.order=null;      // 지난 회차가 남아 있지 않게 먼저 비웁니다
 
@@ -2211,7 +2341,14 @@ function applyOrders(d){
       left:o.left==null?999:o.left,
       taxInvoice:o.taxInvoice, bizNo:o.bizNo,
       refundAmt:o.refundAmt, refundWhy:o.refundWhy,
+      createdAt:o.createdAt?new Date(o.createdAt):null,
     };
+    if(o.st==='ready'){
+      /* 결제 대기 — 가상계좌(입금 기다리는 중)는 날짜와 상관없이, 나머지는 24시간 안 것만 */
+      const fresh = ord.createdAt && (Date.now()-ord.createdAt) < 86400000;
+      if(o.pm==='가상계좌' || fresh) PENDING.push(ord);
+      continue;
+    }
     HISTORY.push(ord);
     if(ACTIVE_ST.includes(o.st)){
       ORDERS.push(ord);
@@ -2234,7 +2371,7 @@ async function syncLive(){
     const r=await fetch('/api/admin?do=pcs',{credentials:'same-origin',cache:'no-store'});
     if(!r.ok){
       LOADING=false;
-      LOAD_ERR = r.status===401 ? '로그인이 풀렸습니다. 새로고침 후 다시 들어와 주세요.'
+      LOAD_ERR = r.status===401 ? '로그인이 풀렸습니다. 비밀번호를 다시 입력해 주세요.'
                : r.status===503 ? '데이터베이스에 연결되지 않았습니다. /api/health 를 확인해 주세요.'
                : '목록을 불러오지 못했습니다 (오류 '+r.status+')';
       route(); return;

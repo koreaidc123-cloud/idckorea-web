@@ -114,8 +114,11 @@ module.exports = async (req, res) => {
     if (st !== cur.status) { patch.status = st; logs.push(`상태 ${cur.status} → ${st}`); }
   }
 
-  /* ── 메모 ── */
-  if (b.note !== undefined && String(b.note) !== String(cur.note || '')) {
+  /* ── 메모 ──
+     ★ 메모 칸을 아예 안 보냈으면(undefined·null) 손대지 않습니다.
+       예전 관리자 화면은 서버 메모를 읽어오지 않은 채 빈 칸('')을 보내서,
+       위치만 고쳐도 현장 메모가 지워졌습니다. 지우려면 '' 를 일부러 보내야 합니다. */
+  if (b.note !== undefined && b.note !== null && String(b.note) !== String(cur.note || '')) {
     patch.note = String(b.note).slice(0, 500) || null;
     logs.push('메모 수정');
   }

@@ -146,10 +146,10 @@ create table if not exists settings (
 );
 insert into settings (k, v) values
   ('setup_fee', '5000'),    -- 초기 셋팅비
-  ('down_sec',  '180'),     -- 이 시간(초) 넘게 신호가 없으면 다운으로 봅니다
+  ('down_sec',  '300'),     -- 이 시간(초) 넘게 신호가 없으면 다운 (신호 2분 간격 → 300 이상, 서버도 300 아래는 300 으로 씀)
   ('noti_day',  '5'),       -- 만료 며칠 전에 알림을 보낼지
-  ('off60',     '3'),       -- 60일 결제 할인율(%)
-  ('off90',     '5')        -- 90일 결제 할인율(%)
+  ('off60',     '3'),       -- 참고용 — 실제 결제 할인율은 api/_price.js 에 고정
+  ('off90',     '5')        -- 참고용 — 실제 결제 할인율은 api/_price.js 에 고정
 on conflict (k) do nothing;
 
 

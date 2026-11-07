@@ -1,7 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
    운영 설정 저장 — 셋팅비 · 다운 판정 시간 · 만료 알림 시점 · 할인율
 
-   POST /api/admin?do=settings   { setup:5000, downSec:180, notiDay:5, off60:3, off90:5 }
+   POST /api/admin?do=settings   { setup:5000, downSec:300, notiDay:5 }
+   ※ off60·off90 도 받기는 하지만 참고용입니다 — 실제 결제 할인율은 api/_price.js 고정값.
+     관리자 화면은 더 이상 이 둘을 보내지 않습니다.
 
    ★ 왜 서버에 두는가
      전에는 브라우저 저장소에만 있었습니다. 그래서
@@ -18,7 +20,11 @@ const { verify } = require('./admin-login');
 /* 화면에서 쓰는 이름 ↔ 표에 저장하는 이름, 그리고 허용 범위 */
 const FIELDS = {
   setup:   { key: 'setup_fee', lo: 0,  hi: 100000, label: '초기 셋팅비' },
-  downSec: { key: 'down_sec',  lo: 60, hi: 3600,   label: '다운 판정 시간' },
+  /* ★ 다운 판정은 300초 이상만 받습니다 (2026-11-07).
+     랙PC 신호는 2분(120초)마다 옵니다. 60·180초처럼 짧으면 신호가 한 번만
+     늦어도 멀쩡한 PC 가 다운으로 보이고, 고객 화면에서도 점검중으로 빠집니다.
+     PC 목록·고객 목록도 300 아래 값은 300 으로 올려서 씁니다. */
+  downSec: { key: 'down_sec',  lo: 300, hi: 3600,  label: '다운 판정 시간(초)' },
   notiDay: { key: 'noti_day',  lo: 1,  hi: 30,     label: '만료 알림 시점' },
   off60:   { key: 'off60',     lo: 0,  hi: 50,     label: '60일 할인율' },
   off90:   { key: 'off90',     lo: 0,  hi: 50,     label: '90일 할인율' },
