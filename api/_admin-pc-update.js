@@ -19,6 +19,7 @@ const { ready, sb } = require('./_supa');
 const { verify } = require('./admin-login');
 const kv = require('./_crypto');
 const { checkLoc } = require('./_rooms');
+const { guessSpec } = require('./_spec');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
 const ST = ['new', 'unv', 'ok', 'rent', 'fix', 'down'];
@@ -26,6 +27,90 @@ const num = (v, lo, hi) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : null;
 };
+
+/* ── 품번 없이 신호만 오던 PC 에 품번 붙이기 ───────────────────────
+   { hwId:"MB-...", pn:"D-002", room:"D", rack:1, fl:1, slot:2, status:"unv" }
+
+   pcs_unregistered 의 한 줄(사양·애니데스크 번호)을 대장(pcs)에 "미검증" 으로 올리고
+   미등록 목록에서는 지웁니다. 미검증이라 고객 화면에는 나가지 않습니다.
+
+   ※ 이 PC 는 아직 전용 열쇠(beat_token)가 없어 신호가 대장에 이어지지 않습니다.
+     그 PC 에서 PC등록을 한 번 더 실행해야 신호가 붙습니다 — 응답 note 로 알려 드립니다.
+   ※ "대장에서 사라진 PC"(claimed_pn 있음)는 여기서 품번을 붙이지 않습니다.
+     원래 품번이 따로 있어 겹치므로 그 PC 에서 다시 등록하는 것이 맞습니다. */
+async function fromUnregistered(b, res) {
+  const hwId = String(b.hwId || '').trim();
+  if (hwId.length < 4 || hwId.length > 128) return res.status(400).json({ error: '어느 PC 인지 알 수 없습니다' });
+  const pn = String(b.pn || '').toUpperCase().trim();
+  if (!isPn(pn)) return res.status(400).json({ error: '품번 형식은 K-001 · Y-042 · D-113 입니다' });
+  const room = pn.charAt(0);
+  if (b.room !== undefined && String(b.room).toUpperCase() !== room) {
+    return res.status(400).json({ error: `품번 앞글자(${room})와 서버실(${String(b.room).toUpperCase()})이 다릅니다` });
+  }
+  const rack = b.rack !== undefined ? num(b.rack, 0, 999) : 0;
+  const fl = b.fl !== undefined ? num(b.fl, 0, 99) : 0;
+  const slot = b.slot !== undefined ? num(b.slot, 0, 99) : 0;
+  if (rack === null || fl === null || slot === null) return res.status(400).json({ error: '자리 번호가 올바르지 않습니다' });
+  if (rack || fl || slot) {
+    const 안되는이유 = checkLoc(room, rack, fl, slot);
+    if (안되는이유) return res.status(400).json({ error: 안되는이유 });
+  }
+
+  let u;
+  try {
+    const rows = await sb('pcs_unregistered', {
+      query: `?select=*&hw_id=eq.${encodeURIComponent(hwId)}&limit=1`,
+    });
+    u = rows && rows[0];
+  } catch (e) {
+    return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+  }
+  if (!u) return res.status(404).json({ error: '미등록 목록에 없는 PC 입니다. 새로고침해 주세요' });
+  if (u.claimed_pn) {
+    return res.status(409).json({
+      error: `이 PC 는 원래 ${u.claimed_pn} 이라고 신호를 보내는 "대장에서 사라진 PC" 입니다.\n` +
+             `여기서 품번을 붙이지 말고, 애니데스크로 접속해 PC등록을 다시 실행해 주세요.`,
+    });
+  }
+
+  const row = {
+    pn, room, rack, fl, slot,
+    cpu: u.cpu || null, core: u.core || null, ram_gb: u.ram_gb || null, ssd_gb: u.ssd_gb || null,
+    gpu: u.gpu || null, ip: u.ip || null,
+    anydesk: /^\d{6,12}$/.test(String(b.anydesk || '').trim()) ? String(b.anydesk).trim()
+           : /^\d{6,12}$/.test(u.anydesk || '') ? u.anydesk : null,
+    /* [정보 수정] 창에서 비밀번호·메모를 같이 적으셨으면 함께 넣습니다 (비밀번호는 자물쇠를 채워서) */
+    pw_enc: String(b.pw || '').trim().length >= 4 && kv.ready() ? kv.seal(String(b.pw).trim()) : null,
+    note: b.note ? String(b.note).slice(0, 500) : null,
+    spec_id: guessSpec(u.cpu, u.ram_gb, u.ssd_gb, u.gpu) || null,
+    /* 등록 프로그램이 만든 일련번호(hw1-…)만 남깁니다 — 다시 등록할 때 같은 품번을 물려받습니다 */
+    hw_id: /^hw1-[0-9a-f]{28}$/.test(hwId) ? hwId : null,
+    status: 'unv', online: false, last_beat: u.last_beat || null,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await sb('pcs', { method: 'POST', body: [row], prefer: 'return=minimal' });
+  } catch (e) {
+    const m = String(e.message || e);
+    if (/23505|duplicate key/.test(m)) {
+      if (/pcs_slot_unique/.test(m)) return res.status(409).json({ error: '그 자리에는 이미 다른 PC 가 있습니다' });
+      return res.status(409).json({ error: '그 품번은 이미 다른 PC 가 쓰고 있습니다' });
+    }
+    return res.status(500).json({ error: m.slice(0, 200) });
+  }
+  try {
+    await sb('pcs_unregistered', { method: 'DELETE', prefer: 'return=minimal',
+      query: `?hw_id=eq.${encodeURIComponent(hwId)}` });
+  } catch (e) {}
+  try {
+    await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+      body: [{ pn, act: `미등록 PC 품번 부여 (${hwId})`.slice(0, 120), who: '관리자' }] });
+  } catch (e) {}
+  return res.status(200).json({
+    ok: true, pn, changed: 1,
+    note: `${pn} 을 미검증으로 올렸습니다.\n그 PC 에서 PC등록을 한 번 더 실행해야 신호(하트비트)가 이어집니다.`,
+  });
+}
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -35,6 +120,11 @@ module.exports = async (req, res) => {
 
   const b = req.body || {};
   const key = String(b.key || '').toUpperCase().trim();
+  /* ★ 2026-11-07 E2E 시험에서 잡은 것 — 품번이 아직 없는 PC([미등록 PC] 의
+     "품번 없이 신호만 오는 PC") 에 [저장 · 품번 부여] 를 누르면 key 가 비어
+     늘 400 "어느 PC 를 고칠지 알 수 없습니다" 가 났습니다.
+     이제 hwId 로 그 줄을 찾아 대장(pcs)에 새로 올립니다. */
+  if (!isPn(key) && b.hwId) return fromUnregistered(b, res);
   if (!isPn(key)) return res.status(400).json({ error: '어느 PC 를 고칠지 알 수 없습니다' });
 
   const patch = {};
