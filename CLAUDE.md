@@ -232,7 +232,8 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 | `SUPABASE_SERVICE_KEY` | `sb_secret_…` (절대 공개 금지) |
 | `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (랙PC 에 배포되는 공개키) |
 | `KVC_SETUP_KEY` | 현장 USB 의 kvc-config.json 에 넣는 등록 암호 |
-| `KVC_ADMIN_PW` | 관리자 로그인 비밀번호 |
+| `KVC_ADMINS` | 관리자별 비밀번호 `대표:긴비번;현장:긴비번` (2026-11-08 · 기록에 이름이 남음) |
+| `KVC_ADMIN_PW` | (예전) 관리자 비밀번호 하나 — `KVC_ADMINS` 가 없을 때만 "대표" 로 씀 |
 | `KVC_SECRET` | 관리자 쿠키 서명 + 애니데스크 비밀번호 암호화 (하나로 둘 다) |
 | `KAKAO_JS_KEY` | 카카오 JavaScript 키 (넣으면 로그인이 바로 켜집니다) |
 | `GOOGLE_CLIENT_ID` | 구글 OAuth 클라이언트 ID |

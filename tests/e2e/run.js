@@ -969,6 +969,233 @@ async function main() {
     await ctx.close();
   });
 
+  /* ══════════ 2026-11-08 2차 — 관리자별 비밀번호 · 기록 · 점검→판매 · 대사 · 자동 알림 SQL ══════════ */
+  const crypto = require('crypto');
+  /* 브라우저 없이 로그인해서 출입증 쿠키만 받아 옵니다 */
+  const loginCookie = async pw => {
+    const r = await fetch(BASE + '/api/admin-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pw }) });
+    const sc = r.headers.get('set-cookie') || '';
+    let d = null; try { d = await r.json(); } catch (e) {}
+    return { status: r.status, d, cookie: (sc.match(/kvc_adm=[^;]*/) || [''])[0] };
+  };
+  const withCookie = async (url, cookie) => (await fetch(BASE + url, { headers: { Cookie: cookie } })).status;
+  const iso = ms => new Date(ms).toISOString();
+
+  await scenario('L1', '관리자별 비밀번호 — 현장 로그인 · 이름 표시 · 기록에 이름 · 옛 출입증·위조·빠진 사람 거부 · 예전 비밀번호 대체', async () => {
+    const ctx = await newContext();
+    const p = await openPage(ctx, '/admin');
+    try {
+      await adminLogin(p, srv.TEST.FIELD_PW); await adminReady(p);
+      await p.waitForFunction(() => /현장/.test(document.getElementById('adm-me').textContent) && !document.getElementById('adm-me').hidden,
+        null, { timeout: 5000 }).catch(() => { throw new Fail('왼쪽 메뉴에 "현장" 이름이 안 보임'); });
+      ok(db().view_log.some(v => v.act === '관리자 로그인' && v.who === '현장'), '로그인 기록에 현장 없음');
+      /* 현장이 비밀번호를 열면 기록에 "현장" — PC 상세 기록(서버)에도 바로 보임 */
+      await p.evaluate(() => openPc('Y-003'));
+      await p.click('#dr-pwbtn');
+      await until(() => db().view_log.some(v => v.pn === 'Y-003' && v.act === '비밀번호 열람' && v.who === '현장'), 4000, '열람 기록 who 가 현장이 아님');
+      await p.waitForFunction(() => /비밀번호 열람 · 현장/.test(document.getElementById('dr-log').textContent), null, { timeout: 5000 })
+        .catch(() => { throw new Fail('PC 상세 기록(서버)에 "비밀번호 열람 · 현장" 이 안 보임'); });
+      /* 대표로 들어간 A3 의 열람은 "대표" 로 남아야 함 */
+      ok(db().view_log.some(v => v.pn === 'Y-002' && v.act === '비밀번호 열람' && v.who === '대표'), 'A3 열람 기록 who 가 대표가 아님');
+      ok(!db().view_log.some(v => v.who === '관리자' && v.at > iso(Date.now() - 3600e3) && !/로그인/.test(v.act)), '아직 "관리자" 로 남는 기록이 있음: '
+        + JSON.stringify(db().view_log.filter(v => v.who === '관리자').map(v => v.act)));
+      ok(await p.evaluate(() => localStorage.getItem('kvc-vlog')) === null, '브라우저에 옛 기록(kvc-vlog)이 남아 있음');
+
+      /* 옛 모양 출입증 (만료.서명) — 서명이 맞아도 로그인 안 된 것으로 */
+      const kv = require('../../api/_crypto');
+      const exp = Date.now() + 3600e3;
+      const oldSig = crypto.createHmac('sha256', kv.signKey()).update(String(exp)).digest('hex');
+      ok(await withCookie('/api/admin?do=pcs', 'kvc_adm=' + encodeURIComponent(exp + '.' + oldSig)) === 401, '옛 모양 출입증이 통과함');
+      /* 현장 출입증의 이름만 대표로 바꿔치기 → 거부 */
+      const f = await loginCookie(srv.TEST.FIELD_PW);
+      ok(f.status === 200 && f.d.name === '현장' && f.cookie, '현장 로그인 응답 ' + f.status);
+      ok(await withCookie('/api/admin?do=pcs', f.cookie) === 200, '현장 출입증으로 목록이 안 열림');
+      const [e1, , s1] = decodeURIComponent(f.cookie.slice(8)).split('.');
+      const swapped = e1 + '.' + Buffer.from('대표').toString('base64url') + '.' + s1;
+      ok(await withCookie('/api/admin?do=pcs', 'kvc_adm=' + encodeURIComponent(swapped)) === 401, '이름 바꿔치기 출입증이 통과함');
+      /* 서명은 맞지만 목록에 없는 이름 → 거부 */
+      const mac = n => crypto.createHmac('sha256', kv.signKey()).update(exp + '.' + n).digest('hex');
+      const ghost = exp + '.' + Buffer.from('손님').toString('base64url') + '.' + mac('손님');
+      ok(await withCookie('/api/admin?do=pcs', 'kvc_adm=' + encodeURIComponent(ghost)) === 401, '목록에 없는 이름 출입증이 통과함');
+
+      /* KVC_ADMINS 를 지우면 → 예전 KVC_ADMIN_PW 가 "대표" 로 · 현장 비밀번호와 현장 출입증은 무효 */
+      const saved = process.env.KVC_ADMINS;
+      delete process.env.KVC_ADMINS;
+      try {
+        const a = await loginCookie(srv.TEST.ADMIN_PW);
+        ok(a.status === 200 && a.d.name === '대표', '예전 비밀번호 대체 로그인 ' + a.status + ' ' + JSON.stringify(a.d));
+        ok((await loginCookie(srv.TEST.FIELD_PW)).status === 401, 'KVC_ADMINS 없는데 현장 비밀번호가 통과');
+        ok(await withCookie('/api/admin?do=pcs', f.cookie) === 401, '목록에서 빠진 현장의 출입증이 아직 통과');
+        ok(await withCookie('/api/admin?do=pcs', a.cookie) === 200, '대체 대표 출입증이 안 통함');
+      } finally { process.env.KVC_ADMINS = saved; }
+      ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
+    } finally { await ctx.close(); }
+  });
+
+  await scenario('LG1', '관리자 기록 — 서버 기록 · 품번/주문번호/기간/로그인 필터 · 글자로 표시', async () => {
+    await ensureAdmin();
+    const now = Date.now();
+    db().view_log.push(
+      { id: 990001, pn: 'Y-003', act: XSS + ' 시험 KVC260101-LOGQ1', who: '현장', at: iso(now - 1000) },
+      { id: 990002, pn: 'Y-003', act: '20일 전 기록', who: '대표', at: iso(now - 86400000 * 20) },
+      { id: 990003, pn: 'Y-003', act: '100일 전 기록', who: '대표', at: iso(now - 86400000 * 100) },
+    );
+    let r = await apiIn(ap, '/api/admin?do=log&pn=Y-003');
+    ok(r.status === 200 && r.d.days === 7, '기본 조회 ' + r.status + ' ' + JSON.stringify(r.d).slice(0, 200));
+    let acts = r.d.rows.map(x => x.act);
+    ok(acts.some(a => /LOGQ1/.test(a)) && !acts.includes('20일 전 기록') && r.d.rows.every(x => x.pn === 'Y-003'), '7일 조회 ' + acts);
+    ok(r.d.rows[0].who === '현장', '최근 것부터가 아님');
+    r = await apiIn(ap, '/api/admin?do=log&pn=Y-003&days=30');
+    acts = r.d.rows.map(x => x.act);
+    ok(acts.includes('20일 전 기록') && !acts.includes('100일 전 기록'), '30일 조회 ' + acts);
+    r = await apiIn(ap, '/api/admin?do=log&pn=Y-003&days=999');
+    ok(r.d.days === 90 && !r.d.rows.some(x => x.act === '100일 전 기록'), '90일 상한 ' + r.d.days);
+    r = await apiIn(ap, '/api/admin?do=log&q=LOGQ1&days=90');
+    ok(r.d.rows.length === 1 && /LOGQ1/.test(r.d.rows[0].act), '주문번호 조회 ' + r.d.rows.length);
+    r = await apiIn(ap, '/api/admin?do=log&days=90');
+    ok(!r.d.rows.some(x => /^ip:/.test(x.who)), '평소 조회에 로그인 실패(ip:) 가 섞임');
+    r = await apiIn(ap, '/api/admin?do=log&days=1&kind=login');
+    ok(r.d.rows.some(x => x.act === '관리자 로그인 실패' && /^ip:/.test(x.who)) && r.d.rows.some(x => x.act === '관리자 로그인')
+      && r.d.rows.every(x => /^관리자 로그인/.test(x.act)), '로그인 기록 조회 ' + JSON.stringify(r.d.rows.slice(0, 3)));
+    ok((await apiIn(ap, '/api/admin?do=log&pn=' + encodeURIComponent('Y-1,x'))).status === 400, '이상한 품번이 통과');
+    ok((await apiIn(ap, '/api/admin?do=log&q=' + encodeURIComponent('a,b)'))).status === 400, '이상한 주문번호가 통과');
+    /* 화면 — 설정 아래 관리자 기록 */
+    await view(ap, 'set');
+    await ap.fill('#lf-pn', 'Y-003');
+    await ap.click('#log-go');
+    await ap.waitForFunction(() => /LOGQ1/.test((document.getElementById('adm-log') || {}).innerText || ''), null, { timeout: 5000 })
+      .catch(() => { throw new Fail('관리자 기록 화면에 결과가 안 나옴'); });
+    const tx = await ap.$eval('#adm-log', e => e.innerText);
+    ok(tx.includes('<img src=x onerror=alert(1)>'), '기록이 글자로 안 보임');
+    ok(!(await ap.$('#adm-log img')), '기록 속 <img> 가 태그로 들어감');
+    await ap.selectOption('[data-lf="kind"]', 'login');
+    await ap.fill('#lf-pn', '');
+    await ap.click('#log-go');
+    await ap.waitForFunction(() => /관리자 로그인 실패/.test((document.getElementById('adm-log') || {}).innerText || ''), null, { timeout: 5000 })
+      .catch(() => { throw new Fail('로그인 기록 보기가 안 됨'); });
+    /* PC 상세 기록도 서버에서 — 글자 그대로 */
+    await ap.evaluate(() => openPc('Y-003'));
+    await ap.waitForFunction(() => /LOGQ1/.test(document.getElementById('dr-log').textContent), null, { timeout: 5000 })
+      .catch(() => { throw new Fail('PC 상세 기록이 서버에서 안 옴'); });
+    ok(!(await ap.$('#dr-log img')), 'PC 상세 기록 속 <img> 가 태그로 들어감');
+    ok(!ap.xss.length, 'XSS 실행됨');
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+    await ap.evaluate(() => closeDrawer());
+  });
+
+  await scenario('F1', '점검 → 판매 — 최근 90일 손님 있던 PC 는 새 비밀번호 필요 · 오래된 PC 는 예전처럼', async () => {
+    await ensureAdmin();
+    const kv = require('../../api/_crypto');
+    let r = await apiIn(ap, '/api/admin?do=pc-update', { key: 'Y-016', status: 'ok' });
+    ok(r.status === 409 && r.d.needPw && /비밀번호/.test(r.d.error), '비밀번호 없이 판매 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(pcOf('Y-016').status === 'fix', '거절했는데 상태가 바뀜');
+    r = await apiIn(ap, '/api/admin?do=pc-update', { key: 'Y-017', status: 'ok' });
+    ok(r.status === 200 && pcOf('Y-017').status === 'ok', '90일 지난 PC 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    /* 화면 — [점검 완료 → 판매] 를 누르면 같은 체크리스트가 뜸 */
+    pcOf('Y-016').last_beat = new Date().toISOString();       // 시험이 길어 신호가 오래되면 "다운" 으로 보여 버튼이 숨으므로
+    await ap.reload(); await adminReady(ap);
+    await ap.evaluate(() => openPc('Y-016'));
+    await ap.click('[data-took="Y-016"]');
+    await ap.waitForSelector('[data-wipedone="Y-016"]', { timeout: 5000 });
+    ok(/점검 완료/.test(await drawerText(ap)), '체크리스트 제목이 점검용이 아님');
+    const cks = await ap.$$('[data-wck]');
+    ok(cks.length === 3 && await ap.$eval('[data-wipedone="Y-016"]', b => b.disabled), '체크리스트 모양');
+    for (const c of cks) await c.check();
+    await ap.fill('#w-pw', 'fix-new-pw-16');
+    await ap.click('[data-wipedone="Y-016"]');
+    await until(() => pcOf('Y-016').status === 'ok', 5000, '판매로 안 바뀜: ' + lastDialog(ap));
+    ok(kv.open(pcOf('Y-016').pw_enc) === 'fix-new-pw-16', '새 비밀번호가 저장 안 됨');
+    await until(() => db().view_log.some(v => v.pn === 'Y-016' && /점검 완료 → 판매 가능 \(최근 손님/.test(v.act) && v.who === '대표'), 3000, '점검 완료 기록 없음');
+  });
+
+  await scenario('R1', '정산·대사 — 토스 거래내역 대조 · 다섯 묶음 · 쪽 넘김 · 읽기만', async () => {
+    await ensureAdmin();
+    const now = Date.now();
+    const day = ms => new Date(ms + 9 * 3600000).toISOString().slice(0, 10);
+    const o = (id, x) => Object.assign({ order_id: id, member_id: null, pn: null, spec_id: 5, days: 30, amount: 65000, setup_fee: 5000,
+      status: 'expired', pay_key: 'pk_' + id, pay_method: '카드', paid_at: iso(now - 7200e3), va_secret: null, tax_invoice: false, biz_no: null,
+      starts_at: iso(now - 7200e3), ends_at: iso(now + 86400000), payer_name: '대사', user_name: '대사', user_phone: null,
+      canceled_at: null, refund_amt: null, refund_why: null, created_at: iso(now - 7200e3), refund_state: null, refund_done_at: null }, x);
+    const added = [
+      o('KVC260101-RCCAN1', { status: 'paid' }),
+      o('KVC260101-RCAMT1', {}),
+      o('KVC260101-RCREF1', { status: 'refunded', refund_amt: 30000, refund_state: 'toss_done' }),
+      o('KVC260101-RCMAN1', { status: 'refunded', refund_amt: 20000, refund_state: 'manual_done', pay_method: '계좌이체' }),
+      o('KVC260101-RCOK01', {}),
+    ];
+    db().orders.push(...added);
+    let k = 900000;
+    const tx = (orderId, status, amount, n = 1) => {
+      for (let i = 0; i < n; i++) srv.toss.transactions.push({ transactionKey: 'txk_' + (k++), paymentKey: 'pk_' + orderId, orderId,
+        method: '카드', status, amount, currency: 'KRW', transactionAt: iso(now - 3600e3) });
+    };
+    const txBefore = srv.toss.transactions.length;
+    tx('KVC260101-RCGHOST', 'DONE', 65000);
+    tx('KVC260101-SEEDVA', 'DONE', 55000);
+    tx('KVC260101-RCCAN1', 'DONE', 65000); tx('KVC260101-RCCAN1', 'CANCELED', 65000);
+    tx('KVC260101-RCAMT1', 'DONE', 60000);
+    tx('KVC260101-RCREF1', 'DONE', 65000); tx('KVC260101-RCREF1', 'CANCELED', 20000);
+    tx('KVC260101-RCMAN1', 'DONE', 65000);
+    tx('KVC260101-RCOK01', 'DONE', 65000);
+    tx('KVC260101-RCBULK', 'DONE', 1, 5001);          // 5000건 넘음 → 쪽 넘김
+    const snap = JSON.stringify(db().orders) + JSON.stringify(db().pcs);
+    const cancels = srv.toss.cancels.length, confirms = srv.toss.confirms.length, calls0 = srv.toss.txCalls;
+    try {
+      const r = await apiIn(ap, `/api/admin?do=recon&from=${day(now - 86400000)}&to=${day(now)}`);
+      ok(r.status === 200, '대조 응답 ' + r.status + ' ' + JSON.stringify(r.d).slice(0, 200));
+      ok(srv.toss.txCalls - calls0 === 2, '쪽 넘김 호출 수 ' + (srv.toss.txCalls - calls0));
+      const ids = g => (r.d.groups[g] || []).map(x => x.orderId).sort();
+      const eq = (g, want) => ok(JSON.stringify(ids(g)) === JSON.stringify(want.slice().sort()), `${g}: ${ids(g)} ≠ ${want}`);
+      eq('tossOnly', ['KVC260101-RCGHOST', 'KVC260101-RCBULK']);
+      eq('doneButNotPaid', ['KVC260101-SEEDVA']);
+      eq('canceledButActive', ['KVC260101-RCCAN1']);
+      eq('amountDiff', ['KVC260101-RCAMT1']);
+      eq('refundDiff', ['KVC260101-RCREF1']);
+      ok((r.d.groups.tossOnly.find(x => x.orderId === 'KVC260101-RCBULK') || {}).tossPaid === 5001, '쪽 넘김으로 받은 합계가 다름');
+      /* 읽기만 — DB · 토스 아무것도 안 바뀜 */
+      ok(JSON.stringify(db().orders) + JSON.stringify(db().pcs) === snap, '대조가 DB 를 바꿈');
+      ok(srv.toss.cancels.length === cancels && srv.toss.confirms.length === confirms, '대조가 토스에 승인·취소를 보냄');
+      /* 잘못된 기간 */
+      ok((await apiIn(ap, `/api/admin?do=recon&from=${day(now - 86400000 * 40)}&to=${day(now)}`)).status === 400, '31일 넘는 기간이 통과');
+      ok((await apiIn(ap, `/api/admin?do=recon&from=${day(now)}&to=${day(now - 86400000)}`)).status === 400, '거꾸로 된 기간이 통과');
+      ok((await apiIn(ap, '/api/admin?do=recon&from=2026-02-31&to=2026-03-01')).status === 400, '없는 날짜가 통과');
+      /* 화면 */
+      await ap.reload(); await adminReady(ap);
+      await view(ap, 'recon');
+      await ap.fill('#rc-from', day(now - 86400000)); await ap.fill('#rc-to', day(now));
+      await ap.click('#rc-go');
+      await ap.waitForFunction(() => /SEEDVA/.test((document.getElementById('recon-doneButNotPaid') || {}).innerText || ''), null, { timeout: 8000 })
+        .catch(() => { throw new Fail('대사 화면에 결과가 안 나옴'); });
+      for (const g of ['tossOnly', 'doneButNotPaid', 'canceledButActive', 'amountDiff', 'refundDiff']) ok(await ap.$('#recon-' + g), g + ' 표 없음');
+      await ap.click('#recon-amountDiff [data-reconord="KVC260101-RCAMT1"]');
+      await ap.waitForSelector('#drawer.on', { timeout: 5000 });
+      ok(/RCAMT1/.test(await drawerText(ap)), '줄을 눌러도 주문 상세가 안 열림');
+      await ap.evaluate(() => closeDrawer());
+      const n = ap.dialogs.length;
+      await ap.click('#recon-tossOnly [data-reconord="KVC260101-RCGHOST"]');
+      await until(() => ap.dialogs.length > n, 3000, '토스에만 있는 결제를 눌러도 안내가 없음');
+      ok(/목록에 없습니다/.test(lastDialog(ap)), '안내 문구 ' + lastDialog(ap));
+      ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+    } finally {
+      const ids = new Set(added.map(x => x.order_id));
+      const keep = db().orders.filter(x => !ids.has(x.order_id));
+      db().orders.length = 0; db().orders.push(...keep);
+      srv.toss.transactions.length = txBefore;
+    }
+  });
+
+  await scenario('S1', 'db/09 자동 알림 SQL — 예약 2개 · Vault 열쇠 이름 · 실명·고객 이름·진짜 토큰 없음', async () => {
+    const sql = fs.readFileSync(path.join(srv.ROOT, 'db', '09-자동알림.sql'), 'utf8');
+    for (const w of ['pg_cron', 'pg_net', 'alert_state', 'kvc_alerts', 'vault.decrypted_secrets', "'kvc_tg_token'", "'kvc_tg_chat'",
+      'net.http_post', 'api.telegram.org/bot', "cron.schedule", 'sweep_expired', "'*/5 * * * *'", "'* * * * *'", 'Asia/Seoul']) {
+      ok(sql.includes(w), 'SQL 에 「' + w + '」 없음');
+    }
+    ok(!/파주|금촌|영태리|등원리/.test(sql), 'SQL 에 서버실 실명');
+    ok(!/payer_name|user_name|user_phone|members/.test(sql), 'SQL 이 고객 이름·연락처를 읽음');
+    ok(!/\d{8,10}:[A-Za-z0-9_-]{30,}/.test(sql), 'SQL 에 진짜 봇 토큰처럼 보이는 값');
+    ok(/\r\n/.test(sql) && !/[^\r]\n/.test(sql), 'SQL 줄바꿈이 다른 db 파일(CRLF)과 다름');
+  });
+
   await scenario('A13', '관리자 — 로그아웃 → 다시 잠김', async () => {
     await ensureAdmin();
     ap.answers.push(true);

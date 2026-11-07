@@ -15,6 +15,9 @@
      Y-011          3700X       반납 유예(hold) — 고객C 의 지난 주문 SEEDC1(어제 만료 · 60일 123,500원)
      Y-012          3700X       임대중이지만 주문 SEEDH1 이 1시간 전에 끝남 → 만료 정리가 유예로 보냄
      Y-013          3700X       임대중 · 고객E 주문 SEEDE1 이 2일 뒤 만료 (D-3 목록)
+     ── 점검 → 판매 시험용 (2026-11-08) ──
+     Y-016          3700X       점검중(fix) — 20일 전 끝난 주문 SEEDF1 (최근 손님 있음 → 새 비밀번호 필요)
+     Y-017          3700X       점검중(fix) — 200일 전 끝난 주문 SEEDF2 (90일 지남 → 예전처럼 바로 판매)
    주문 (그 밖)
      SEEDR1   해지됨 · 스마트스토어 · 직접 송금 대기(manual_pending) 30,000원 (고객D)
      SEEDVA   가상계좌 입금 대기 (구매자B)
@@ -60,6 +63,9 @@ function seed() {
     pc({ pn: 'Y-011', rack: 1, fl: 2, slot: 3, status: 'hold', hold_until: iso(now + 86400000 * 2), anydesk: '1042887625' }),
     pc({ pn: 'Y-012', rack: 1, fl: 2, slot: 4, status: 'rent', anydesk: '1042887626' }),
     pc({ pn: 'Y-013', rack: 1, fl: 2, slot: 5, status: 'rent', anydesk: '1042887627' }),
+    /* 점검(fix) → 판매 시험용 (2026-11-08) — 최근 손님이 있으면 새 비밀번호 필요 */
+    pc({ pn: 'Y-016', rack: 1, fl: 2, slot: 6, status: 'fix', anydesk: '1042887628' }),
+    pc({ pn: 'Y-017', rack: 1, fl: 2, slot: 7, status: 'fix', anydesk: '1042887629' }),
   );
   db.pcs_unregistered.push(
     { hw_id: 'MB-NEW-0001', room: 'D', ip: '59.45.20.1', cpu: 'AMD Ryzen 7 1700', core: '8코어', ram_gb: 32, ssd_gb: 240,
@@ -121,6 +127,14 @@ function seed() {
       paid_at: iso(now - 86400000 * 4), starts_at: iso(now - 86400000 * 4), ends_at: iso(now - 86400000),
       canceled_at: iso(now - 86400000), refund_amt: 30000, refund_why: '고객 요청', refund_state: 'manual_pending',
       payer_name: '고객D', user_name: '고객D', user_phone: '010-4444-0004' }),
+    /* 20일 전에 끝난 주문 — 그 PC(Y-016)는 지금 점검중. 판매로 돌리려면 새 비밀번호가 필요 */
+    ord({ order_id: 'KVC260101-SEEDF1', pn: 'Y-016', status: 'expired', paid_at: iso(now - 86400000 * 50),
+      starts_at: iso(now - 86400000 * 50), ends_at: iso(now - 86400000 * 20), created_at: iso(now - 86400000 * 50),
+      payer_name: '고객F', user_name: '고객F', user_phone: '010-4444-0006' }),
+    /* 200일 전에 끝난 주문 — 그 PC(Y-017)는 점검중이지만 90일이 지나 예전처럼 바로 판매 가능 */
+    ord({ order_id: 'KVC250101-SEEDF2', pn: 'Y-017', status: 'expired', paid_at: iso(now - 86400000 * 230),
+      starts_at: iso(now - 86400000 * 230), ends_at: iso(now - 86400000 * 200), created_at: iso(now - 86400000 * 230),
+      payer_name: '고객G', user_name: '고객G', user_phone: '010-4444-0007' }),
     /* 가상계좌 입금 대기 */
     ord({ order_id: 'KVC260101-SEEDVA', member_id: '33333333-3333-4333-8333-333333333333', spec_id: 3,
       amount: 55000, status: 'ready', pay_method: '가상계좌', created_at: iso(now - 3600 * 1000),

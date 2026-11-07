@@ -24,6 +24,7 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT || 3939);
 const TEST = {
   ADMIN_PW: 'e2e-test-admin-password-long-2026',     // 시험용 관리자 비밀번호 (가짜)
   SECRET: 'e2e-test-dummy-secret-0123456789abcdef',    // 시험용 서명 열쇠 (가짜)
+  FIELD_PW: 'e2e-test-field-password-long-2026',      // 시험용 두 번째 관리자 '현장' 비밀번호 (가짜)
 };
 for (const k of ['KAKAO_JS_KEY', 'GOOGLE_CLIENT_ID', 'TOSS_CLIENT_KEY', 'ALIGO_KEY', 'ALIGO_USER_ID',
   'ALIGO_SENDER', 'KVC_ADMIN_SECRET', 'KVC_ASSIGN_FRESH_SEC', 'SUPABASE_PUBLISHABLE_KEY']) delete process.env[k];
@@ -33,6 +34,8 @@ Object.assign(process.env, {
   SUPABASE_PUBLISHABLE_KEY: 'test-dummy-publishable',
   KVC_SECRET: TEST.SECRET,
   KVC_ADMIN_PW: TEST.ADMIN_PW,
+  /* 관리자별 비밀번호 (2026-11-08) — 대표 · 현장 두 사람. 시험(L1)에서 지웠다 넣었다 합니다 */
+  KVC_ADMINS: '대표:' + TEST.ADMIN_PW + ';현장:' + TEST.FIELD_PW,
   KVC_SETUP_KEY: 'test-dummy-setup-key',
   TOSS_SECRET_KEY: 'test_sk_e2e_dummy_not_real',
 });
@@ -44,7 +47,16 @@ const toss = {
   payments: {},          // paymentKey → 결제 정보
   cancels: [],           // 취소 요청 기록
   confirms: [],          // 승인 요청 기록
+  /* 거래내역 (GET /v1/transactions) — 승인·취소가 될 때마다 한 줄씩 쌓입니다.
+     시험에서 직접 넣어 "토스에만 있는 결제" 같은 어긋남을 만들 수도 있습니다 (2026-11-08) */
+  transactions: [],
+  txSeq: 1,
+  txCalls: 0,
 };
+function addTx(o) {
+  toss.transactions.push(Object.assign({ transactionKey: 'txk_' + String(toss.txSeq++).padStart(6, '0'),
+    method: '카드', currency: 'KRW', transactionAt: new Date().toISOString() }, o));
+}
 function tossJson(status, obj) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -72,6 +84,7 @@ async function fakeToss(url, opt) {
       card: va ? null : { ownerType: '개인' },
     }, ex || {}, { confirmed: true });
     toss.payments[body.paymentKey] = pay;
+    if (pay.status === 'DONE') addTx({ paymentKey: pay.paymentKey, orderId: pay.orderId, status: 'DONE', amount: pay.totalAmount, method: pay.method });
     return tossJson(200, pay);
   }
   let m = u.pathname.match(/^\/v1\/payments\/orders\/(.+)$/);
@@ -88,7 +101,22 @@ async function fakeToss(url, opt) {
     if (!p || !p.confirmed) return tossJson(404, { code: 'NOT_FOUND_PAYMENT', message: '없는 결제' });
     if (p.cancelReject) return tossJson(400, { code: p.cancelReject, message: '시험용 취소 거절' });
     p.status = body.cancelAmount && body.cancelAmount < p.totalAmount ? 'PARTIAL_CANCELED' : 'CANCELED';
+    addTx({ paymentKey: key, orderId: p.orderId, status: p.status, amount: Number(body.cancelAmount || p.totalAmount), method: p.method });
     return tossJson(200, p);
+  }
+  /* 거래내역 — startDate · endDate (한국 시각) 사이 · startingAfter 다음부터 · limit 건 */
+  if (method === 'GET' && u.pathname === '/v1/transactions') {
+    const sd = u.searchParams.get('startDate') || '', ed = u.searchParams.get('endDate') || '';
+    const F = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+    if (!F.test(sd) || !F.test(ed)) return tossJson(400, { code: 'INVALID_REQUEST', message: '날짜 형식' });
+    const lo = Date.parse(sd + '+09:00'), hi = Date.parse(ed + '+09:00');
+    const limit = Math.min(10000, Number(u.searchParams.get('limit') || 100));
+    toss.txCalls++;
+    let list = toss.transactions.filter(x => { const t = Date.parse(x.transactionAt); return t >= lo && t <= hi; })
+      .sort((a, b) => a.transactionKey.localeCompare(b.transactionKey));
+    const after = u.searchParams.get('startingAfter');
+    if (after) list = list.filter(x => x.transactionKey > after);
+    return tossJson(200, list.slice(0, limit));
   }
   m = u.pathname.match(/^\/v1\/payments\/([^/]+)$/);
   if (method === 'GET' && m) {

@@ -7,6 +7,7 @@
      · PATCH  /rest/v1/<표>?조건        고치기 (Prefer: return=representation 이면 바뀐 줄을 돌려줌)
      · DELETE /rest/v1/<표>?조건        지우기
      · POST   /rest/v1/rpc/sweep_expired · rpc/beat
+     · 조건: eq neq gt gte lt lte in is like ilike (앞에 not. 가능)
 
    표 모양은 db/schema.sql + 02-heartbeat + 06-B 를 따라 만들었습니다.
    없는 칸을 읽거나 쓰면 진짜 Supabase 처럼 400 을 돌려줘서
@@ -142,6 +143,13 @@ function makeFilter(table, col, expr) {
     case 'lt': f = r => r[col] != null && cmpVal(r[col], v) < 0; break;
     case 'lte': f = r => r[col] != null && cmpVal(r[col], v) <= 0; break;
     case 'in': { const L = parseList(v); f = r => r[col] != null && L.some(x => eqVal(r[col], x)); break; }
+    /* like · ilike — PostgREST 처럼 * 가 "아무 글자나" 입니다 (관리자 기록 화면이 씀 · 2026-11-08) */
+    case 'like': case 'ilike': {
+      const rx = new RegExp('^' + v.split('*').map(s => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$',
+        op === 'ilike' ? 'is' : 's');
+      f = r => r[col] != null && rx.test(String(r[col]));
+      break;
+    }
     case 'is':
       if (v === 'null') f = r => r[col] === null || r[col] === undefined;
       else if (v === 'true') f = r => r[col] === true;
