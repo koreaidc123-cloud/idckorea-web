@@ -40,7 +40,7 @@ let v08 = true;
 /* db/10-연장결제.sql 을 돌리면 생기는 칸 · 함수 (2026-11-08)
    ★ 기본은 "아직 안 돌린 Supabase" (v10=false) 입니다 — 월요일 결제 시험 때의 실제 상태라서,
      예전 시험들이 그대로 통과해야 합니다. 연장 결제 시험(EX*)만 setV10(true) 로 켭니다. */
-const V10 = { orders: ['kind', 'parent_id', 'ext_from', 'ext_to', 'applied_at'] };
+const V10 = { orders: ['kind', 'parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at'] };
 let v10 = false;
 const colsOf = t => {
   let c = COLS[t];
@@ -248,6 +248,9 @@ function checkRow(table, row, self) {
           others.some(o => o.kind === 'extend' && o.status === 'ready' && o.parent_id === row.parent_id)) {
         throw new PgErr(409, '23505', 'duplicate key value violates unique constraint "orders_one_ready_ext"');
       }
+      if (row.ext_req != null && others.some(o => o.ext_req === row.ext_req)) {
+        throw new PgErr(409, '23505', 'duplicate key value violates unique constraint "orders_ext_req_uq"');
+      }
     }
   }
   if (table === 'pcs' && row.room && !['K', 'Y', 'D'].includes(row.room)) {
@@ -302,97 +305,132 @@ function rpc(name, body) {
     return 'OK';
   }
   /* db/10 함수들 — SQL 과 같은 순서 · 같은 조건으로 흉내 냅니다 (한 요청이 한 번에 끝나므로 잠금과 같음) */
-  if (v10 && name === 'apply_extension') return applyExtension(String((body || {}).p_order || ''));
-  if (v10 && name === 'revert_extension') {
-    const b = body || {};
-    return revertExtension(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status);
-  }
-  if (v10 && name === 'admin_extend_order') return adminExtendOrder(body || {});
+  if (v10 && FN10[name]) return FN10[name](body || {});
   throw new PgErr(404, 'PGRST202', 'Could not find the function public.' + name);
 }
 
-/* ── db/10 apply_extension 흉내 ── */
+/* ── db/10 흉내 ── */
 const ACTIVE = ['assigned', 'paid'];
+const isoOf = ms => new Date(ms).toISOString();
 function logExt(pn, act, who) {
   DB.view_log.push(Object.assign(defaults('view_log'), { pn, act, who: who || 'system:extend' }));
 }
+const findOrder = id => DB.orders.find(o => o.order_id === id);
 function applyExtension(id) {
-  const c = DB.orders.find(o => o.order_id === id);
+  const c = findOrder(id);
   if (!c) return { ok: false, reason: 'no_order' };
   if (c.kind !== 'extend') return { ok: false, reason: 'not_extend' };
   if (c.status !== 'paid') return { ok: true, skip: 'done', status: c.status, pn: c.pn, endsAt: c.ext_to };
-  const p = DB.orders.find(o => o.order_id === c.parent_id);
+  const p = findOrder(c.parent_id);
   if (!p) return { ok: false, reason: 'no_parent' };
   if (!['assigned', 'expired'].includes(p.status) || !p.pn) return { ok: false, reason: 'parent_state', status: p.status };
+  const now = Date.now();
+  if (p.cancel_lock_at && Date.parse(p.cancel_lock_at) > now - 10 * 60000) return { ok: false, reason: 'parent_busy', pn: p.pn };
+  if (DB.orders.some(o => o.parent_id === p.order_id && o.kind === 'extend' && o.status === 'refunding')) return { ok: false, reason: 'parent_busy', pn: p.pn };
   if (DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id)) {
     return { ok: false, reason: 'pc_taken', pn: p.pn };
   }
   const pc = DB.pcs.find(x => x.pn === p.pn);
-  if (!pc || !['rent', 'hold'].includes(pc.status)) return { ok: false, reason: 'pc_gone', pn: p.pn, pcStatus: pc ? pc.status : null };
-  const now = Date.now();
+  const st = pc ? pc.status : null;
+  if (!st || (p.status === 'assigned' && !['rent', 'hold'].includes(st)) || (p.status === 'expired' && st !== 'hold')) {
+    return { ok: false, reason: 'pc_gone', pn: p.pn, pcStatus: st };
+  }
   const base = Math.max(p.ends_at ? Date.parse(p.ends_at) : now, now);
   const end = base + Number(c.days) * 86400000;
-  const iso = ms => new Date(ms).toISOString();
-  Object.assign(p, { ends_at: iso(end), status: 'assigned' });
-  Object.assign(pc, { status: 'rent', updated_at: iso(now) });
+  Object.assign(p, { ends_at: isoOf(end), status: 'assigned' });
+  Object.assign(pc, { status: 'rent', updated_at: isoOf(now) });
   if (v08) pc.hold_until = null;
-  Object.assign(c, { status: 'applied', pn: p.pn, ext_from: iso(base), ext_to: iso(end),
-    starts_at: iso(base), ends_at: iso(end), applied_at: iso(now) });
+  Object.assign(c, { status: 'applied', pn: p.pn, ext_from: isoOf(base), ext_to: isoOf(end),
+    starts_at: isoOf(base), ends_at: isoOf(end), applied_at: isoOf(now) });
   logExt(p.pn, `연장 결제 적용 ${c.order_id} · ${c.days}일 · 원 주문 ${p.order_id}`);
-  return { ok: true, pn: p.pn, endsAt: iso(end), from: iso(base), parent: p.order_id };
+  return { ok: true, pn: p.pn, endsAt: isoOf(end), from: isoOf(base), parent: p.order_id };
 }
-/* ── db/10 revert_extension 흉내 ── */
-function revertExtension(id, st) {
-  if (!['refunded', 'canceled'].includes(st)) return { ok: false, reason: 'bad_status' };
-  const c = DB.orders.find(o => o.order_id === id);
+function beginExtRefund(id) {
+  const c = findOrder(id);
   if (!c) return { ok: false, reason: 'no_order' };
-  if (c.kind !== 'extend' || c.status !== 'applied') return { ok: false, reason: 'not_applied', status: c.status };
-  const p = DB.orders.find(o => o.order_id === c.parent_id);
-  if (!p) return { ok: false, reason: 'no_parent' };
-  if (DB.orders.some(o => o.parent_id === c.parent_id && o.kind === 'extend' && o.status === 'applied' &&
-      o.order_id !== c.order_id && Date.parse(o.ext_to) > Date.parse(c.ext_to))) return { ok: false, reason: 'not_latest' };
-  if (Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
-  const now = Date.now(), iso = ms => new Date(ms).toISOString();
-  const vEnd = Date.parse(c.ext_from);
-  let vSt;
-  if (vEnd > now) { p.ends_at = c.ext_from; vSt = p.status; }
-  else {
-    p.ends_at = c.ext_from;
-    if (p.status === 'assigned') p.status = 'expired';
-    vSt = 'expired';
-    const pc = DB.pcs.find(x => x.pn === p.pn);
-    const busy = DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id);
-    if (pc && ['rent', 'hold'].includes(pc.status) && !busy) Object.assign(pc, { status: 'wipe', wipe_at: iso(now), updated_at: iso(now) });
+  if (c.kind !== 'extend') return { ok: false, reason: 'not_extend' };
+  if (c.status === 'refunding') return { ok: true, was: c.applied_at ? 'applied' : 'paid', again: true };
+  if (!['paid', 'applied'].includes(c.status)) return { ok: false, reason: 'bad_state', status: c.status };
+  if (c.status === 'applied') {
+    const p = findOrder(c.parent_id);
+    if (DB.orders.some(o => o.parent_id === c.parent_id && o.kind === 'extend' && ['applied', 'refunding'].includes(o.status) &&
+        o.order_id !== c.order_id && Date.parse(o.ext_to) > Date.parse(c.ext_to))) return { ok: false, reason: 'not_latest' };
+    if (!p || Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
   }
-  Object.assign(c, { status: st, canceled_at: iso(now), ends_at: iso(Math.min(Date.parse(c.ends_at), now)) });
-  logExt(p.pn, `연장 되돌림 ${c.order_id} · 원 주문 ${p.order_id}`);
-  return { ok: true, pn: p.pn, parentEnd: c.ext_from, parentStatus: vSt };
+  const was = c.status;
+  c.status = 'refunding';
+  return { ok: true, was };
 }
-/* ── db/10 admin_extend_order 흉내 — 실패하면 넣은 줄까지 없던 일로 ── */
+function finishExtRefund(id, st) {
+  if (!['refunded', 'canceled'].includes(st)) return { ok: false, reason: 'bad_status' };
+  const c = findOrder(id);
+  if (!c) return { ok: false, reason: 'no_order' };
+  if (['refunded', 'canceled'].includes(c.status)) return { ok: true, skip: 'done', status: c.status };
+  if (c.kind !== 'extend' || c.status !== 'refunding') return { ok: false, reason: 'not_refunding', status: c.status };
+  const now = Date.now();
+  let p = null, vEnd = null, vSt = null;
+  if (c.applied_at) {
+    p = findOrder(c.parent_id);
+    if (!p) return { ok: false, reason: 'no_parent' };
+    if (Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
+    vEnd = c.ext_from;
+    if (Date.parse(vEnd) > now) { p.ends_at = vEnd; vSt = p.status; }
+    else {
+      p.ends_at = vEnd;
+      if (p.status === 'assigned') p.status = 'expired';
+      vSt = 'expired';
+      const pc = DB.pcs.find(x => x.pn === p.pn);
+      const busy = DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id);
+      if (pc && ['rent', 'hold'].includes(pc.status) && !busy) Object.assign(pc, { status: 'wipe', wipe_at: isoOf(now), updated_at: isoOf(now) });
+    }
+    logExt(p.pn, `연장 되돌림 ${c.order_id} · 원 주문 ${p.order_id}`);
+  }
+  Object.assign(c, { status: st, canceled_at: c.canceled_at || isoOf(now),
+    ends_at: isoOf(Math.min(c.ends_at ? Date.parse(c.ends_at) : now, now)) });
+  return { ok: true, pn: (p && p.pn) || c.pn, parentEnd: vEnd, parentStatus: vSt, reverted: !!c.applied_at };
+}
+function abortExtRefund(id) {
+  const c = findOrder(id);
+  if (!c || c.status !== 'refunding') return { ok: false, reason: 'not_refunding' };
+  if (c.refund_amt !== null && c.refund_amt !== undefined) return { ok: false, reason: 'money_done' };
+  c.status = c.applied_at ? 'applied' : 'paid';
+  return { ok: true };
+}
+function beginParentCancel(id) {
+  const p = findOrder(id);
+  if (!p) return { ok: false, reason: 'no_order' };
+  const kids = DB.orders.filter(o => o.parent_id === id && o.kind === 'extend' && ['applied', 'paid', 'refunding'].includes(o.status))
+    .sort((a, b) => (b.ext_to ? Date.parse(b.ext_to) : Infinity) - (a.ext_to ? Date.parse(a.ext_to) : Infinity))
+    .map(o => ({ no: o.order_id, days: o.days, status: o.status }));
+  if (kids.length) return { ok: false, reason: 'has_ext', kids };
+  p.cancel_lock_at = isoOf(Date.now());
+  return { ok: true };
+}
+/* 관리자 수동 연장 — 실패하면 넣은 줄까지 없던 일로 (apply 는 실패할 때 아무것도 안 바꾸므로 줄만 빼면 됨) */
 function adminExtendOrder(b) {
   const days = Number(b.p_days);
   if (![30, 60, 90].includes(days)) return { ok: false, reason: 'bad_days' };
-  const p = DB.orders.find(o => o.order_id === b.p_parent);
+  const p = findOrder(b.p_parent);
   if (!p) return { ok: false, reason: 'no_parent' };
+  const req = b.p_req ? String(b.p_req).slice(0, 64) : null;
+  if (req) {
+    const d = DB.orders.find(o => o.ext_req === req);
+    if (d) return { ok: d.status === 'applied' && d.parent_id === p.order_id, dup: true, child: d.order_id, pn: d.pn, endsAt: d.ext_to, reason: 'dup' };
+  }
   if (!['assigned', 'expired'].includes(p.status)) return { ok: false, reason: 'parent_state', status: p.status };
   const id = 'MXT' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' +
     crypto.randomBytes(3).toString('hex').toUpperCase();
-  const snapshot = JSON.stringify({ orders: DB.orders, pcs: DB.pcs, view_log: DB.view_log });
   const row = Object.assign(defaults('orders'), {
     order_id: id, member_id: p.member_id, pn: null, spec_id: p.spec_id, days, amount: Math.max(Number(b.p_amount) || 0, 0),
     setup_fee: 0, status: 'paid', pay_method: String(b.p_method || '수동').slice(0, 30) || '수동', paid_at: new Date().toISOString(),
-    payer_name: p.payer_name, user_name: p.user_name, user_phone: p.user_phone, kind: 'extend', parent_id: p.order_id,
+    payer_name: p.payer_name, user_name: p.user_name, user_phone: p.user_phone, kind: 'extend', parent_id: p.order_id, ext_req: req,
   });
   for (const c of colsOf('orders')) if (row[c] === undefined) row[c] = null;
   checkRow('orders', row, null);
   DB.orders.push(row);
   const r = applyExtension(id);
   if (!r.ok || r.skip) {
-    /* 거래 취소 — 바꾼 것을 전부 되돌립니다 */
-    const s = JSON.parse(snapshot);
-    DB.orders.length = 0; DB.orders.push(...s.orders.filter(o => o.order_id !== id));
-    for (const pc of DB.pcs) Object.assign(pc, s.pcs.find(x => x.pn === pc.pn));
-    DB.view_log.length = 0; DB.view_log.push(...s.view_log);
+    DB.orders.splice(DB.orders.indexOf(row), 1);
     const pc = DB.pcs.find(x => x.pn === p.pn);
     return { ok: false, reason: r.reason || 'fail', pcStatus: pc ? pc.status : null };
   }
@@ -400,6 +438,19 @@ function adminExtendOrder(b) {
   if (lg) lg.who = String(b.p_who || 'admin').slice(0, 60);
   return Object.assign({}, r, { child: id });
 }
+const FN10 = {
+  apply_extension: b => applyExtension(String(b.p_order || '')),
+  begin_ext_refund: b => beginExtRefund(String(b.p_order || '')),
+  finish_ext_refund: b => finishExtRefund(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status),
+  abort_ext_refund: b => abortExtRefund(String(b.p_order || '')),
+  revert_extension: b => {
+    const r = beginExtRefund(String(b.p_order || ''));
+    return r.ok ? finishExtRefund(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status) : r;
+  },
+  begin_parent_cancel: b => beginParentCancel(String(b.p_order || '')),
+  abort_parent_cancel: b => { const p = findOrder(String(b.p_order || '')); if (p) p.cancel_lock_at = null; return { ok: true }; },
+  admin_extend_order: adminExtendOrder,
+};
 
 /* ── 요청 하나 처리 ── */
 function handle(method, path, qs, headers, body) {
@@ -514,7 +565,7 @@ module.exports = {
     DB.settings = DB.settings.filter(s => s.k !== 'ext_pay');
     if (v10) {
       for (const o of DB.orders) if (!o.kind) o.kind = 'new';
-      for (const k of ['parent_id', 'ext_from', 'ext_to', 'applied_at']) for (const o of DB.orders) if (o[k] === undefined) o[k] = null;
+      for (const k of ['parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at']) for (const o of DB.orders) if (o[k] === undefined) o[k] = null;
       DB.settings.push({ k: 'ext_pay', v: '1' });
     }
   },

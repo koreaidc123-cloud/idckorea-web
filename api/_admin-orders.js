@@ -66,8 +66,10 @@ module.exports = async (req, res) => {
            [오늘 할 일] 에서 사라지면 고객에게 돈을 안 보낸 채 잊게 됩니다 (Codex T-0179) */
       const owed = withRefund ? await fetchAll(
         `?select=${c}&status=in.(refunded,canceled)&refund_state=eq.manual_pending&order=order_id.asc`) : [];
-      const ext = withExt ? await fetchAll(
-        `?select=${c}&status=eq.applied&ends_at=gte.${new Date().toISOString()}&order=order_id.asc`) : [];
+      const ext = withExt ? (await fetchAll(
+        `?select=${c}&status=eq.applied&ends_at=gte.${new Date().toISOString()}&order=order_id.asc`)).concat(
+        /* 환불 처리 중(refunding)에 멈춘 연장 줄 — [오늘 할 일] 에서 마무리해야 하므로 끝까지 받습니다 */
+        await fetchAll(`?select=${c}&status=eq.refunding&order=order_id.asc`)) : [];
       return { active, hist, owed, ext };
     };
     const EXT_SEL = ',kind,parent_id,ext_from,ext_to,applied_at';

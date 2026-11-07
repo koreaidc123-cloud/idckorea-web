@@ -597,7 +597,7 @@ function badges(){
   /* 오늘 할 일 숫자 = 화면에 뜨는 카드의 건수 합 (점검중은 급하지 않아 뺍니다) */
   const tc=todayCounts();
   const tn=tc.downs.length+tc.hub.length+tc.d3.length+tc.wait.length+tc.exp7.length
-          +tc.wipe.length+tc.va.length+tc.refund.length;
+          +tc.wipe.length+tc.va.length+tc.refund.length+tc.extFix.length;
   put('bd-today',tn); put('tb-today',tn);
 }
 
@@ -825,7 +825,9 @@ function todayCounts(){
     /* 초기화 대기 — 신호가 끊겨 "다운" 으로 보이는 PC 도 빠지지 않게 표의 원래 상태(raw)로 봅니다 */
     wipe:PCS.filter(p=>p.pn&&p.raw==='wipe').sort((a,b)=>locKey(a)-locKey(b)),
     va:PENDING.filter(o=>o.pm==='가상계좌'),
-    refund:HISTORY.filter(o=>o.refundState==='manual_pending')};
+    refund:HISTORY.filter(o=>o.refundState==='manual_pending'),
+    /* 연장 환불이 중간에 멈춘 것 (돈 단계 뒤 끊김 등) — [해지 · 환불] 을 다시 눌러 마무리 (2026-11-08) */
+    extFix:HISTORY.filter(o=>o.kind==='extend'&&o.st==='refunding')};
 }
 /* 결제는 끝났는데 PC 가 안 붙은 주문 — 돈을 받았으니 가장 먼저 처리합니다 */
 function isWait(o){ return o.st==='paid'&&!o.pn; }
@@ -838,7 +840,7 @@ const waitTag=o=>isExt(o)? '<span class="warnbadge">연장 결제 — 원래 PC 
 const holdTx=p=>!p?'':p.raw==='hold'?'반납 유예'+(p.holdUntil?' · '+fmtD(p.holdUntil)+'까지':'')
   :p.raw==='wipe'?'초기화 대기':p.raw==='rent'?'다시 임대중':(ST[p.raw]||'');
 function vToday(){
-  const {downs,hub,fix,d3,wait,exp7,wipe,va,refund}=todayCounts();
+  const {downs,hub,fix,d3,wait,exp7,wipe,va,refund,extFix}=todayCounts();
   const rentFirst=downs.slice().sort((a,b)=>((b.order?1:0)-(a.order?1:0)));
   const hubKeys=new Set(hub.flatMap(e=>e[1].map(p=>p.pn)));
   const head=`
@@ -846,7 +848,7 @@ function vToday(){
     <span class="live">현장에서 처리할 순서대로 — 고객 영향이 큰 것부터</span></div>
   ${sqlNote()}`;
   const none=!(downs.length||hub.length||fix.length||d3.length||wait.length||exp7.length
-             ||wipe.length||va.length||refund.length);
+             ||wipe.length||va.length||refund.length||extFix.length);
   if(none) return head+`<div class="card"><div class="empty2" id="today-empty"><b>오늘은 처리할 일이 없습니다</b>
     배정 대기 · 환불 송금 · 반납 초기화 · 만료 · 다운 PC 가 하나도 없습니다.</div></div>`;
   const nil='<tr><td class="dim" style="padding:20px">없음</td></tr>';
@@ -858,6 +860,14 @@ function vToday(){
       <tr data-ord="${esc(o.no)}"><td data-label="주문" class="dim num">${esc(o.no)}</td><td data-label="고객">${esc(o.nm)}</td>
       <td data-label="연락처" class="dim num">${esc(o.ph)}</td><td data-label="상품" class="dim">${esc(oSpec(o))} · ${o.days}일</td>
       <td>${waitTag(o)}</td></tr>`).join('')}</tbody></table></div>
+  </div>`:''}
+  ${extFix.length? `<div class="card" style="margin-bottom:14px;border-color:#F7CDD3" id="today-extfix">
+    <div class="sec-h"><h3>🔁 연장 환불 마무리 필요</h3><span class="cnt">${extFix.length}건</span>
+      <div class="r"><span class="dim" style="font-size:12px">돈 단계는 끝났거나 중간에 멈춘 연장 환불 · 줄을 눌러 [해지 · 환불] 을 다시 누르세요</span></div></div>
+    <div class="sec-b"><table class="tbl mc"><tbody>${extFix.map(o=>`
+      <tr data-ord="${esc(o.no)}"><td data-label="주문" class="dim num">${esc(o.no)}</td><td data-label="고객">${esc(o.nm)}</td>
+      <td data-label="원 주문" class="dim num">${esc(o.parent||'')}</td>
+      <td><span class="warnbadge">환불 처리 중</span></td></tr>`).join('')}</tbody></table></div>
   </div>`:''}
   ${refund.length? `<div class="card" style="margin-bottom:14px;border-color:#F7CDD3" id="today-refund">
     <div class="sec-h"><h3>💸 직접 송금해야 할 환불</h3><span class="cnt">${refund.length}건</span>
@@ -1367,7 +1377,7 @@ const RECON_GROUPS=[
   ['refundDiff','≠ 환불 금액이 다름','토스가 돌려준 금액과 주문의 환불 금액이 다릅니다 (직접 송금 환불은 제외)'],
 ];
 const tossStTx=s=>({DONE:'결제 완료',CANCELED:'취소',PARTIAL_CANCELED:'부분 취소',WAITING_FOR_DEPOSIT:'입금 대기'})[s]||s||'';
-const dbStTx=s=>({ready:'결제 대기',paid:'결제완료·배정 대기',assigned:'이용중',expired:'만료',refunded:'환불',canceled:'취소',applied:'연장 적용됨'})[s]||s||'없음';
+const dbStTx=s=>({ready:'결제 대기',paid:'결제완료·배정 대기',assigned:'이용중',expired:'만료',refunded:'환불',canceled:'취소',applied:'연장 적용됨',refunding:'환불 처리 중'})[s]||s||'없음';
 function vRecon(){
   const d=RECON.data;
   const groups = RECON.loading ? '<div class="card"><div class="empty2">토스에 묻는 중…</div></div>'
@@ -2410,7 +2420,7 @@ document.addEventListener('click',async e=>{
       + (out.d.pcReturned ? `\n✓ ${oPn(o)} 은 [초기화 대기] 로 갔습니다.\n   초기화 + 애니데스크 비밀번호 교체 뒤 [오늘 할 일] 에서 판매로 돌려 주세요.` : '')
       /* 연장 결제 줄 환불 — 원 주문 기간을 되돌렸는지 (2026-11-08) */
       + (out.d.extReverted===true ? `\n✓ 원 주문 ${o.parent||''} 의 만료일을 ${out.d.parentEnd?fmtD(new Date(out.d.parentEnd)):''} 로 되돌렸습니다.` : '')
-      + (out.d.extReverted===false ? `\n⚠ 원 주문 ${o.parent||''} 의 기간을 되돌리지 못했습니다. 원 주문 만료일을 직접 확인해 주세요.` : ''));
+      + (out.d.extFinished===false ? `\n⚠ 환불 마무리(기간 되돌리기)가 끝나지 않았습니다.\n   [오늘 할 일] 의 "연장 환불 마무리 필요" 에서 [해지 · 환불] 을 다시 눌러 주세요.` : ''));
     closeDrawer();
     await syncLive(); return;
   }
@@ -2569,14 +2579,19 @@ document.addEventListener('click',async e=>{
       +(o.st==='expired'?'\n\n※ 이미 만료된 주문입니다. 오늘부터 30일로 다시 시작합니다.':''), String(def||''));
     if(amt===null)return;
     ex.disabled=true;
+    /* ★ 요청 번호 (Codex T-0193) — 응답이 끊겨 "실패" 로 보이면 같은 번호로 다시 보냅니다.
+       서버(db/10)는 같은 번호를 한 번만 연장합니다. 성공하면 번호를 지워 다음 연장은 새 번호로. */
+    if(!EXT_REQ[o.no]) EXT_REQ[o.no]='R'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
     if(LIVE){
       try{
         const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({no:o.no, act:'extend', days:30, amount:+amt||0})});
+          body:JSON.stringify({no:o.no, act:'extend', days:30, amount:+amt||0, reqId:EXT_REQ[o.no]})});
         const d=await r.json().catch(()=>({}));
-        if(!r.ok){ ex.disabled=false; alert(d.error||'연장하지 못했습니다'); return; }
-      }catch(e){ ex.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+        if(!r.ok){ ex.disabled=false; if(r.status<500) EXT_REQ[o.no]=null; alert(d.error||'연장하지 못했습니다'); return; }
+        EXT_REQ[o.no]=null;
+        if(d.dup) alert('앞서 보낸 연장이 이미 처리돼 있었습니다 (두 번 연장하지 않았습니다).');
+      }catch(e){ ex.disabled=false; alert('서버에 연결하지 못했습니다.\n다시 누르시면 같은 요청으로 보내 두 번 연장되지 않습니다.'); return; }
     }
     /* 만료된 주문을 되살리면 진행중 목록 · PC 상태(유예 → 임대중)가 함께 바뀌므로
        화면에서 셈하지 않고 서버에서 다시 받아옵니다 */
@@ -2887,6 +2902,8 @@ const PENDING=[];
 /* 주문번호로 찾기 — 진행중(ORDERS) 에 없으면 끝난 것(HISTORY) 까지 봅니다.
    만료된 주문을 연장하거나, 해지된 주문의 직접 송금을 [송금 완료] 로 바꾸려면 필요합니다. */
 const findOrd=no=>ORDERS.find(x=>x.no===no)||HISTORY.find(x=>x.no===no)||null;
+/* 관리자 [30일 연장] 요청 번호 — 주문번호별로 기억 (30초마다 목록을 새로 받아도 남게) */
+const EXT_REQ={};
 /* HAS_HOLD    = settings 에 hold_days 가 있음 → db/08 SQL 을 돌림 (반납 유예 → 초기화 대기 흐름)
    REFUND_COLS = 주문에 환불 송금 추적 칸이 있음 (이것도 db/08)
    HISTORY_CUT = 지난 주문이 너무 많아 서버가 오래된 것을 빼고 보냄 */

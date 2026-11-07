@@ -107,7 +107,8 @@ module.exports = async (req, res) => {
         }
         try {
           await sb('orders', { method: 'PATCH', prefer: 'return=minimal',
-            query: `?order_id=eq.${encodeURIComponent(orderId)}`, body: { refund_state: 'toss_done' } });
+            query: `?order_id=eq.${encodeURIComponent(orderId)}`,
+            body: { refund_state: 'toss_done', refund_amt: Number(order.amount) || 0, refund_why: '토스에서 직접 취소' } });
         } catch (e) {}
         return res.status(200).json({ ok: true, canceled: orderId, reverted: true });
       }
@@ -116,7 +117,7 @@ module.exports = async (req, res) => {
       if (order.kind !== 'extend') {
         let kids = [];
         try {
-          kids = await sb('orders', { query: `?select=order_id&parent_id=eq.${encodeURIComponent(orderId)}&kind=eq.extend&status=eq.applied` }) || [];
+          kids = await sb('orders', { query: `?select=order_id&parent_id=eq.${encodeURIComponent(orderId)}&kind=eq.extend&status=in.(applied,paid,refunding)` }) || [];
         } catch (e) {
           if (!missingCol(e)) throw e;   // 연결 오류면 500 → 토스가 다시 보내 줍니다
           kids = [];                     // db/10 전이면 칸이 없어 여기로 — 예전처럼 처리
