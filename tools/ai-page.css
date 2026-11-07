@@ -149,3 +149,5 @@
   .ai-end{padding:80px 0}
 }
 .ai-hero>.shell{width:100%;box-sizing:border-box}
+.ai-hero h1 .hl{color:var(--sky)}
+.ai-lead,.ai-h p,.ai-card p{word-break:keep-all}
