@@ -7,6 +7,7 @@
    act = extend  기간 연장      { days:30, amount:65000, payMethod:"계좌이체" }
    act = cancel  해지·환불      { refund:12000, why:"고객 요청", force:false }
    act = move    PC 이전        { toPn:"Y-055", why:"그래픽카드 고장" }
+   act = assign  배정 대기 주문에 PC 붙이기 { toPn:"Y-055" 또는 "" (자동 선택) }
    act = tax     세금계산서 요청 { bizNo:"123-45-67890" }
 
    ★ 환불 규정 (대표님이 정하신 것)
@@ -17,6 +18,7 @@
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
 const { verify } = require('./admin-login');
+const { tossSecret, grabPc, lockPc, releasePc, pcBusyByOther, period } = require('./_pay');
 
 const DAY = 86400000;
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : null) || null;
@@ -53,7 +55,7 @@ function refundQuote(order, setupFee, at) {
      카드와 달리 돌려받을 통장을 토스에 같이 알려줘야 취소됩니다.
      없으면 관리자에게 물어봅니다.
    ═══════════════════════════════════════════════════════════════ */
-const TOSS_SECRET = process.env.TOSS_SECRET_KEY || 'test_sk_zXLkKEypNArWmo50nX3lmeaxYG5R';
+const TOSS_SECRET = tossSecret();
 
 async function tossCancel(order, amount, why, acct) {
   if (!order.pay_key) return { done: false, reason: '수동' };
@@ -105,7 +107,7 @@ module.exports = async (req, res) => {
   const no = str(b.no, 64);
   const act = str(b.act, 12);
   if (!no) return res.status(400).json({ error: '주문번호가 필요합니다' });
-  if (!['extend', 'cancel', 'move', 'tax', 'quote', 'cust'].includes(act)) {
+  if (!['extend', 'cancel', 'move', 'assign', 'tax', 'quote', 'cust'].includes(act)) {
     return res.status(400).json({ error: '알 수 없는 처리입니다' });
   }
 
@@ -235,12 +237,11 @@ module.exports = async (req, res) => {
           ends_at: now.toISOString(),
         },
       });
-      /* 쓰던 PC 를 판매 재고로 되돌립니다 */
-      if (order.pn) {
-        await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
-          query: `?pn=eq.${encodeURIComponent(order.pn)}&status=eq.rent`,
-          body: { status: 'ok', updated_at: now.toISOString() } });
-      }
+      /* 쓰던 PC 를 판매 재고로 되돌립니다.
+         ★ 그 PC 를 지금 다른 주문이 쓰고 있으면 건드리지 않습니다 (2026-11-07).
+           만료된 옛 주문을 뒤늦게 해지하면, 그 사이 같은 PC 를 받은 새 고객의
+           PC 가 "임대 가능" 으로 풀려 또 팔릴 수 있었습니다. */
+      const pcRes = await releasePc(order.pn, no, now);
       /* 돈이 실제로 돌아갔는지를 기록에 남깁니다.
          나중에 "환불했다는데 안 들어왔다" 는 문의가 오면 여기를 봅니다. */
       const 방법 = tc.done ? '토스 취소 완료'
@@ -249,10 +250,65 @@ module.exports = async (req, res) => {
       await log(order.pn, `해지 · 환불 ${asked.toLocaleString('ko-KR')}원 `
         + `(${q.rule} · ${q.used}일 사용) · ${방법} · ${str(b.why, 100) || '고객 요청'}`);
       return res.status(200).json({
-        ok: true, refund: asked, quote: q, pcReturned: !!order.pn,
+        ok: true, refund: asked, quote: q, pcReturned: pcRes === 'released',
+        pcBusy: pcRes === 'busy',                             // 다른 주문이 쓰고 있어 PC 는 그대로 둠
         moneyBack: tc.done,                                   // 토스가 실제로 돌려줬는가
         manualRefund: !tc.done && asked > 0,                  // 관리자가 직접 보내야 하는가
       });
+    }
+
+    /* ── 배정 대기 주문에 PC 붙이기 ───────────────────────────────
+       결제는 됐는데 그 순간 남은 PC 가 없어 자동 배정을 못 받은 주문(status=paid)입니다.
+       예전에는 이걸 처리할 버튼이 없었고, 하루가 지나면 만료 정리가
+       이 주문을 "만료" 로 바꿔 관리자 화면에서 사라졌습니다 (돈은 받았는데!).
+
+       { toPn:"Y-055" }  그 PC 로 배정
+       { toPn:"" }       같은 사양 중 살아있는 PC 를 자동으로 골라 배정
+
+       ★ PC 는 status=eq.ok 조건으로 잡아 두 주문이 한 PC 를 갖지 않게 합니다.
+       ★ 주문도 status=eq.paid 조건으로 바꿔, 그 사이 다른 곳에서 처리됐으면 PC 를 놓아줍니다.
+       ★ 이용 기간은 배정한 지금부터 시작합니다 (결제 승인 때와 같은 방식). */
+    if (act === 'assign' || (act === 'move' && order.status === 'paid' && !order.pn)) {
+      if (order.status !== 'paid' || order.pn) {
+        return res.status(409).json({ error: '결제완료 · 배정 대기 주문만 배정할 수 있습니다 (현재: ' + order.status + ')' });
+      }
+      const toPn = String(b.toPn || '').toUpperCase().trim();
+      let pc = null;
+      if (toPn) {
+        if (!/^[KYD]-\d{3}$/.test(toPn)) return res.status(400).json({ error: '품번을 정확히 적어 주세요 (예: Y-055)' });
+        const rows = await sb('pcs', { query: `?select=pn,status,spec_id,anydesk&pn=eq.${encodeURIComponent(toPn)}&limit=1` });
+        const to = rows && rows[0];
+        if (!to) return res.status(404).json({ error: `${toPn} 은 없는 품번입니다` });
+        if (to.status !== 'ok') return res.status(409).json({ error: `${toPn} 은 지금 임대할 수 있는 상태가 아닙니다 (현재: ${to.status})` });
+        if (!(await lockPc(toPn, now))) {
+          return res.status(409).json({ error: `${toPn} 은 방금 다른 주문에 배정됐습니다. 다른 PC 를 골라 주세요` });
+        }
+        pc = to;
+      } else {
+        pc = await grabPc({ specId: order.spec_id, now });
+        if (!pc) {
+          return res.status(409).json({ error: '이 사양으로 지금 켜져 있는 빈 PC 가 없습니다.\n품번을 직접 적어 배정해 주세요' });
+        }
+      }
+
+      const per = period(order.days, now);
+      let done = null;
+      try {
+        done = await sb('orders', { method: 'PATCH', prefer: 'return=representation',
+          query: `?order_id=eq.${encodeURIComponent(no)}&status=eq.paid&select=order_id`,
+          body: { status: 'assigned', pn: pc.pn, spec_id: pc.spec_id || order.spec_id,
+                  starts_at: per.starts_at, ends_at: per.ends_at } });
+      } catch (e) { done = null; }
+      if (!(done && done[0])) {
+        /* 주문을 못 바꿨으면 잡아둔 PC 를 놓아줍니다 */
+        try { await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
+          query: `?pn=eq.${encodeURIComponent(pc.pn)}&status=eq.rent`,
+          body: { status: 'ok', updated_at: new Date().toISOString() } }); } catch (e2) {}
+        return res.status(409).json({ error: '그 사이 이 주문이 다른 곳에서 처리됐습니다. 새로고침 후 확인해 주세요' });
+      }
+      await log(pc.pn, `배정 대기 주문 배정 ${no} → ${pc.pn}${toPn ? '' : ' (자동 선택)'}`);
+      return res.status(200).json({ ok: true, to: pc.pn, anydesk: pc.anydesk || null,
+        startsAt: per.starts_at, endsAt: per.ends_at });
     }
 
     /* ── PC 이전 (고장 · 사양 변경) ── */
@@ -294,7 +350,8 @@ module.exports = async (req, res) => {
           body: { status: 'ok', updated_at: new Date().toISOString() } }); } catch (e2) {}
         throw e;
       }
-      if (from) {
+      /* ★ 원래 PC 를 지금 다른 주문이 쓰고 있으면(만료된 옛 주문을 옮긴 경우) 건드리지 않습니다 */
+      if (from && !(await pcBusyByOther(from, no))) {
         /* 원래 쓰던 PC 는 점검으로 보냅니다 — 고장이라 옮기는 경우가 대부분입니다 */
         await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
           query: `?pn=eq.${encodeURIComponent(from)}`,

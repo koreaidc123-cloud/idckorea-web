@@ -21,33 +21,10 @@ const crypto = require('crypto');
 const { ready, sb } = require('./_supa');
 const kv = require('./_crypto');
 
-const DAYS = 30;
 const DAY = 86400000;
 
-/* ── 출입증 ── */
-function signKey() {
-  return crypto.createHmac('sha256', kv.signKey()).update('kvc-customer').digest();
-}
-function makeTicket(memberId) {
-  const exp = Date.now() + DAYS * DAY;
-  const body = `${memberId}.${exp}`;
-  const sig = crypto.createHmac('sha256', signKey()).update(body).digest('hex');
-  return `${body}.${sig}`;
-}
-function readTicket(req) {
-  if (!kv.ready()) return null;
-  const raw = (req.headers.cookie || '').split(';').map(s => s.trim())
-    .find(s => s.startsWith('kvc_cust='));
-  if (!raw) return null;
-  const parts = decodeURIComponent(raw.slice(9)).split('.');
-  if (parts.length !== 3) return null;
-  const [id, exp, sig] = parts;
-  if (Number(exp) < Date.now()) return null;
-  const want = crypto.createHmac('sha256', signKey()).update(`${id}.${exp}`).digest('hex');
-  if (want.length !== sig.length) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
-  return id;
-}
+/* ── 출입증 ── 주문 만들기에서도 같이 쓰도록 _ticket.js 로 옮겼습니다 */
+const { DAYS, makeTicket, readTicket } = require('./_ticket');
 
 /* ── 카카오·구글에 진짜 그 사람인지 물어봅니다 ── */
 async function checkKakao(token) {

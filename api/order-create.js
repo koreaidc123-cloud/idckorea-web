@@ -11,6 +11,8 @@
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
 const { quote } = require('./_price');
+const kv = require('./_crypto');
+const { readTicket } = require('./_ticket');
 
 /* 주문번호: 날짜 + 무작위 — 토스 규격(6~64자, 영숫자·-·_) */
 function newOrderId() {
@@ -61,9 +63,25 @@ module.exports = async (req, res) => {
       });
     }
 
-    /* 회원 찾기 — 없으면 만듭니다 (전화번호가 고객 식별의 기준입니다) */
+    /* ── 회원 찾기 ───────────────────────────────────────────────
+       ★ 로그인 출입증(httpOnly 쿠키)으로 찾습니다 (2026-11-07 결제 점검).
+         예전에는 브라우저가 보낸 카카오·구글 번호(socialId)로 찾았는데,
+         내 가상컴 화면이 저장소를 덮어쓰면서 그 번호가 사라졌습니다.
+         그러면 주문에 회원이 안 붙어(member_id 빈 값) 결제를 해도
+         내 가상컴에 PC 가 안 보이고 비밀번호도 "고객님의 PC 가 아닙니다" 로 막혔습니다.
+         출입증은 서버가 카카오·구글에 직접 확인하고 발급한 것이라 믿을 수 있습니다. */
     let memberId = null;
-    if (b.via && b.socialId) {
+    const ticketId = readTicket(req);
+    if (ticketId) {
+      const me = await sb('members', { query: `?select=id&id=eq.${encodeURIComponent(ticketId)}&limit=1` });
+      if (me && me[0]) memberId = me[0].id;
+    }
+    if (!memberId && kv.ready()) {
+      /* 출입증을 확인할 수 있는 환경인데 출입증이 없거나 만료 → 다시 로그인 */
+      return res.status(401).json({ error: '로그인이 만료됐습니다. 다시 로그인해 주세요.' });
+    }
+    /* 아래는 KVC_SECRET 이 없어 출입증을 못 쓰는 환경(시험용)에서만 씁니다 */
+    if (!memberId && b.via && b.socialId) {
       const found = await sb('members', {
         query: `?select=id&via=eq.${encodeURIComponent(b.via)}&social_id=eq.${encodeURIComponent(b.socialId)}&limit=1`,
       });
