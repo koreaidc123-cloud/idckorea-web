@@ -9,7 +9,7 @@
 
    ②를 건너뛰면 금액을 고쳐서 결제할 수 있습니다. 그래서 이 단계가 있습니다.
    ═══════════════════════════════════════════════════════════════ */
-const { ready, sb } = require('./_supa');
+const { ready, sb, missingCol } = require('./_supa');
 const { quote } = require('./_price');
 const kv = require('./_crypto');
 const { readTicket } = require('./_ticket');
@@ -24,10 +24,141 @@ function newOrderId() {
 
 const phoneOk = s => /^01[016789]-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
 
+/* ═══ 연장 결제 주문 (2026-11-08) ═══════════════════════════════════
+   고객이 [내 가상컴] 에서 [연장하기] 를 누르면 여기로 extendOf(원 주문번호)가 옵니다.
+   ★ 새 PC 를 사는 주문이 아니라 "같은 PC 기간만 늘리는" 주문입니다.
+     · 원 주문은 그대로 두고, 연장 줄(kind='extend', parent_id=원 주문)을 하나 새로 만듭니다.
+       연장마다 결제키·금액이 따로 있어야 연장분만 따로 환불할 수 있기 때문입니다.
+     · 재고 확인은 하지 않습니다 (새 PC 를 잡지 않으므로).
+     · 금액은 원 주문 상품의 가격표(_price.js)로만 정합니다. 셋팅비는 0원 (이미 셋팅된 PC).
+     · 실제로 기간을 늘리는 일은 결제 승인 뒤 데이터베이스 함수(apply_extension)가 한 번에 합니다.
+   ★ db/10-연장결제.sql 을 안 돌렸으면(칸·함수 없음, settings.ext_pay 가 1 이 아님) 받지 않습니다.
+     그때 고객 화면은 [카카오톡으로 연장 요청] 을 그대로 보여 줍니다. */
+function newExtId() {
+  const d = new Date();
+  const ymd = d.toISOString().slice(2, 10).replace(/-/g, '');
+  const rnd = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `KVX${ymd}-${rnd}`;          // KVX = 연장 결제 (KVC 새 주문과 한눈에 구분)
+}
+const REUSE_MS = 30 * 60000;          // 30분 안에 다시 누르면 같은 주문으로 결제창을 엽니다
+
+async function createExtension(req, res, b) {
+  if (!ready()) return res.status(503).json({ error: '지금은 연장 결제를 받을 수 없습니다. 카카오톡으로 요청해 주세요' });
+  const parentId = String(b.extendOf || '').trim().slice(0, 64);
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(parentId)) return res.status(400).json({ error: '주문번호가 올바르지 않습니다' });
+  const days = Number(b.days);
+
+  /* 회원 — 출입증(쿠키)으로만 찾습니다. 남의 주문은 연장할 수 없습니다 */
+  const memberId = readTicket(req);
+  if (!memberId) return res.status(401).json({ error: '로그인이 만료됐습니다. 다시 로그인해 주세요.' });
+
+  /* 기능이 켜져 있는지 (db/10 을 돌렸는지) */
+  const NOT_READY = { error: '지금은 화면에서 바로 연장할 수 없습니다.\n카카오톡 상담으로 연장을 요청해 주세요.' };
+  const flag = await sb('settings', { query: '?select=v&k=eq.ext_pay&limit=1' });
+  if (!(flag && flag[0] && flag[0].v === '1')) return res.status(409).json(NOT_READY);
+
+  let parent;
+  try {
+    const rows = await sb('orders', {
+      query: `?select=order_id,member_id,pn,spec_id,status,ends_at,kind,user_name,user_phone,cancel_lock_at` +
+             `&order_id=eq.${encodeURIComponent(parentId)}&limit=1`,
+    });
+    parent = rows && rows[0];
+  } catch (e) {
+    if (missingCol(e, 'kind') || missingCol(e, 'cancel_lock_at')) return res.status(409).json(NOT_READY);
+    throw e;
+  }
+  if (!parent || parent.member_id !== memberId) {
+    return res.status(404).json({ error: '고객님의 주문이 아닙니다. 내 가상컴을 새로고침해 주세요.' });
+  }
+  const NEW = '같은 PC 로는 연장할 수 없는 주문입니다.\n새로 신청해 주세요.';
+  if (!parent.pn || !['assigned', 'expired'].includes(parent.status)) {
+    return res.status(409).json({ error: NEW, needNew: true });
+  }
+  /* 관리자가 이 주문을 해지하는 중이면 결제를 받지 않습니다 (받아도 기간을 못 늘림) */
+  if (parent.cancel_lock_at) return res.status(409).json(NOT_READY);
+
+  /* PC 상태 — 이용중이면 rent, 끝난 주문이면 반납 유예(hold) 중이어야 자료가 그대로 있습니다.
+     초기화 대기(wipe)로 넘어갔으면 자료가 지워졌을 수 있어 같은 PC 연장을 받지 않습니다. */
+  const pr = await sb('pcs', { query: `?select=pn,status&pn=eq.${encodeURIComponent(parent.pn)}&limit=1` });
+  const pcSt = pr && pr[0] ? pr[0].status : null;
+  if (parent.status === 'expired' && pcSt !== 'hold') {
+    return res.status(409).json({
+      error: '자료 보관 기간(반납 유예)이 지나 같은 PC 로 연장할 수 없습니다.\n새로 신청해 주세요.', needNew: true });
+  }
+  if (parent.status === 'assigned' && !['rent', 'hold'].includes(pcSt)) {
+    return res.status(409).json({ error: '지금 이 PC 는 점검 중이라 바로 연장할 수 없습니다.\n카카오톡 상담으로 알려 주세요.' });
+  }
+  /* 그 PC 를 다른 주문이 쓰고 있으면 안 됩니다 (만료 뒤 다른 손님에게 간 경우) */
+  const other = await sb('orders', {
+    query: `?select=order_id&pn=eq.${encodeURIComponent(parent.pn)}&status=in.(assigned,paid)` +
+           `&order_id=neq.${encodeURIComponent(parent.order_id)}&limit=1`,
+  });
+  if (other && other[0]) return res.status(409).json({ error: NEW, needNew: true });
+
+  const q = quote(parent.spec_id, days);
+  if (!q) return res.status(400).json({ error: '연장 기간은 30 · 60 · 90일입니다' });
+  const orderName = `연장 · ${parent.pn} · ${q.days}일`;
+
+  /* 이미 만든 연장 주문이 있는지 — 결제 대기(ready)·결제완료 대기(paid) */
+  const mine = await sb('orders', {
+    query: `?select=order_id,status,days,amount,pay_key,member_id,created_at` +
+           `&parent_id=eq.${encodeURIComponent(parent.order_id)}&kind=eq.extend&status=in.(ready,paid)`,
+  }) || [];
+  /* 돈은 받았는데 아직 기간이 안 늘어난 연장이 있으면 또 받지 않습니다 (두 번 결제 방지) */
+  if (mine.some(x => x.status === 'paid')) {
+    return res.status(409).json({ error: '이미 결제하신 연장이 처리 대기 중입니다.\n담당자가 곧 연락드립니다.' });
+  }
+  const wait = mine.find(x => x.status === 'ready');
+  if (wait) {
+    /* 가상계좌가 발급된 연장(결제키 있음)은 건드리지 않습니다.
+       지우면 나중에 입금돼도 "이미 처리됨" 으로 무시돼 돈만 받고 연장이 안 됩니다. */
+    if (wait.pay_key) {
+      return res.status(409).json({ error: '입금을 기다리는 연장 결제(가상계좌)가 있습니다.\n발급받으신 계좌로 입금해 주시거나, 기한이 지난 뒤 다시 시도해 주세요.' });
+    }
+    const fresh = wait.created_at && Date.now() - Date.parse(wait.created_at) < REUSE_MS;
+    if (fresh && Number(wait.days) === q.days && Number(wait.amount) === q.amount && wait.member_id === memberId) {
+      return res.status(200).json({ orderId: wait.order_id, orderName, amount: q.amount, days: q.days,
+        verified: true, extend: true, pn: parent.pn, reused: true });
+    }
+    /* 오래됐거나 기간을 바꿨으면 옛 연장 주문은 취소하고 새로 만듭니다.
+       (결제키가 없는 = 토스 승인 전이라, 그 창에서 결제를 마쳐도 승인 단계에서 막혀 돈이 안 나갑니다) */
+    await sb('orders', { method: 'PATCH', prefer: 'return=minimal',
+      query: `?order_id=eq.${encodeURIComponent(wait.order_id)}&status=eq.ready&pay_key=is.null`,
+      body: { status: 'canceled', canceled_at: new Date().toISOString() } });
+  }
+
+  const name = String(b.name || parent.user_name || '').trim().slice(0, 30) || null;
+  const phone = phoneOk(b.phone) ? String(b.phone).trim() : (parent.user_phone || null);
+  const orderId = newExtId();
+  try {
+    await sb('orders', {
+      method: 'POST', prefer: 'return=minimal',
+      body: [{
+        order_id: orderId, member_id: memberId, spec_id: parent.spec_id, days: q.days, amount: q.amount,
+        setup_fee: 0, status: 'ready', user_name: name, user_phone: phone,
+        kind: 'extend', parent_id: parent.order_id,
+      }],
+    });
+  } catch (e) {
+    /* 두 창에서 거의 동시에 눌러 "결제 대기 연장은 하나" 규칙에 걸린 경우 */
+    if (/23505|orders_one_ready_ext/.test(String(e.message || e))) {
+      return res.status(409).json({ error: '다른 창에서 연장 결제를 진행 중입니다. 잠시 후 다시 시도해 주세요.' });
+    }
+    throw e;
+  }
+  return res.status(200).json({ orderId, orderName, amount: q.amount, days: q.days, verified: true, extend: true, pn: parent.pn });
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   const b = req.body || {};
+  /* 연장 결제 — 새 주문과 길을 완전히 나눕니다 (새 주문 흐름은 한 줄도 바뀌지 않게) */
+  if (b.extendOf) {
+    try { return await createExtension(req, res, b); }
+    catch (e) { return res.status(500).json({ error: String(e.message || e).slice(0, 300) }); }
+  }
   const q = quote(b.specId, b.days);
   if (!q) return res.status(400).json({ error: '상품 또는 이용 기간이 올바르지 않습니다' });
 

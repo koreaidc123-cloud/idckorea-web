@@ -22,8 +22,8 @@
         토스가 계좌 발급 때 준 secret 을 주문에 저장해 두었다가 비교합니다.
      남이 아무 주문번호나 넣어 "입금됐다"·"취소됐다" 고 속일 수 없게 하는 장치입니다.
    ═══════════════════════════════════════════════════════════════ */
-const { ready, sb } = require('./_supa');
-const { tossGet, grabPc, releasePc, period } = require('./_pay');
+const { ready, sb, missingCol } = require('./_supa');
+const { tossGet, grabPc, releasePc, period, applyExtension, logExtFail } = require('./_pay');
 
 /* ★ 웹훅 내용은 믿지 않습니다 (2026-11-07 결제 점검에서 고침)
      예전에는 누가 이 주소로 {orderId, status:'CANCELED'} 만 보내도
@@ -92,6 +92,42 @@ module.exports = async (req, res) => {
       if (['canceled', 'refunded', 'expired'].includes(order.status)) {
         return res.status(200).json({ ok: true, skip: '이미 처리됨' });
       }
+      /* ── 연장 결제를 토스 상점관리자에서 직접 취소한 경우 (2026-11-08) ──
+         기간을 늘려 둔(applied) 연장이면 revert_extension 으로 원 주문 기간을 되돌립니다.
+         ★ 쓰던 PC 는 원 주문 것이라 releasePc 로 풀면 안 됩니다 (고객이 아직 쓰는 중).
+         "가장 마지막 연장" 이 아니면 되돌릴 수 없어 관리자에게 맡깁니다 (기록 남김). */
+      if (order.kind === 'extend' && order.status === 'applied') {
+        let r;
+        try { r = await sb('rpc/revert_extension', { method: 'POST', body: { p_order: orderId, p_status: 'refunded' } }); }
+        catch (e) { r = { ok: false, reason: 'rpc' }; }
+        if (!(r && r.ok)) {
+          try { await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+            body: [{ pn: order.pn, act: `⚠ 토스에서 연장 결제 ${orderId} 가 취소됐지만 기간을 되돌리지 못함 (${(r && r.reason) || '?'}) — 관리자 확인`, who: 'system:webhook' }] }); } catch (e) {}
+          return res.status(200).json({ ok: true, skip: '연장 취소 — 관리자 확인' });
+        }
+        try {
+          await sb('orders', { method: 'PATCH', prefer: 'return=minimal',
+            query: `?order_id=eq.${encodeURIComponent(orderId)}`,
+            body: { refund_state: 'toss_done', refund_amt: Number(order.amount) || 0, refund_why: '토스에서 직접 취소' } });
+        } catch (e) {}
+        return res.status(200).json({ ok: true, canceled: orderId, reverted: true });
+      }
+      /* 기간을 늘린 연장 줄이 붙은 원 주문을 토스에서 직접 취소한 경우 — 연장분 처리 순서를
+         사람이 정해야 하므로 자동으로 바꾸지 않습니다 (정산·대사 화면에도 어긋남으로 뜹니다) */
+      if (order.kind !== 'extend') {
+        let kids = [];
+        try {
+          kids = await sb('orders', { query: `?select=order_id&parent_id=eq.${encodeURIComponent(orderId)}&kind=eq.extend&status=in.(applied,paid,refunding)` }) || [];
+        } catch (e) {
+          if (!missingCol(e)) throw e;   // 연결 오류면 500 → 토스가 다시 보내 줍니다
+          kids = [];                     // db/10 전이면 칸이 없어 여기로 — 예전처럼 처리
+        }
+        if (kids.length) {
+          try { await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+            body: [{ pn: order.pn, act: `⚠ 토스에서 원 주문 ${orderId} 가 취소됐지만 연장 ${kids.length}건이 붙어 있어 그대로 둠 — 관리자 확인`, who: 'system:webhook' }] }); } catch (e) {}
+          return res.status(200).json({ ok: true, skip: '연장 줄이 있는 원 주문 — 관리자 확인' });
+        }
+      }
       const got = await sb('orders', {
         method: 'PATCH',
         query: `?order_id=eq.${encodeURIComponent(orderId)}&status=in.(ready,paid,assigned)&select=order_id`,
@@ -132,20 +168,31 @@ module.exports = async (req, res) => {
 
     /* 결제중(ready)일 때만 결제완료로 — 결제 승인 화면과 동시에 와도 한 번만 처리됩니다 */
     const per = period(order.days, now);
+    const isExt = order.kind === 'extend';
+    const claimBody = {
+      status: 'paid',
+      pay_key: order.pay_key || pay.paymentKey || null,
+      pay_method: order.pay_method || pay.method || null,
+      paid_at: now.toISOString(),
+    };
+    /* 연장 결제는 기간을 여기서 정하지 않습니다 (apply_extension 이 원 주문 끝 뒤에 붙임) */
+    if (!isExt) { claimBody.starts_at = per.starts_at; claimBody.ends_at = per.ends_at; }
     const claimed = await sb('orders', {
       method: 'PATCH',
       query: `?order_id=eq.${encodeURIComponent(orderId)}&status=eq.ready&select=order_id`,
-      body: {
-        status: 'paid',
-        pay_key: order.pay_key || pay.paymentKey || null,
-        pay_method: order.pay_method || pay.method || null,
-        paid_at: now.toISOString(),
-        starts_at: per.starts_at,
-        ends_at: per.ends_at,
-      },
+      body: claimBody,
       prefer: 'return=representation',
     });
     if (!(claimed && claimed[0])) return res.status(200).json({ ok: true, skip: '이미 처리됨' });
+
+    /* ── 연장 결제 입금 (가상계좌) — 같은 PC 의 기간을 늘립니다 (2026-11-08) ──
+       못 늘렸으면 결제완료(paid)로 두고 관리자가 처리합니다. 자동 환불은 하지 않습니다.
+       토스에는 200 을 줍니다 (입금 확정은 끝났으니 다시 보내 달라고 할 일이 아님). */
+    if (isExt) {
+      const r = await applyExtension(orderId);
+      if (!r.ok) await logExtFail(orderId, r, '가상계좌 입금');
+      return res.status(200).json({ ok: true, event: ev || 'DEPOSIT', extended: !!(r.ok && !r.skip), pn: r.pn || null });
+    }
 
     /* 같은 사양 중 임대 가능하고 살아있는 PC 한 대를 배정합니다 */
     let pc = null;

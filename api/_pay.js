@@ -140,4 +140,33 @@ function period(days, now) {
   return { starts_at: now.toISOString(), ends_at: ends.toISOString() };
 }
 
-module.exports = { tossSecret, tossAuth, tossGet, grabPc, lockPc, releasePc, pcBusyByOther, period, freshIso };
+/* ── 연장 결제 적용 (2026-11-08) ──────────────────────────────────
+   결제가 끝난(paid) 연장 줄의 기간을 데이터베이스 함수 apply_extension 으로 늘립니다.
+   ★ 왜 데이터베이스 함수인가
+     "원 주문 잠그기 → PC 상태 보기 → 기간 늘리기 → PC 임대중으로" 를 여기(Vercel)서
+     여러 번 나눠 부르면, 그 사이에 만료 정리가 PC 를 초기화 대기로 바꾸거나
+     응답이 끊겨 반쯤만 바뀔 수 있습니다. 데이터베이스 안에서 한 번에 하면 그런 틈이 없습니다.
+   ★ 절대 예외를 던지지 않습니다. 결제는 이미 끝났기 때문에, 못 늘렸으면
+     연장 줄을 결제완료(paid)로 두고 관리자 [오늘 할 일] 에서 사람이 처리합니다.
+     자동 환불은 하지 않습니다 (고객과 통화 후 관리자가 결정).
+   돌려주는 값: 함수 결과 그대로 {ok, pn, endsAt, skip, reason} · 부르지 못했으면 {ok:false, reason:'rpc'} */
+async function applyExtension(orderId) {
+  try {
+    const r = await sb('rpc/apply_extension', { method: 'POST', body: { p_order: orderId } });
+    return (r && typeof r === 'object') ? r : { ok: false, reason: 'rpc' };
+  } catch (e) {
+    return { ok: false, reason: 'rpc', detail: String(e.message || e).slice(0, 200) };
+  }
+}
+
+/* 연장 적용 결과를 관리자 기록에 남깁니다 (실패했을 때 왜 실패했는지 보려고) */
+async function logExtFail(orderId, r, where) {
+  try {
+    await sb('view_log', { method: 'POST', prefer: 'return=minimal',
+      body: [{ pn: (r && r.pn) || null, act: `⚠ 연장 결제 적용 실패 ${orderId} · ${(r && r.reason) || '?'} · ${where} — 결제완료로 남김 (자동 환불 안 함)`,
+               who: 'system:extend' }] });
+  } catch (e) {}
+}
+
+module.exports = { tossSecret, tossAuth, tossGet, grabPc, lockPc, releasePc, pcBusyByOther, period, freshIso,
+  applyExtension, logExtFail };

@@ -156,7 +156,8 @@ module.exports = async (req, res) => {
     /* 돈은 받았는데(남은 금액 > 0) DB 는 결제 대기·취소 */
     if (net > 0 && ['ready', 'canceled'].includes(o.status)) hit.push('doneButNotPaid');
     /* 전액 취소됐는데 DB 는 아직 쓰는 중 */
-    const activeButCanceled = t.paid > 0 && net <= 0 && ['paid', 'assigned'].includes(o.status);
+    /* applied = 기간을 늘려 둔 연장 결제 줄 (2026-11-08 · db/10) — 토스에서 취소됐는데 기간이 그대로면 어긋남 */
+    const activeButCanceled = t.paid > 0 && net <= 0 && ['paid', 'assigned', 'applied'].includes(o.status);
     if (activeButCanceled) hit.push('canceledButActive');
     /* 받은 금액이 주문 금액과 다름 */
     if (t.paid > 0 && Number(o.amount) !== t.paid) hit.push('amountDiff');

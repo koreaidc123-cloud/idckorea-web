@@ -1227,6 +1227,443 @@ async function main() {
     ok(/\r\n/.test(sql) && !/[^\r]\n/.test(sql), 'SQL 줄바꿈이 다른 db 파일(CRLF)과 다름');
   });
 
+  /* ══════════ 연장 결제 (2026-11-08 · db/10) ══════════
+     고객이 [내 가상컴] 에서 같은 PC 를 연장 결제 → 연장 줄(kind=extend) 하나 → apply_extension 이 기간을 늘림.
+     가짜 DB 는 기본이 "db/10 을 아직 안 돌린" 상태라, 여기서만 setV10(true) 로 켜고 끝에서 끕니다. */
+  const A_ID = '11111111-1111-4111-8111-111111111111', C_ID = '44444444-4444-4444-8444-444444444444';
+  const A_USER = { name: '고객A', phone: '010-1111-2222', via: 'kakao' };
+  const C_USER = { name: '고객C', phone: '010-4444-0003', via: 'kakao' };
+  /* 출입증 쿠키를 붙여 서버 API 를 바로 부릅니다 (화면 없이 확인) */
+  const callAs = async (memberId, url, body) => {
+    const r = await fetch(BASE + url, { method: body === undefined ? 'GET' : 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: 'kvc_cust=' + encodeURIComponent(makeTicket(memberId)) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    let d = null; try { d = await r.json(); } catch (e) {}
+    return { status: r.status, d };
+  };
+  const DAYMS = 86400000;
+  const near = (a, b, ms = 5000) => Math.abs(Date.parse(a) - Date.parse(b)) <= ms;
+  /* 시험용 PC · 끝난 주문 하나 만들기 (반납 유예·초기화 대기 상태를 마음대로 만들려고) */
+  const addPc = (pn, slot, st) => {
+    const base = Object.assign({}, pcOf('Y-001'));
+    db().pcs.push(Object.assign(base, { pn, rack: 2, fl: 1, slot, status: st, hw_id: 'HW-' + pn,
+      beat_token: 'tok-' + pn + '-0123456789abcdef', anydesk: '10428877' + String(slot).padStart(2, '0'),
+      hold_until: st === 'hold' ? new Date(Date.now() + 2 * DAYMS).toISOString() : null,
+      wipe_at: st === 'wipe' ? new Date().toISOString() : null }));
+  };
+  const addExpired = (id, pn, memberId) => db().orders.push({
+    order_id: id, member_id: memberId, pn, spec_id: 5, days: 30, amount: 65000, setup_fee: 5000, status: 'expired',
+    pay_key: null, pay_method: '카드', paid_at: new Date(Date.now() - 31 * DAYMS).toISOString(), va_secret: null,
+    tax_invoice: false, biz_no: null, starts_at: new Date(Date.now() - 31 * DAYMS).toISOString(),
+    ends_at: new Date(Date.now() - DAYMS).toISOString(), payer_name: '고객C', user_name: '고객C', user_phone: '010-4444-0003',
+    canceled_at: null, refund_amt: null, refund_why: null, created_at: new Date(Date.now() - 31 * DAYMS).toISOString(),
+    refund_state: null, refund_done_at: null, kind: 'new', parent_id: null, ext_from: null, ext_to: null, applied_at: null,
+  });
+  const extRows = parent => db().orders.filter(o => o.kind === 'extend' && o.parent_id === parent);
+
+  await scenario('EX1', '연장 결제 — db/10 전: 고객 화면은 카톡 요청 그대로 · 연장 주문은 409 (결제창 안 열림)', async () => {
+    srv.fakeDb.setV10(false);
+    let r = await callAs(A_ID, '/api/customer?do=me');
+    ok(r.status === 200 && r.d.extendReady === false && Array.isArray(r.d.grace) && !r.d.grace.length,
+      'db/10 전 me 응답 ' + r.status + ' ' + JSON.stringify(r.d && { e: r.d.extendReady, g: r.d.grace }));
+    ok(r.d.pcs.every(p => p.ext === undefined), 'db/10 전인데 연장 가격이 나감');
+    const before = db().orders.length;
+    r = await callAs(A_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDA1', days: 30 });
+    ok(r.status === 409 && /카카오톡/.test(r.d.error), 'db/10 전 연장 주문 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(db().orders.length === before, 'db/10 전인데 주문이 생김');
+    /* ext_pay 를 0 으로 끄면(대표님 스위치) 칸이 있어도 버튼이 숨고 주문도 안 받음 */
+    srv.fakeDb.setV10(true);
+    db().settings.find(s => s.k === 'ext_pay').v = '0';
+    r = await callAs(A_ID, '/api/customer?do=me');
+    ok(r.d.extendReady === false, 'ext_pay=0 인데 연장 버튼이 켜짐');
+    r = await callAs(A_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDA1', days: 30 });
+    ok(r.status === 409, 'ext_pay=0 인데 연장 주문 ' + r.status);
+    db().settings.find(s => s.k === 'ext_pay').v = '1';
+  });
+
+  await scenario('EX2', '연장 결제 — 이용중 PC: 내 가상컴 [연장하기] → 30일 → 카드 → 같은 PC · 만료일 +30 · 연장 줄 · 새로고침해도 한 번만', async () => {
+    srv.fakeDb.setV10(true);
+    const par = orderOf('KVC260101-SEEDA1');
+    ok(par && par.status === 'assigned' && par.pn === 'Y-004' && pcOf('Y-004').status === 'rent', '시작 상태가 다름');
+    const endBefore = par.ends_at, amtBefore = par.amount, daysBefore = par.days;
+    const rentBefore = db().pcs.filter(x => x.status === 'rent').length;
+    const ctx = await newContext();
+    await loginCustomer(ctx, A_ID, A_USER);
+    const p = await openPage(ctx, '/mypage');
+    await p.waitForSelector('#cards .pc [data-extopen]');
+    const idx = await p.evaluate(() => U.pcs.findIndex(x => x.pn === 'Y-004'));
+    ok(idx >= 0, '내 가상컴에 Y-004 카드 없음');
+    /* 연장 요청(카톡) 대신 [연장하기] — 재부팅 · 비번 재발급 두 개만 카톡 */
+    const hrefs = await p.$$eval('#cards .pc', (cs, i) => [...cs[i].querySelectorAll('.acts a')].map(a => a.href), idx);
+    ok(hrefs.length === 2 && hrefs.every(h => /pf\.kakao\.com/.test(h)), '카톡 버튼 ' + hrefs);
+    await p.click(`[data-extopen="${idx}"]`);
+    const box = (await p.$eval(`#extbox-${idx}`, e => e.innerText)).replace(/\s+/g, ' ');
+    ok(/30일 연장 · 65,000원/.test(box) && /60일/.test(box) && /90일/.test(box), '연장 기간 고르기 ' + box);
+    await Promise.all([p.waitForURL(/\/product\?/), p.click(`#extbox-${idx} [data-extgo="30"]`)]);
+    const pu = new URL(p.url());
+    ok(pu.searchParams.get('ext') === 'KVC260101-SEEDA1' && pu.searchParams.get('pn') === 'Y-004' && pu.searchParams.get('g') === '5',
+      '결제 화면 주소 ' + p.url());
+    await p.waitForSelector('#ext-note');
+    ok(/Y-004/.test(await p.textContent('.pt-h')) && /연장/.test(await p.textContent('#go')), '연장 결제 화면이 아님');
+    await Promise.all([p.waitForURL(/\/success/), p.click('#go')]);
+    await p.waitForFunction(() => /연장이 완료|결제가 완료|실패/.test(document.body.innerText), null, { timeout: 8000 });
+    const t = await p.evaluate(() => document.body.innerText);
+    ok(/연장이 완료/.test(t) && /Y-004/.test(t), '연장 성공 화면이 아님: ' + t.slice(0, 200));
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
+    const id = new URL(p.url()).searchParams.get('orderId');
+    ok(/^KVX\d{6}-/.test(id), '연장 주문번호 ' + id);
+    const c = orderOf(id);
+    ok(c && c.kind === 'extend' && c.parent_id === 'KVC260101-SEEDA1' && c.status === 'applied' && c.pn === 'Y-004',
+      '연장 줄 ' + JSON.stringify(c && { k: c.kind, p: c.parent_id, s: c.status, pn: c.pn }));
+    ok(c.amount === 65000 && c.setup_fee === 0 && c.days === 30, '연장 금액 ' + c.amount + ' 셋팅비 ' + c.setup_fee);
+    ok(near(c.ext_from, endBefore) && near(c.ext_to, new Date(Date.parse(endBefore) + 30 * DAYMS).toISOString()), '연장 기간 ' + c.ext_from + ' ~ ' + c.ext_to);
+    const par2 = orderOf('KVC260101-SEEDA1');
+    ok(par2.ends_at === c.ext_to && par2.status === 'assigned', '원 주문 만료일이 안 늘어남');
+    ok(par2.amount === amtBefore && par2.days === daysBefore, '원 주문 금액·일수가 바뀜 (연장 줄에만 있어야 함)');
+    ok(pcOf('Y-004').status === 'rent', 'Y-004 가 임대중이 아님');
+    ok(db().pcs.filter(x => x.status === 'rent').length === rentBefore, '연장인데 PC 를 새로 잡음');
+    ok(srv.toss.confirms.some(x => x.orderId === id && x.amount === 65000), '토스 승인 기록 없음');
+    ok(db().view_log.some(v => v.pn === 'Y-004' && v.act.includes('연장 결제 적용 ' + id)), '연장 기록 없음');
+    /* 성공 화면 새로고침 → 같은 결과 · 기간이 또 늘지 않음 */
+    await p.reload();
+    await p.waitForFunction(() => /연장이 완료|결제가 완료|실패/.test(document.body.innerText), null, { timeout: 8000 });
+    ok(/연장이 완료/.test(await p.evaluate(() => document.body.innerText)), '새로고침 뒤 연장 화면 아님');
+    ok(orderOf('KVC260101-SEEDA1').ends_at === c.ext_to, '새로고침에 기간이 또 늘어남');
+    /* 같은 결제 승인이 또 와도 한 번만 */
+    const again = await post('/api/toss-confirm', { paymentKey: c.pay_key, orderId: id, amount: 65000 });
+    ok(again.status === 200 && again.d.extended === true && orderOf('KVC260101-SEEDA1').ends_at === c.ext_to, '중복 승인 ' + JSON.stringify(again.d));
+    /* 결제 내역에 "Y-004 연장" 줄 */
+    const me = await callAs(A_ID, '/api/customer?do=me');
+    ok(me.d.orders.some(o => o.no === id && /Y-004 연장/.test(o.name)), '결제 내역에 연장 줄 없음');
+    S.extA = id; S.extAEnd0 = endBefore;
+    await ctx.close();
+  });
+
+  await scenario('EX3', '연장 결제 — 반납 유예 PC: 화면 안내 · 30분 안 재사용 · 가상계좌 입금 웹훅에 적용 · 남의 주문 · 초기화 대기는 "새로 신청"', async () => {
+    srv.fakeDb.setV10(true);
+    addPc('Y-020', 1, 'hold'); addExpired('KVC260101-SEEDG1', 'Y-020', C_ID);
+    addPc('Y-021', 2, 'wipe'); addExpired('KVC260101-SEEDG2', 'Y-021', C_ID);
+    let r = await callAs(C_ID, '/api/customer?do=me');
+    const g = (r.d.grace || []).find(x => x.pn === 'Y-020');
+    ok(r.d.extendReady && g && g.orderNo === 'KVC260101-SEEDG1' && g.ext[30] === 65000 && g.holdUntil, '유예 PC 안내 ' + JSON.stringify(r.d.grace));
+    ok(!(r.d.grace || []).some(x => x.pn === 'Y-021'), '초기화 대기 PC 가 연장 안내에 나옴');
+    /* 화면에도 보임 */
+    const ctx = await newContext();
+    await loginCustomer(ctx, C_ID, C_USER);
+    const p = await openPage(ctx, '/mypage');
+    await p.waitForSelector('#grace');
+    ok(/Y-020/.test(await p.textContent('#grace')) && await p.$('#grace [data-extopen]'), '내 가상컴에 유예 PC 연장 안내 없음');
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
+    await ctx.close();
+    /* 남의 주문은 연장 못 함 */
+    r = await callAs(A_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG1', days: 30 });
+    ok(r.status === 404, '남의 주문 연장 응답 ' + r.status);
+    /* 초기화 대기 PC → 새로 신청 */
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG2', days: 30 });
+    ok(r.status === 409 && r.d.needNew && /새로 신청/.test(r.d.error), '초기화 대기 연장 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    /* 60일 → 금액은 가격표 그대로 (3% 할인) · 30분 안에 다시 누르면 같은 주문 */
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG1', days: 60 });
+    ok(r.status === 200 && r.d.amount === 126100 && r.d.orderName === '연장 · Y-020 · 60일' && /^KVX/.test(r.d.orderId), '60일 연장 주문 ' + JSON.stringify(r.d));
+    const first = r.d.orderId;
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG1', days: 60 });
+    ok(r.status === 200 && r.d.orderId === first, '30분 안 재사용 안 됨 ' + JSON.stringify(r.d));
+    /* 기간을 바꾸면 옛 것은 취소 · 새 주문 (결제 대기 연장은 원 주문당 하나) */
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG1', days: 30 });
+    ok(r.status === 200 && r.d.orderId !== first && r.d.amount === 65000, '기간 바꾼 연장 주문 ' + JSON.stringify(r.d));
+    ok(orderOf(first).status === 'canceled', '옛 연장 주문이 취소 안 됨: ' + orderOf(first).status);
+    ok(extRows('KVC260101-SEEDG1').filter(o => o.status === 'ready').length === 1, '결제 대기 연장이 둘 이상');
+    const id = r.d.orderId;
+    /* 가상계좌 발급 → 입금 대기 중에는 다른 연장 주문을 안 받음 */
+    r = await post('/api/toss-confirm', { paymentKey: 'tva_ext_g1', orderId: id, amount: 65000 });
+    ok(r.status === 200 && r.d.status === 'WAITING_FOR_DEPOSIT', '가상계좌 발급 ' + JSON.stringify(r.d).slice(0, 200));
+    const o = orderOf(id);
+    ok(o.status === 'ready' && o.pay_key === 'tva_ext_g1' && o.va_secret, '입금 대기 주문 ' + JSON.stringify({ s: o.status, k: o.pay_key }));
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG1', days: 90 });
+    ok(r.status === 409 && /입금/.test(r.d.error) && orderOf(id).status === 'ready', '입금 대기 중 새 연장 ' + r.status);
+    /* 입금 → 웹훅 → 같은 PC 로 기간이 늘어남 (오늘부터 30일) */
+    srv.toss.payments['tva_ext_g1'].status = 'DONE';
+    r = await post('/api/toss-webhook', { eventType: 'DEPOSIT_CALLBACK', orderId: id, status: 'DONE', secret: o.va_secret });
+    ok(r.status === 200 && r.d.extended === true && r.d.pn === 'Y-020', '입금 웹훅 ' + JSON.stringify(r.d));
+    const c = orderOf(id), par = orderOf('KVC260101-SEEDG1');
+    ok(c.status === 'applied' && par.status === 'assigned' && par.ends_at === c.ext_to, '적용 상태 ' + JSON.stringify({ c: c.status, p: par.status }));
+    ok(near(c.ext_to, new Date(Date.now() + 30 * DAYMS).toISOString(), 60000), '오늘부터 30일이 아님 ' + c.ext_to);
+    ok(pcOf('Y-020').status === 'rent' && pcOf('Y-020').hold_until === null, 'Y-020 ' + pcOf('Y-020').status + ' ' + pcOf('Y-020').hold_until);
+    /* 같은 웹훅이 또 와도 그대로 */
+    r = await post('/api/toss-webhook', { eventType: 'DEPOSIT_CALLBACK', orderId: id, status: 'DONE', secret: o.va_secret });
+    ok(orderOf('KVC260101-SEEDG1').ends_at === c.ext_to, '중복 웹훅에 또 늘어남');
+    r = await callAs(C_ID, '/api/customer?do=me');
+    ok(!r.d.grace.some(x => x.pn === 'Y-020') && r.d.pcs.some(x => x.pn === 'Y-020'), '연장 뒤 내 가상컴 카드로 안 돌아옴');
+    S.extG1 = id;
+  });
+
+  await scenario('EX4', '연장 결제 — 그 사이 PC 가 초기화 대기면: 결제완료로 남김 · 자동 환불 없음 · "담당자 연락" · 오늘 할 일 표시 · [연장 다시 적용]', async () => {
+    srv.fakeDb.setV10(true);
+    await ensureAdmin();
+    addPc('Y-022', 3, 'hold'); addExpired('KVC260101-SEEDG3', 'Y-022', C_ID);
+    let r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG3', days: 30 });
+    ok(r.status === 200, '연장 주문 ' + r.status);
+    const id = r.d.orderId;
+    pcOf('Y-022').status = 'wipe';           // 결제창이 떠 있는 사이 유예가 끝나 초기화 대기로
+    const cancels = srv.toss.cancels.length;
+    r = await post('/api/toss-confirm', { paymentKey: 'tcard_ext_fail', orderId: id, amount: 65000 });
+    ok(r.status === 200 && r.d.status === 'DONE' && r.d.extendFailed === true && /담당자가 곧 연락/.test(r.d.warn || ''),
+      '적용 실패 응답 ' + JSON.stringify(r.d).slice(0, 200));
+    const c = orderOf(id);
+    ok(c.status === 'paid' && !c.pn, '실패한 연장이 결제완료로 안 남음 ' + c.status);
+    ok(srv.toss.cancels.length === cancels, '자동 환불이 나감');
+    ok(orderOf('KVC260101-SEEDG3').status === 'expired', '원 주문이 바뀜');
+    ok(db().view_log.some(v => /연장 결제 적용 실패/.test(v.act) && v.act.includes(id)), '실패 기록 없음');
+    /* 고객 성공 화면 — "결제 완료 — 담당자가 곧 연락드립니다" */
+    const ctx = await newContext();
+    await loginCustomer(ctx, C_ID, C_USER);
+    const p = await openPage(ctx, `/success?paymentKey=tcard_ext_fail&orderId=${id}&amount=65000`);
+    await p.waitForFunction(() => /연장이 완료|결제가 완료|실패/.test(document.body.innerText), null, { timeout: 8000 });
+    ok(/결제 완료 — 담당자가 곧 연락드립니다/.test(await p.evaluate(() => document.body.innerText)), '고객 화면 안내 없음');
+    await ctx.close();
+    /* 이 원 주문은 연장을 또 받지 않음 (두 번 결제 방지) */
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG3', days: 30 });
+    ok(r.status === 409, '처리 대기 중 또 연장 ' + r.status);
+    /* 관리자 오늘 할 일 */
+    await ap.reload(); await adminReady(ap);
+    await view(ap, 'today');
+    ok((await mainText(ap)).includes('연장 결제 — 원래 PC 반납됨'), '오늘 할 일에 연장 실패 표시 없음');
+    /* 관리자가 PC 를 반납 유예로 되돌린 뒤 [연장 다시 적용] */
+    pcOf('Y-022').status = 'hold';
+    await ap.evaluate(no => openOrd(no), id);
+    ok(/원래 PC 반납됨/.test(await drawerText(ap)), '주문 상세 안내 없음');
+    ap.answers.push(true);
+    await ap.click(`[data-extapply="${id}"]`);
+    await until(() => orderOf(id).status === 'applied', 6000, '다시 적용 안 됨: ' + lastDialog(ap));
+    ok(pcOf('Y-022').status === 'rent' && orderOf('KVC260101-SEEDG3').status === 'assigned', '다시 적용 뒤 상태');
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+  });
+
+  await scenario('EX5', '연장 — 관리자 30일 연장은 연장 줄로 · 원 주문 해지는 409 · 마지막 연장만 환불 · 환불하면 기간 되돌림 · 초기화 대기는 409', async () => {
+    srv.fakeDb.setV10(true);
+    ok(S.extA, 'EX2 가 먼저 성공해야 합니다');
+    await ensureAdmin();
+    const parId = 'KVC260101-SEEDA1';
+    const end1 = orderOf(parId).ends_at, amt0 = orderOf(parId).amount;
+    /* 관리자 [30일 연장] — 새 방식: 연장 줄(MXT)이 생기고 원 주문 금액은 그대로 */
+    let r = await apiIn(ap, '/api/admin?do=order-action', { no: parId, act: 'extend', days: 30, amount: 65000, payMethod: '계좌이체' });
+    ok(r.status === 200 && r.d.via === 'extend-row' && /^MXT/.test(r.d.child || ''), '관리자 연장 ' + r.status + ' ' + JSON.stringify(r.d));
+    const mx = orderOf(r.d.child);
+    ok(mx.kind === 'extend' && mx.status === 'applied' && mx.pay_method === '계좌이체' && mx.amount === 65000 && !mx.pay_key, '관리자 연장 줄 ' + JSON.stringify(mx));
+    ok(orderOf(parId).amount === amt0 && near(orderOf(parId).ends_at, new Date(Date.parse(end1) + 30 * DAYMS).toISOString()), '원 주문 ' + orderOf(parId).ends_at);
+    ok(db().view_log.some(v => v.act.includes('연장 결제 적용 ' + mx.order_id) && v.who !== 'system:extend'), '관리자 연장 기록에 관리자 이름 없음');
+    /* 주문 상세에 연장 내역 2줄 */
+    await ap.reload(); await adminReady(ap);
+    await ap.evaluate(no => openOrd(no), parId);
+    const rows = await ap.$$eval('#ord-exts tr[data-ord]', es => es.map(e => e.dataset.ord));
+    ok(rows.length === 2 && rows[0] === mx.order_id && rows.includes(S.extA), '연장 내역 ' + rows);
+    /* 원 주문 해지 → 409 (연장 목록) */
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: parId, act: 'cancel', why: '시험' });
+    ok(r.status === 409 && r.d.error.includes(S.extA) && r.d.error.includes(mx.order_id), '원 주문 해지 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    /* 먼저 한 연장(KVX)부터는 안 됨 */
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: S.extA, act: 'cancel', why: '시험' });
+    ok(r.status === 409 && r.d.notLatest, '마지막 아닌 연장 환불 ' + r.status + ' ' + JSON.stringify(r.d));
+    /* 마지막(관리자 연장 · 토스 결제 아님) 환불 → 직접 송금 대기 · 기간 되돌림 · PC 는 그대로 */
+    const cancels = srv.toss.cancels.length;
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: mx.order_id, act: 'cancel', why: '시험 환불' });
+    ok(r.status === 200 && r.d.extReverted === true && r.d.manualRefund && r.d.refund === 65000, '관리자 연장 환불 ' + JSON.stringify(r.d));
+    ok(srv.toss.cancels.length === cancels, '토스 결제가 아닌데 토스 취소를 부름');
+    ok(orderOf(mx.order_id).status === 'refunded' && orderOf(mx.order_id).refund_state === 'manual_pending', '연장 줄 상태 ' + orderOf(mx.order_id).status);
+    ok(orderOf(parId).ends_at === orderOf(S.extA).ext_to && orderOf(parId).status === 'assigned', '원 주문 기간이 안 돌아감');
+    ok(pcOf('Y-004').status === 'rent', '연장 환불로 PC 가 풀림: ' + pcOf('Y-004').status);
+    /* 이제 KVX 가 마지막 → 그 결제키로 토스 취소 · 원래 만료일로 */
+    const extA = orderOf(S.extA);
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: S.extA, act: 'cancel', why: '시험 환불' });
+    ok(r.status === 200 && r.d.moneyBack && r.d.extReverted === true, '카드 연장 환불 ' + JSON.stringify(r.d));
+    const last = srv.toss.cancels[srv.toss.cancels.length - 1];
+    ok(last.paymentKey === extA.pay_key, '다른 결제키로 취소함: ' + last.paymentKey);
+    ok(orderOf(parId).ends_at === S.extAEnd0 && orderOf(parId).status === 'assigned', '원래 만료일로 안 돌아감 ' + orderOf(parId).ends_at);
+    ok(orderOf(S.extA).refund_state === 'toss_done' && pcOf('Y-004').status === 'rent', '카드 연장 환불 뒤 상태');
+    /* 토스가 뒤이어 보내는 취소 웹훅 — 이미 처리됨 */
+    r = await post('/api/toss-webhook', { eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: S.extA, status: 'CANCELED' } });
+    ok(r.d && /이미 처리됨|부분취소/.test(r.d.skip || ''), '환불 뒤 웹훅 ' + JSON.stringify(r.d));
+    ok(orderOf(parId).ends_at === S.extAEnd0, '웹훅이 기간을 또 바꿈');
+    /* 초기화 대기 PC 의 옛 주문 — 새 방식에서도 409 · 연장 줄 안 남음 */
+    const n = db().orders.length;
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: 'KVC260101-SEEDG2', act: 'extend', days: 30, amount: 65000 });
+    ok(r.status === 409 && /초기화 대기/.test(r.d.error), '초기화 대기 연장 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(db().orders.length === n && pcOf('Y-021').status === 'wipe', '거절했는데 줄이 생기거나 PC 가 바뀜');
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+    await ap.evaluate(() => closeDrawer());     // 열어 둔 주문 상세가 뒤 시험(A13 로그아웃 버튼)을 가리지 않게
+  });
+
+  await scenario('EX6', '연장 — 토스 상점관리자에서 직접 취소: 마지막 연장은 기간 되돌림 · 연장 붙은 원 주문은 그대로 두고 기록', async () => {
+    srv.fakeDb.setV10(true);
+    ok(S.extG1, 'EX3 이 먼저 성공해야 합니다');
+    const parId = 'KVC260101-SEEDG1', c = orderOf(S.extG1);
+    /* 원 주문(카드 결제였다고 치고)을 토스에서 취소 → 연장이 붙어 있어 자동 처리 안 함 */
+    orderOf(parId).pay_key = 'tcard_parent_g1';
+    srv.toss.payments['tcard_parent_g1'] = { paymentKey: 'tcard_parent_g1', orderId: parId, totalAmount: 65000, balanceAmount: 0,
+      status: 'CANCELED', method: '카드', confirmed: true };
+    let r = await post('/api/toss-webhook', { eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: parId, status: 'CANCELED' } });
+    ok(r.d && /관리자 확인/.test(r.d.skip || '') && orderOf(parId).status === 'assigned' && pcOf('Y-020').status === 'rent', '원 주문 웹훅 ' + JSON.stringify(r.d));
+    ok(db().view_log.some(v => v.act.includes(parId) && /관리자 확인/.test(v.act)), '관리자 확인 기록 없음');
+    /* 연장(가상계좌)을 토스에서 취소 → 기간 되돌림 · 끝난 날이 지났으니 원 주문 만료 · PC 초기화 대기 */
+    srv.toss.payments[c.pay_key].status = 'CANCELED';
+    r = await post('/api/toss-webhook', { eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: S.extG1, status: 'CANCELED' } });
+    ok(r.d && r.d.reverted === true, '연장 취소 웹훅 ' + JSON.stringify(r.d));
+    ok(orderOf(S.extG1).status === 'refunded' && orderOf(S.extG1).refund_state === 'toss_done', '연장 줄 ' + orderOf(S.extG1).status);
+    ok(orderOf(parId).status === 'expired' && orderOf(parId).ends_at === c.ext_from, '원 주문 ' + orderOf(parId).status);
+    ok(pcOf('Y-020').status === 'wipe', 'Y-020 이 초기화 대기로 안 감: ' + pcOf('Y-020').status);
+  });
+
+  /* 가짜 DB 함수를 직접 부르기 (시험에서 "중간에 끊긴" 상태를 만들 때) */
+  const rpc = async (name, body) => (await fetch(process.env.SUPABASE_URL + '/rest/v1/rpc/' + name, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+  /* 반납 유예 PC + 끝난 원 주문 + 카드 연장 결제까지 (적용된 연장 하나) */
+  const makeApplied = async (pn, slot, parentId, key) => {
+    addPc(pn, slot, 'hold'); addExpired(parentId, pn, C_ID);
+    const r = await callAs(C_ID, '/api/order-create', { extendOf: parentId, days: 30 });
+    ok(r.status === 200, '연장 주문 ' + r.status + ' ' + JSON.stringify(r.d));
+    const c = await post('/api/toss-confirm', { paymentKey: key, orderId: r.d.orderId, amount: 65000 });
+    return { id: r.d.orderId, conf: c };
+  };
+
+  await scenario('EX8', '연장 — Codex T-0193 지적: 환불 중엔 적용 안 됨 · 원 주문 해지 중 잠금 · 관리자 연장 두 번 눌러도 한 번 · 끝난 주문의 PC 가 rent 면 거절 · 끊긴 환불 이어서 마무리', async () => {
+    srv.fakeDb.setV10(true);
+    await ensureAdmin();
+    /* ① 결제완료(미적용) 연장을 환불 시작 → 그 사이 적용 요청이 와도 기간이 안 늘어남 */
+    addPc('Y-023', 4, 'hold'); addExpired('KVC260101-SEEDG4', 'Y-023', C_ID);
+    let r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG4', days: 30 });
+    const p1 = r.d.orderId;
+    pcOf('Y-023').status = 'wipe';
+    await post('/api/toss-confirm', { paymentKey: 'tcard_ex8_a', orderId: p1, amount: 65000 });
+    ok(orderOf(p1).status === 'paid', '미적용 연장 준비 실패 ' + orderOf(p1).status);
+    pcOf('Y-023').status = 'hold';
+    let x = await rpc('begin_ext_refund', { p_order: p1, p_amount: 65000 });
+    ok(x.ok && x.was === 'paid' && orderOf(p1).status === 'refunding', '환불 시작 ' + JSON.stringify(x));
+    x = await rpc('apply_extension', { p_order: p1 });
+    ok(x.ok && x.skip && orderOf(p1).status === 'refunding' && orderOf('KVC260101-SEEDG4').status === 'expired', '환불 중인데 적용됨 ' + JSON.stringify(x));
+    /* 관리자 [해지 · 환불] → 전액 토스 취소 → 마무리 (기간은 원래 안 늘었으니 그대로) */
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: p1, act: 'cancel', why: '시험' });
+    ok(r.status === 200 && r.d.moneyBack && r.d.refund === 65000 && r.d.extFinished, '미적용 연장 환불 ' + JSON.stringify(r.d));
+    ok(orderOf(p1).status === 'refunded' && pcOf('Y-023').status === 'hold', '환불 뒤 상태 ' + orderOf(p1).status + ' ' + pcOf('Y-023').status);
+
+    /* ② 원 주문 해지 중(잠금)에는 연장이 적용되지 않음 · 토스 취소가 안 되면 잠금이 풀림 */
+    const a = await makeApplied('Y-024', 5, 'KVC260101-SEEDG5', 'tcard_ex8_b');
+    ok(a.conf.d.extended === true, '준비 연장 ' + JSON.stringify(a.conf.d).slice(0, 150));
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: 'KVC260101-SEEDG5', act: 'cancel', why: '시험' });
+    ok(r.status === 409 && r.d.extensions && r.d.extensions.includes(a.id), '연장 붙은 원 주문 해지 ' + r.status);
+    addPc('Y-025', 6, 'rent');
+    db().orders.push(Object.assign({}, orderOf('KVC260101-SEEDA1'), { order_id: 'KVC260101-SEEDG6', member_id: C_ID, pn: 'Y-025',
+      status: 'assigned', pay_key: 'tcard_ex8_parent', starts_at: new Date(Date.now() - DAYMS).toISOString(), ends_at: new Date(Date.now() + 10 * DAYMS).toISOString(), kind: 'new',
+      parent_id: null, ext_req: null, cancel_lock_at: null, refund_state: null }));
+    srv.toss.payments['tcard_ex8_parent'] = { paymentKey: 'tcard_ex8_parent', orderId: 'KVC260101-SEEDG6', totalAmount: 65000,
+      status: 'DONE', method: '카드', confirmed: true, cancelReject: 'NOT_CANCELABLE_PAYMENT' };
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG6', days: 30 });
+    const g6 = r.d.orderId;
+    orderOf('KVC260101-SEEDG6').cancel_lock_at = new Date().toISOString();    // 관리자가 해지를 시작한 순간
+    r = await post('/api/toss-confirm', { paymentKey: 'tcard_ex8_c', orderId: g6, amount: 65000 });
+    ok(r.d.extendFailed === true && orderOf(g6).status === 'paid', '해지 중인데 연장이 적용됨 ' + JSON.stringify(r.d).slice(0, 150));
+    ok(db().view_log.some(v => v.act.includes(g6) && /parent_busy/.test(v.act)), '해지 중 실패 기록 없음');
+    orderOf('KVC260101-SEEDG6').cancel_lock_at = null;
+    srv.fakeDb.db.orders.find(o => o.order_id === g6).status = 'refunded';       // 이 결제는 따로 정리했다고 치고
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: 'KVC260101-SEEDG6', act: 'cancel', why: '시험' });
+    ok(r.status === 502 && orderOf('KVC260101-SEEDG6').status === 'assigned', '토스 거절 해지 ' + r.status);
+    /* 이 502 는 일부러 만든 "토스가 취소를 거절" 응답입니다 — 마무리 검사(Z1)의 서버 오류 집계에서 뺍니다 */
+    for (let i = srv.apiLog.length - 1; i >= 0; i--) {
+      if (srv.apiLog[i].st === 502 && /order-action/.test(srv.apiLog[i].url)) { srv.apiLog.splice(i, 1); break; }
+    }
+    ok(!orderOf('KVC260101-SEEDG6').cancel_lock_at, '토스 거절 뒤 해지 잠금이 안 풀림');
+
+    /* ③ 관리자 연장 — 같은 요청 번호로 두 번 와도 한 번만 */
+    const end0 = orderOf('KVC260101-SEEDG6').ends_at;
+    const req = { no: 'KVC260101-SEEDG6', act: 'extend', days: 30, amount: 65000, reqId: 'Rtest-dup-0001' };
+    const r1 = await apiIn(ap, '/api/admin?do=order-action', req);
+    const r2 = await apiIn(ap, '/api/admin?do=order-action', req);
+    ok(r1.status === 200 && r2.status === 200 && r2.d.dup === true && r1.d.child === r2.d.child, '중복 요청 ' + JSON.stringify([r1.d, r2.d]));
+    ok(extRows('KVC260101-SEEDG6').filter(o => o.status === 'applied').length === 1, '연장 줄이 두 개');
+    ok(near(orderOf('KVC260101-SEEDG6').ends_at, new Date(Date.parse(end0) + 30 * DAYMS).toISOString()), '두 번 늘어남');
+
+    /* ④ 끝난 주문인데 그 사이 PC 가 rent(다른 손님)로 바뀌면 적용 거절 */
+    addPc('Y-026', 7, 'hold'); addExpired('KVC260101-SEEDG7', 'Y-026', C_ID);
+    r = await callAs(C_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDG7', days: 30 });
+    const g7 = r.d.orderId;
+    pcOf('Y-026').status = 'rent';
+    r = await post('/api/toss-confirm', { paymentKey: 'tcard_ex8_d', orderId: g7, amount: 65000 });
+    ok(r.d.extendFailed === true && orderOf(g7).status === 'paid' && orderOf('KVC260101-SEEDG7').status === 'expired', '만료 주문 rent PC 에 적용됨');
+
+    /* ⑤ 환불이 돈 단계 뒤에 끊긴 연장 → 오늘 할 일에 뜸 → 다시 누르면 토스 안 부르고 마무리 */
+    const parG5 = orderOf('KVC260101-SEEDG5');
+    x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 65000 });
+    ok(x.ok, '끊긴 환불 만들기 ' + JSON.stringify(x));
+    Object.assign(orderOf(a.id), { refund_amt: 65000, refund_state: 'toss_done', refund_why: '시험' });
+    srv.toss.payments['tcard_ex8_b'].status = 'CANCELED';
+    await ap.reload(); await adminReady(ap);
+    await view(ap, 'today');
+    ok(/연장 환불 마무리 필요/.test(await mainText(ap)) && await ap.$(`#today-extfix [data-ord="${a.id}"]`), '오늘 할 일에 끊긴 환불 없음');
+    const cancels = srv.toss.cancels.length;
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: a.id, act: 'cancel', why: '시험' });
+    ok(r.status === 200 && r.d.extFinished && r.d.extReverted, '이어서 마무리 ' + JSON.stringify(r.d));
+    ok(srv.toss.cancels.length === cancels, '이미 돌려준 돈을 또 토스에 취소 요청함');
+    ok(orderOf(a.id).status === 'refunded' && parG5.status === 'expired' && pcOf('Y-024').status === 'wipe', '마무리 뒤 상태 '
+      + orderOf(a.id).status + ' ' + parG5.status + ' ' + pcOf('Y-024').status);
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+  });
+
+  await scenario('EX9', '연장 — Codex T-0194 지적: 다른 창의 환불에 합류하면 처음 정한 금액 그대로 · 해지 잠금은 그 요청만 풂 · 환불 중 원 주문이 만료돼도 기간 되돌림', async () => {
+    srv.fakeDb.setV10(true);
+    await ensureAdmin();
+    /* ① 한 창이 10,000원으로 환불을 시작한 뒤(끊김) 다른 창이 다른 금액으로 눌러도 10,000원으로 이어감 */
+    const a = await makeApplied('Y-027', 8, 'KVC260101-SEEDG8', 'tcard_ex9_a');
+    ok(a.conf.d.extended === true, '준비 연장');
+    let x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 10000 });
+    ok(x.ok && x.amount === 10000 && orderOf(a.id).status === 'refunding', '환불 시작 ' + JSON.stringify(x));
+    x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 65000 });
+    ok(x.ok && x.again && x.amount === 10000, '합류했는데 금액이 바뀜 ' + JSON.stringify(x));
+    x = await rpc('apply_extension', { p_order: a.id });
+    ok(x.skip && orderOf(a.id).status === 'refunding', '환불 중인데 적용 함수가 상태를 바꿈');
+    let r = await apiIn(ap, '/api/admin?do=order-action', { no: a.id, act: 'cancel', why: '시험', refund: 50000, force: true });
+    ok(r.status === 200 && r.d.refund === 10000 && r.d.extFinished, '합류 환불 ' + JSON.stringify(r.d));
+    const last = srv.toss.cancels[srv.toss.cancels.length - 1];
+    ok(last.paymentKey === 'tcard_ex9_a' && last.cancelAmount === 10000, '토스 취소 금액 ' + JSON.stringify(last));
+    ok(orderOf(a.id).refund_amt === 10000 && orderOf(a.id).status === 'refunded', '기록 금액 ' + orderOf(a.id).refund_amt);
+    /* ② 해지 잠금 — 나중 요청이 넘겨받으면 먼저 요청은 못 풂 · 넘겨받은 요청만 풂 */
+    x = await rpc('begin_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-A' });
+    ok(x.ok && orderOf('KVC260101-SEEDA1').cancel_job === 'job-A', '잠금 A ' + JSON.stringify(x));
+    x = await rpc('begin_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-B' });
+    ok(x.ok && orderOf('KVC260101-SEEDA1').cancel_job === 'job-B', '잠금 넘겨받기 ' + JSON.stringify(x));
+    x = await rpc('abort_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-A' });
+    ok(!x.ok && orderOf('KVC260101-SEEDA1').cancel_lock_at, '다른 요청이 잠금을 풂');
+    r = await callAs(A_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDA1', days: 30 });
+    ok(r.status === 409, '해지 중인 주문에 연장 주문이 만들어짐 ' + r.status);
+    x = await rpc('abort_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-B' });
+    ok(x.ok && !orderOf('KVC260101-SEEDA1').cancel_lock_at, '자기 잠금을 못 풂');
+    /* ③ 환불 도중 만료 정리가 원 주문을 expired 로 바꿔도 날짜는 되돌림 */
+    const b2 = await makeApplied('Y-028', 9, 'KVC260101-SEEDG9', 'tcard_ex9_b');
+    ok(b2.conf.d.extended === true, '준비 연장 2');
+    const c2 = orderOf(b2.id), par = orderOf('KVC260101-SEEDG9');
+    x = await rpc('begin_ext_refund', { p_order: b2.id, p_amount: 65000 });
+    ok(x.ok, '환불 시작 2');
+    par.status = 'expired';                          // 그 사이 만료 정리
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: b2.id, act: 'cancel', why: '시험' });
+    ok(r.status === 200 && r.d.extFinished && r.d.extReverted, '만료된 원 주문 환불 ' + JSON.stringify(r.d));
+    ok(par.ends_at === c2.ext_from && par.status === 'expired', '원 주문 날짜가 안 돌아감 ' + par.ends_at + ' / ' + c2.ext_from);
+    ok(pcOf('Y-028').status === 'wipe', 'PC ' + pcOf('Y-028').status);
+  });
+
+  await scenario('EX7', 'db/10 SQL — 함수 9개 · 잠금 · service_role 만 · 한 원 주문당 결제 대기 연장 하나 · 실명 없음 · CRLF', async () => {
+    const sql = fs.readFileSync(path.join(srv.ROOT, 'db', '10-연장결제.sql'), 'utf8');
+    for (const w of ['apply_extension', 'revert_extension', 'admin_extend_order', 'begin_ext_refund', 'finish_ext_refund',
+      'abort_ext_refund', 'begin_parent_cancel', 'abort_parent_cancel', 'orders_ext_req_uq', 'cancel_lock_at', 'for update', 'security definer',
+      'orders_one_ready_ext', "where kind = 'extend' and status = 'ready'", "'ext_pay'", 'hold_until = null',
+      "status in ('rent', 'hold')", 'from public, anon, authenticated', 'to service_role', 'not_latest', 'create or replace function',
+      'add column if not exists kind', 'db/08']) {
+      ok(sql.includes(w), 'SQL 에 「' + w + '」 없음');
+    }
+    const nFn = (sql.match(/create or replace function/g) || []).length;
+    ok(nFn === 9 && (sql.match(/security definer/g) || []).length === 9 && (sql.match(/set search_path = public/g) || []).length === 9, '함수 보안 설정 개수 ' + nFn);
+    ok((sql.match(/^revoke all on function/gm) || []).length === 9 && (sql.match(/^grant execute on function/gm) || []).length === 9, 'revoke/grant 개수');
+    for (const w of ['record_ext_refund', 'refund_plan', 'cancel_job']) ok(sql.includes(w), 'SQL 에 「' + w + '」 없음');
+    ok(!/파주|금촌|영태리|등원리/.test(sql), 'SQL 에 서버실 실명');
+    ok(/\r\n/.test(sql) && !/[^\r]\n/.test(sql), 'SQL 줄바꿈이 다른 db 파일(CRLF)과 다름');
+    srv.fakeDb.setV10(false);         // 뒤 시험(A13 · Z1)은 예전 상태로
+  });
+
   await scenario('A13', '관리자 — 로그아웃 → 다시 잠김', async () => {
     await ensureAdmin();
     ap.answers.push(true);

@@ -597,7 +597,7 @@ function badges(){
   /* 오늘 할 일 숫자 = 화면에 뜨는 카드의 건수 합 (점검중은 급하지 않아 뺍니다) */
   const tc=todayCounts();
   const tn=tc.downs.length+tc.hub.length+tc.d3.length+tc.wait.length+tc.exp7.length
-          +tc.wipe.length+tc.va.length+tc.refund.length;
+          +tc.wipe.length+tc.va.length+tc.refund.length+tc.extFix.length;
   put('bd-today',tn); put('tb-today',tn);
 }
 
@@ -665,7 +665,7 @@ function vDash(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>사양</th><th>회원</th><th>결제</th><th>기간</th><th>금액</th><th></th></tr></thead>
       <tbody>${ORDERS.slice().sort(()=>0).slice(0,7).map(o=>`
-      <tr data-ord="${esc(o.no)}"><td class="dim num">${esc(o.no)}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':esc(oPn(o))}</td>
+      <tr data-ord="${esc(o.no)}"><td class="dim num">${esc(o.no)}</td><td class="pn">${isWait(o)?waitTag(o):esc(oPn(o))}</td>
       <td>${esc(oSpec(o))}</td><td>${esc(o.nm)}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
       <td class="dim">${esc(o.pm)}</td><td class="dim num">${o.days}일</td>
       <td class="num"><b>${w(o.amt)}원</b></td>
@@ -825,15 +825,22 @@ function todayCounts(){
     /* 초기화 대기 — 신호가 끊겨 "다운" 으로 보이는 PC 도 빠지지 않게 표의 원래 상태(raw)로 봅니다 */
     wipe:PCS.filter(p=>p.pn&&p.raw==='wipe').sort((a,b)=>locKey(a)-locKey(b)),
     va:PENDING.filter(o=>o.pm==='가상계좌'),
-    refund:HISTORY.filter(o=>o.refundState==='manual_pending')};
+    refund:HISTORY.filter(o=>o.refundState==='manual_pending'),
+    /* 연장 환불이 중간에 멈춘 것 (돈 단계 뒤 끊김 등) — [해지 · 환불] 을 다시 눌러 마무리 (2026-11-08) */
+    extFix:HISTORY.filter(o=>o.kind==='extend'&&o.st==='refunding')};
 }
 /* 결제는 끝났는데 PC 가 안 붙은 주문 — 돈을 받았으니 가장 먼저 처리합니다 */
 function isWait(o){ return o.st==='paid'&&!o.pn; }
+/* ★ 연장 결제인데 기간을 못 늘린 것(2026-11-08) — 새 주문 배정 대기와 구분해서 보여줍니다.
+   고객은 "같은 PC 연장" 을 샀는데 그 PC 가 이미 초기화 대기 등으로 넘어간 경우입니다.
+   주문 상세에서 [연장 다시 적용] · [PC 배정(새 PC)] · [해지·환불] 중 고릅니다. 자동 환불은 없습니다. */
+const isExt=o=>o&&o.kind==='extend';
+const waitTag=o=>isExt(o)? '<span class="warnbadge">연장 결제 — 원래 PC 반납됨</span>' : '<span class="warnbadge">배정 대기</span>';
 /* 반납 유예 PC 한 줄 설명 — "11/10 까지 유예" */
 const holdTx=p=>!p?'':p.raw==='hold'?'반납 유예'+(p.holdUntil?' · '+fmtD(p.holdUntil)+'까지':'')
   :p.raw==='wipe'?'초기화 대기':p.raw==='rent'?'다시 임대중':(ST[p.raw]||'');
 function vToday(){
-  const {downs,hub,fix,d3,wait,exp7,wipe,va,refund}=todayCounts();
+  const {downs,hub,fix,d3,wait,exp7,wipe,va,refund,extFix}=todayCounts();
   const rentFirst=downs.slice().sort((a,b)=>((b.order?1:0)-(a.order?1:0)));
   const hubKeys=new Set(hub.flatMap(e=>e[1].map(p=>p.pn)));
   const head=`
@@ -841,7 +848,7 @@ function vToday(){
     <span class="live">현장에서 처리할 순서대로 — 고객 영향이 큰 것부터</span></div>
   ${sqlNote()}`;
   const none=!(downs.length||hub.length||fix.length||d3.length||wait.length||exp7.length
-             ||wipe.length||va.length||refund.length);
+             ||wipe.length||va.length||refund.length||extFix.length);
   if(none) return head+`<div class="card"><div class="empty2" id="today-empty"><b>오늘은 처리할 일이 없습니다</b>
     배정 대기 · 환불 송금 · 반납 초기화 · 만료 · 다운 PC 가 하나도 없습니다.</div></div>`;
   const nil='<tr><td class="dim" style="padding:20px">없음</td></tr>';
@@ -852,7 +859,15 @@ function vToday(){
     <div class="sec-b"><table class="tbl mc"><tbody>${wait.map(o=>`
       <tr data-ord="${esc(o.no)}"><td data-label="주문" class="dim num">${esc(o.no)}</td><td data-label="고객">${esc(o.nm)}</td>
       <td data-label="연락처" class="dim num">${esc(o.ph)}</td><td data-label="상품" class="dim">${esc(oSpec(o))} · ${o.days}일</td>
-      <td><span class="warnbadge">배정 대기</span></td></tr>`).join('')}</tbody></table></div>
+      <td>${waitTag(o)}</td></tr>`).join('')}</tbody></table></div>
+  </div>`:''}
+  ${extFix.length? `<div class="card" style="margin-bottom:14px;border-color:#F7CDD3" id="today-extfix">
+    <div class="sec-h"><h3>🔁 연장 환불 마무리 필요</h3><span class="cnt">${extFix.length}건</span>
+      <div class="r"><span class="dim" style="font-size:12px">돈 단계는 끝났거나 중간에 멈춘 연장 환불 · 줄을 눌러 [해지 · 환불] 을 다시 누르세요</span></div></div>
+    <div class="sec-b"><table class="tbl mc"><tbody>${extFix.map(o=>`
+      <tr data-ord="${esc(o.no)}"><td data-label="주문" class="dim num">${esc(o.no)}</td><td data-label="고객">${esc(o.nm)}</td>
+      <td data-label="원 주문" class="dim num">${esc(o.parent||'')}</td>
+      <td><span class="warnbadge">환불 처리 중</span></td></tr>`).join('')}</tbody></table></div>
   </div>`:''}
   ${refund.length? `<div class="card" style="margin-bottom:14px;border-color:#F7CDD3" id="today-refund">
     <div class="sec-h"><h3>💸 직접 송금해야 할 환불</h3><span class="cnt">${refund.length}건</span>
@@ -1194,7 +1209,7 @@ function vOrders(){
     <div class="sec-b"><table class="tbl mc">
       <thead><tr><th>주문번호</th><th>품번</th><th>회원(결제자)</th><th>실제 이용자</th><th>가입</th><th>결제</th><th>기간</th><th>만료</th></tr></thead>
       <tbody>${V.map(o=>`
-      <tr data-ord="${esc(o.no)}"><td data-label="주문번호" class="dim num">${esc(o.no)}</td><td data-label="품번" class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':esc(oPn(o))}</td>
+      <tr data-ord="${esc(o.no)}"><td data-label="주문번호" class="dim num">${esc(o.no)}</td><td data-label="품번" class="pn">${isWait(o)?waitTag(o):esc(oPn(o))}</td>
       <td data-label="회원">${esc(o.nm)}<div class="dim">${esc(o.ph)}</div></td>
       <td data-label="이용자">${o.mis? esc(o.userNm)+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
       <td data-label="가입" class="dim">${viaLabel(o.via)}</td>
@@ -1362,7 +1377,7 @@ const RECON_GROUPS=[
   ['refundDiff','≠ 환불 금액이 다름','토스가 돌려준 금액과 주문의 환불 금액이 다릅니다 (직접 송금 환불은 제외)'],
 ];
 const tossStTx=s=>({DONE:'결제 완료',CANCELED:'취소',PARTIAL_CANCELED:'부분 취소',WAITING_FOR_DEPOSIT:'입금 대기'})[s]||s||'';
-const dbStTx=s=>({ready:'결제 대기',paid:'결제완료·배정 대기',assigned:'이용중',expired:'만료',refunded:'환불',canceled:'취소'})[s]||s||'없음';
+const dbStTx=s=>({ready:'결제 대기',paid:'결제완료·배정 대기',assigned:'이용중',expired:'만료',refunded:'환불',canceled:'취소',applied:'연장 적용됨',refunding:'환불 처리 중'})[s]||s||'없음';
 function vRecon(){
   const d=RECON.data;
   const groups = RECON.loading ? '<div class="card"><div class="empty2">토스에 묻는 중…</div></div>'
@@ -1575,7 +1590,22 @@ function openOrd(no){
       <span class="k">사양</span><span class="v">${esc(sp.n)} · 램 ${sp.ram}GB · SSD ${sp.ssd}GB</span>
       <span class="k">기간</span><span class="v num">${o.days}일 · ${fmtD(o.start)} ~ ${fmtD(o.end)}</span>
       <span class="k">금액</span><span class="v num"><b>${w(o.amt)}원</b> <span class="dim">${esc(o.pm)}</span></span>
+      ${/* 연장 결제 줄 — 어느 주문을 늘린 것인지 (누르면 원 주문으로) */''}
+      ${isExt(o)? `<span class="k">연장 결제</span><span class="v">원 주문 <span data-ord="${esc(o.parent||'')}" style="text-decoration:underline;cursor:pointer">${esc(o.parent||'?')}</span>
+        ${o.extFrom? ` · <span class="num">${fmtD(o.extFrom)} ~ ${fmtD(o.extTo)}</span> 늘림`:''}</span>`:''}
     </div>
+    ${isExt(o)&&isWait(o)? `<div class="mismatch"><b>⚠ 연장 결제 — 원래 PC 반납됨.</b> 고객은 결제를 마쳤지만 원래 PC 가 초기화 대기 등이라
+      기간을 못 늘렸습니다. PC 를 반납 유예/임대중으로 되돌릴 수 있으면 [연장 다시 적용], 아니면 고객과 통화 후
+      [새 PC 배정] 또는 [해지 · 환불] 을 해 주세요. (자동 환불은 하지 않습니다)</div>`:''}
+    ${(()=>{ /* 원 주문에 붙은 연장 내역 — 환불은 가장 마지막 연장부터 (서버도 같은 규칙) */
+      const ks=isExt(o)?[]:extsOf(o.no); if(!ks.length) return '';
+      const last=ks.find(k=>k.st==='applied');
+      return `<div class="blockttl">연장 내역 ${ks.length}건 — 환불은 가장 마지막 연장부터</div>
+      <table class="tbl mc" id="ord-exts"><tbody>${ks.map(k=>`<tr data-ord="${esc(k.no)}">
+        <td data-label="주문" class="dim num">${esc(k.no)}</td>
+        <td data-label="상태">${esc(dbStTx(k.st))}${k===last?' · <b>마지막</b>':''}</td>
+        <td data-label="기간" class="num">${k.days}일 · ${w(k.amt)}원</td>
+        <td data-label="늘린 기간" class="dim num">${k.extFrom?fmtD(k.extFrom):'—'} ~ ${k.extTo?fmtD(k.extTo):'—'}</td></tr>`).join('')}</tbody></table>`; })()}
     <div class="blockttl">신원 — 넷이 다를 수 있습니다</div>
     <div class="kv">
       <span class="k">① 회원</span><span class="v">${esc(o.nm)} <span class="dim">${o.via==='kakao'?'카카오 (카톡 문의 자동매칭)':viaLabel(o.via)+' (문의번호로 식별)'}</span></span>
@@ -1609,14 +1639,16 @@ function openOrd(no){
   </div>
   <div class="dracts">
     ${/* 결제는 됐는데 PC 가 안 붙은 주문 — 여기서 바로 배정합니다 (2026-11-07) */''}
-    ${isWait(o)? `<button class="btn btn-r" data-assignpaid="${esc(o.no)}">🖥 PC 배정 (결제 완료 · 배정 대기)</button>`:''}
+    ${isExt(o)&&isWait(o)? `<button class="btn btn-r" data-extapply="${esc(o.no)}">🔁 연장 다시 적용 (원래 PC 그대로)</button>`:''}
+    ${isWait(o)? `<button class="btn ${isExt(o)?'btn-o':'btn-r'}" data-assignpaid="${esc(o.no)}">${isExt(o)?'🖥 새 PC 배정 (원래 PC 반납됨 · 자료 없음)':'🖥 PC 배정 (결제 완료 · 배정 대기)'}</button>`:''}
     ${o.refundState==='manual_pending'? `<button class="btn btn-r" data-refunddone="${esc(o.no)}">💸 직접 송금 완료</button>`:''}
-    ${ended?'':`<button class="btn btn-b" data-copycust="${esc(o.no)}">📋 고객 전달용 복사 (위치 제외)</button>`}
+    ${/* 연장 결제 줄(applied·paid)은 원 주문의 기간 기록입니다 — 복사·연장·이전은 원 주문에서 합니다 */''}
+    ${ended||(isExt(o)&&o.st!=='assigned')?'':`<button class="btn btn-b" data-copycust="${esc(o.no)}">📋 고객 전달용 복사 (위치 제외)</button>`}
     ${/* 만료된 주문도 연장할 수 있습니다 — PC 가 반납 유예 중이면 그 PC 를 그대로 돌려드립니다 */''}
-    ${isWait(o)||closed?'':`<button class="btn btn-o" data-extend="${esc(o.no)}">${o.st==='expired'?'30일 연장 (만료된 주문 되살리기)':'30일 연장'}</button>`}
+    ${isWait(o)||closed||(isExt(o)&&o.st!=='assigned')?'':`<button class="btn btn-o" data-extend="${esc(o.no)}">${o.st==='expired'?'30일 연장 (만료된 주문 되살리기)':'30일 연장'}</button>`}
     ${/* PC 이전 — 설명서에는 있는데 버튼이 없었습니다 (서버 act=move 는 이미 있음).
           고장 난 PC 를 쓰던 고객을 같은 기간 그대로 다른 PC 로 옮깁니다. */''}
-    ${o.pn&&!isWait(o)&&!ended? `<button class="btn btn-o" data-movepc="${esc(o.no)}">🔀 PC 이전</button>`:''}
+    ${o.pn&&!isWait(o)&&!ended&&!(isExt(o)&&o.st!=='assigned')? `<button class="btn btn-o" data-movepc="${esc(o.no)}">🔀 PC 이전</button>`:''}
     ${/* 서버에는 있는데 버튼이 없어 못 쓰던 것들입니다 */''}
     <button class="btn btn-o" data-custedit="${esc(o.no)}">👤 고객 정보 수정</button>
     <button class="btn btn-o" data-taxreq="${esc(o.no)}">
@@ -2385,7 +2417,10 @@ document.addEventListener('click',async e=>{
                               : `   (db/08 SQL 을 돌리기 전이라 목록에 남지 않습니다 — 꼭 따로 적어 두세요)`)
        :                     '환불액은 없습니다.')
       /* ★ 2026-11-07 — PC 는 바로 판매로 가지 않고 [초기화 대기] 로 갑니다 */
-      + (out.d.pcReturned ? `\n✓ ${oPn(o)} 은 [초기화 대기] 로 갔습니다.\n   초기화 + 애니데스크 비밀번호 교체 뒤 [오늘 할 일] 에서 판매로 돌려 주세요.` : ''));
+      + (out.d.pcReturned ? `\n✓ ${oPn(o)} 은 [초기화 대기] 로 갔습니다.\n   초기화 + 애니데스크 비밀번호 교체 뒤 [오늘 할 일] 에서 판매로 돌려 주세요.` : '')
+      /* 연장 결제 줄 환불 — 원 주문 기간을 되돌렸는지 (2026-11-08) */
+      + (out.d.extReverted===true ? `\n✓ 원 주문 ${o.parent||''} 의 만료일을 ${out.d.parentEnd?fmtD(new Date(out.d.parentEnd)):''} 로 되돌렸습니다.` : '')
+      + (out.d.extFinished===false ? `\n⚠ 환불 마무리(기간 되돌리기)가 끝나지 않았습니다.\n   [오늘 할 일] 의 "연장 환불 마무리 필요" 에서 [해지 · 환불] 을 다시 눌러 주세요.` : ''));
     closeDrawer();
     await syncLive(); return;
   }
@@ -2506,6 +2541,24 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  /* 연장 결제 다시 적용 — 결제는 됐는데 기간을 못 늘린 연장 (원래 PC 를 유예/임대중으로 되돌린 뒤) */
+  const xa=t.closest('[data-extapply]');
+  if(xa){
+    const o=findOrd(xa.dataset.extapply); if(!o)return;
+    if(!LIVE){ alert('서버에 연결된 상태에서만 할 수 있습니다.'); return; }
+    if(!confirm(o.nm+'님의 연장 결제를 원래 PC 에 다시 적용합니다.\n원래 PC 가 [임대중] 이나 [반납 유예] 여야 합니다.\n\n진행할까요?')) return;
+    xa.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({no:o.no, act:'ext-apply'})});
+      const d=await r.json().catch(()=>({}));
+      xa.disabled=false;
+      if(!r.ok){ alert(d.error||'다시 적용하지 못했습니다'); return; }
+      alert('연장되었습니다.\n'+(d.pn||'')+' · 새 만료일 '+fmtD(new Date(d.endsAt)));
+    }catch(e){ xa.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    closeDrawer(); await syncLive(); return;
+  }
+
   const ex=t.closest('[data-extend]');
   if(ex){
     const o=findOrd(ex.dataset.extend); if(!o)return;
@@ -2526,14 +2579,19 @@ document.addEventListener('click',async e=>{
       +(o.st==='expired'?'\n\n※ 이미 만료된 주문입니다. 오늘부터 30일로 다시 시작합니다.':''), String(def||''));
     if(amt===null)return;
     ex.disabled=true;
+    /* ★ 요청 번호 (Codex T-0193) — 응답이 끊겨 "실패" 로 보이면 같은 번호로 다시 보냅니다.
+       서버(db/10)는 같은 번호를 한 번만 연장합니다. 성공하면 번호를 지워 다음 연장은 새 번호로. */
+    if(!EXT_REQ[o.no]) EXT_REQ[o.no]='R'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
     if(LIVE){
       try{
         const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({no:o.no, act:'extend', days:30, amount:+amt||0})});
+          body:JSON.stringify({no:o.no, act:'extend', days:30, amount:+amt||0, reqId:EXT_REQ[o.no]})});
         const d=await r.json().catch(()=>({}));
-        if(!r.ok){ ex.disabled=false; alert(d.error||'연장하지 못했습니다'); return; }
-      }catch(e){ ex.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+        if(!r.ok){ ex.disabled=false; if(r.status<500) EXT_REQ[o.no]=null; alert(d.error||'연장하지 못했습니다'); return; }
+        EXT_REQ[o.no]=null;
+        if(d.dup) alert('앞서 보낸 연장이 이미 처리돼 있었습니다 (두 번 연장하지 않았습니다).');
+      }catch(e){ ex.disabled=false; alert('서버에 연결하지 못했습니다.\n다시 누르시면 같은 요청으로 보내 두 번 연장되지 않습니다.'); return; }
     }
     /* 만료된 주문을 되살리면 진행중 목록 · PC 상태(유예 → 임대중)가 함께 바뀌므로
        화면에서 셈하지 않고 서버에서 다시 받아옵니다 */
@@ -2844,6 +2902,8 @@ const PENDING=[];
 /* 주문번호로 찾기 — 진행중(ORDERS) 에 없으면 끝난 것(HISTORY) 까지 봅니다.
    만료된 주문을 연장하거나, 해지된 주문의 직접 송금을 [송금 완료] 로 바꾸려면 필요합니다. */
 const findOrd=no=>ORDERS.find(x=>x.no===no)||HISTORY.find(x=>x.no===no)||null;
+/* 관리자 [30일 연장] 요청 번호 — 주문번호별로 기억 (30초마다 목록을 새로 받아도 남게) */
+const EXT_REQ={};
 /* HAS_HOLD    = settings 에 hold_days 가 있음 → db/08 SQL 을 돌림 (반납 유예 → 초기화 대기 흐름)
    REFUND_COLS = 주문에 환불 송금 추적 칸이 있음 (이것도 db/08)
    HISTORY_CUT = 지난 주문이 너무 많아 서버가 오래된 것을 빼고 보냄 */
@@ -2869,6 +2929,9 @@ function applyOrders(d){
       refundState:o.refundState||null,
       refundDoneAt:o.refundDoneAt?new Date(o.refundDoneAt):null,
       createdAt:o.createdAt?new Date(o.createdAt):null,
+      /* 연장 결제 (db/10) — kind:'extend' 면 parent(원 주문)의 기간을 extFrom~extTo 만큼 늘린 줄 */
+      kind:o.kind||'new', parent:o.parent||null,
+      extFrom:o.extFrom?new Date(o.extFrom):null, extTo:o.extTo?new Date(o.extTo):null,
     };
     if(o.st==='ready'){
       /* 결제 대기 — 가상계좌(입금 기다리는 중)는 날짜와 상관없이, 나머지는 24시간 안 것만 */
@@ -2892,7 +2955,11 @@ function applyOrders(d){
 let SRV_MEMBERS=[], SRV_COUNTS={};
 
 /* 이 PC 를 예전에 쓰던 분들 */
-const pastOf=pn=>HISTORY.filter(o=>o.pn===pn && !ACTIVE_ST.includes(o.st));
+/* 연장 결제 줄은 같은 손님의 기간 기록이라 "예전에 쓰던 분" 에서 뺍니다 */
+const pastOf=pn=>HISTORY.filter(o=>o.pn===pn && !ACTIVE_ST.includes(o.st) && o.kind!=='extend');
+/* 원 주문에 붙은 연장 줄 — 최근 것부터 */
+const extsOf=no=>HISTORY.filter(o=>o.parent===no && o.kind==='extend')
+  .sort((a,b)=>(b.extTo?+b.extTo:0)-(a.extTo?+a.extTo:0));
 
 async function syncLive(){
   if(sessionStorage.getItem('kvc-adm')!=='1') return;

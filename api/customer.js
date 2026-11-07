@@ -18,8 +18,9 @@
      남의 품번을 넣어도 자기 주문에 없으면 돌려주지 않습니다.
    ═══════════════════════════════════════════════════════════════ */
 const crypto = require('crypto');
-const { ready, sb } = require('./_supa');
+const { ready, sb, missingCol } = require('./_supa');
 const kv = require('./_crypto');
+const { quote } = require('./_price');
 
 const DAY = 86400000;
 
@@ -121,24 +122,55 @@ module.exports = async (req, res) => {
   /* ── 내 PC · 주문 ── */
   if (what === 'me') {
     try {
-      const [ms, os] = await Promise.all([
-        sb('members', { query: `?select=name,phone,email,via&id=eq.${memberId}&limit=1` }),
-        sb('orders', {
-          query: `?select=order_id,pn,spec_id,days,amount,status,pay_method,starts_at,ends_at,` +
-                 `pcs(pn,anydesk,cpu,core,ram_gb,ssd_gb,gpu,status,online,last_beat)` +
-                 `&member_id=eq.${memberId}&order=ends_at.desc&limit=200`,
-        }),
-      ]);
+      /* ★ 연장 결제 칸(kind·parent_id)은 db/10 SQL 을 돌려야 생깁니다 (2026-11-08).
+           없으면 그 칸만 빼고 다시 받고, 화면은 예전처럼 [카카오톡으로 연장 요청] 을 보여줍니다. */
+      const baseCols = `order_id,pn,spec_id,days,amount,status,pay_method,starts_at,ends_at,` +
+                       `pcs(pn,anydesk,cpu,core,ram_gb,ssd_gb,gpu,status,online,last_beat)`;
+      const loadOrders = c => sb('orders', {
+        query: `?select=${c}&member_id=eq.${memberId}&order=ends_at.desc&limit=200` });
+      let extCols = true, os;
+      const ms = await sb('members', { query: `?select=name,phone,email,via&id=eq.${memberId}&limit=1` });
+      try { os = await loadOrders(baseCols + ',kind,parent_id'); }
+      catch (e) {
+        if (!missingCol(e, 'kind') && !missingCol(e, 'parent_id')) throw e;
+        extCols = false;
+        os = await loadOrders(baseCols);
+      }
+      /* [연장하기] 를 보여줄지 — 칸이 있고, 대표님이 켜 두셨을 때(settings.ext_pay = 1)만 */
+      let extendReady = false;
+      if (extCols) {
+        try {
+          const f = await sb('settings', { query: '?select=v&k=eq.ext_pay&limit=1' });
+          extendReady = !!(f && f[0] && f[0].v === '1');
+        } catch (e) { extendReady = false; }
+      }
       const me = (ms && ms[0]) || {};
       const now = Date.now();
+      /* 연장 가격 — 결제와 같은 가격표(_price.js)에서만 가져옵니다 */
+      const extPrices = specId => {
+        const out = {};
+        for (const d of [30, 60, 90]) { const q = quote(specId, d); if (q) out[d] = q.amount; }
+        return out;
+      };
+      /* 돈은 받았는데 아직 기간이 안 늘어난 연장 (관리자 처리 대기) — 그 주문엔 [연장하기] 대신 안내 */
+      const extWait = new Set((os || []).filter(o => o.kind === 'extend' && o.status === 'paid' && o.parent_id)
+        .map(o => o.parent_id));
 
-      const pcs = [], orders = [];
+      const pcs = [], orders = [], grace = [];
       for (const o of (os || [])) {
+        /* 버려진 결제창(ready) 중 연장 주문은 결제 내역에 보이지 않게 합니다 (돈이 안 나간 것) */
+        if (o.kind === 'extend' && ['ready', 'canceled'].includes(o.status)) continue;
         orders.push({
-          no: o.order_id, name: o.pn, days: o.days, amt: o.amount,
+          no: o.order_id, name: o.kind === 'extend' ? (o.pn || '') + ' 연장' : o.pn, days: o.days, amt: o.amount,
           pm: o.pay_method || '—', st: o.status,
           start: o.starts_at, end: o.ends_at,
         });
+        /* 반납 유예 중인 PC (끝난 주문 · 자료 그대로) — 지금 연장하면 같은 PC 를 그대로 씁니다 */
+        if (extendReady && o.status === 'expired' && o.pn && o.pcs && o.pcs.status === 'hold' &&
+            o.kind !== 'extend' && !grace.some(g => g.pn === o.pn)) {
+          grace.push({ pn: o.pn, orderNo: o.order_id, end: o.ends_at, specId: o.spec_id,
+            ext: extPrices(o.spec_id), extWait: extWait.has(o.order_id) });
+        }
         /* 지금 쓰고 계신 PC 만 카드로 보여줍니다 */
         if (o.status !== 'assigned' || !o.pcs) continue;
         const ends = o.ends_at ? Date.parse(o.ends_at) : null;
@@ -154,12 +186,31 @@ module.exports = async (req, res) => {
           start: o.starts_at, end: o.ends_at,
           live: !!(p.online && beat !== null && beat < 300),      // 지금 켜져 있는가
           orderNo: o.order_id,
+          /* 연장 결제 — 상품 번호와 30·60·90일 가격 (켜져 있을 때만) */
+          specId: extendReady ? o.spec_id : undefined,
+          ext: extendReady ? extPrices(o.spec_id) : undefined,
+          extWait: extendReady ? extWait.has(o.order_id) : undefined,
         });
+      }
+
+      /* 유예 PC 중 다른 손님이 이미 쓰는 것은 뺍니다 (만료 뒤 다른 주문에 간 경우 · 드묾)
+         · 유예가 언제 끝나는지(hold_until)도 같이 알려 드립니다 */
+      if (grace.length) {
+        try {
+          const list = grace.map(g => encodeURIComponent(g.pn)).join(',');
+          const [busy, hold] = await Promise.all([
+            sb('orders', { query: `?select=pn&pn=in.(${list})&status=in.(assigned,paid)` }),
+            sb('pcs', { query: `?select=pn,hold_until&pn=in.(${list})` }),
+          ]);
+          const taken = new Set((busy || []).map(x => x.pn));
+          for (let i = grace.length - 1; i >= 0; i--) if (taken.has(grace[i].pn)) grace.splice(i, 1);
+          for (const g of grace) { const h = (hold || []).find(x => x.pn === g.pn); g.holdUntil = h ? h.hold_until : null; }
+        } catch (e) { grace.length = 0; }    // 확인 못 하면 보여주지 않습니다 (안전한 쪽)
       }
       return res.status(200).json({
         ok: true,
         user: { name: me.name || '회원', phone: me.phone || '', via: me.via || '', email: me.email || '' },
-        pcs, orders,
+        pcs, orders, grace, extendReady,
       });
     } catch (e) {
       return res.status(500).json({ error: String(e.message || e).slice(0, 200) });

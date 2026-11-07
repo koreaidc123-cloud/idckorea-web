@@ -459,7 +459,17 @@ const PROD=PRODUCTS[SPEC_ID];
 window.KVC_P=PROD; window.KVC_SPEC=SPEC_ID;           // 아래쪽 스크립트도 씁니다
 /* 목록에서 고른 PC — 결제 후 이 PC 를 먼저 배정해 봅니다.
    이미 팔렸으면 같은 상품의 다른 PC 로 배정됩니다 (서버가 판단). */
-const PC_PICK=/^[KYD]-\d{3}$/.test((_q.get('pc')||'').toUpperCase())
+/* ═══ 연장 결제 모드 (2026-11-08) ═══════════════════════════════════
+   [내 가상컴] 의 [연장하기] 가 product.html?g=상품&ext=원주문번호&pn=품번&d=30 으로 보냅니다.
+   새 PC 를 사는 게 아니라 "쓰던 PC 그대로 기간만 늘리는" 결제입니다.
+     · 결제창·결제수단은 새 주문과 똑같이 씁니다 (결제 코드를 두 벌 만들지 않으려고).
+     · 서버(order-create)에 extendOf 로 보내면, 서버가 "정말 이 고객의 주문인지 ·
+       PC 가 아직 그대로인지" 확인하고 금액을 정합니다. 화면 값은 표시용입니다.
+     · 고른 PC(pc=) 는 연장에서는 쓰지 않습니다. */
+const EXT=/^[A-Za-z0-9_-]{6,64}$/.test(_q.get('ext')||'') ? _q.get('ext') : '';
+const EXT_PN=EXT && /^[KYD]-\d{3}$/.test((_q.get('pn')||'').toUpperCase()) ? _q.get('pn').toUpperCase() : '';
+const EXT_D=[30,60,90].includes(Number(_q.get('d'))) ? Number(_q.get('d')) : 30;
+const PC_PICK=!EXT && /^[KYD]-\d{3}$/.test((_q.get('pc')||'').toUpperCase())
   ? _q.get('pc').toUpperCase() : '';
 
 /* 3700X 가 아닌 상품이면 화면의 이름·사양·가격·사진을 갈아끼웁니다.
@@ -496,6 +506,18 @@ const PC_PICK=/^[KYD]-\d{3}$/.test((_q.get('pc')||'').toUpperCase())
     c.textContent='✓ 선택하신 PC: '+PC_PICK+' — 결제 후 이 PC 로 배정해 드립니다';
     h.after(c);
   }
+  /* 연장 결제 — 제목과 안내를 바꿉니다 (고객이 "새 PC 를 사는 건가?" 헷갈리지 않게) */
+  if(EXT){
+    const h=document.querySelector('.pt-h');
+    h.textContent=(EXT_PN? EXT_PN+' · ':'')+PROD.n+' 기간 연장';
+    const c=document.createElement('div');
+    c.id='ext-note';
+    c.style.cssText='display:block;margin:10px 0 0;padding:10px 14px;background:#EEF3FF;'
+      +'color:#1B4FD8;border-radius:12px;font-size:14px;font-weight:700;line-height:1.6';
+    c.textContent='🔁 연장 결제 — '+(EXT_PN||'쓰시던 PC')+' 를 같은 PC 그대로, 자료도 그대로 기간만 늘립니다. 셋팅비는 없습니다.';
+    h.after(c);
+    document.title=(EXT_PN? EXT_PN+' ':'')+'기간 연장 · 한국 가상컴';
+  }
 })();
 let _pay=null;
 function tossPay(){
@@ -513,7 +535,8 @@ async function startPay(){
   /* 연락처가 서버에 없는 회원 — 예전 가입 흐름이 번호를 브라우저에만
      저장하고 서버로 안 보내던 시절의 회원입니다. 여기서 한 번 받아
      저장합니다. 안 그러면 서버가 주문을 거부합니다("연락처 형식이…"). */
-  if(!U.phone){
+  /* 연장 결제는 원 주문의 연락처를 그대로 씁니다 — 여기서 다시 묻지 않습니다 */
+  if(!U.phone && !EXT){
     const ph=(prompt('접속 정보를 문자로 보내드릴 연락처를 입력해 주세요.\n(예: 010-0000-0000)')||'').trim();
     if(!/^01[016789]-?\d{3,4}-?\d{4}$/.test(ph)){ if(ph)alert('연락처 형식이 올바르지 않습니다.'); return; }
     try{
@@ -534,11 +557,22 @@ async function startPay(){
   let orderName=PROD.n+' 가상컴 '+m.n, amt=tot;
   try{
     /* 회원은 서버가 로그인 출입증(쿠키)으로 찾습니다. credentials 를 꼭 붙입니다. */
+    /* 연장이면 extendOf(원 주문번호)만 보냅니다 — 상품·금액은 서버가 원 주문에서 정합니다 */
+    const body=EXT ? {extendOf:EXT, days:S.d, name:U.name, phone:U.phone}
+      : {specId:SPEC_ID, days:S.d, name:U.name, phone:U.phone,
+         via:U.via, socialId:U.kakaoId||U.googleId||'', email:U.email||''};
     const r=await fetch('/api/order-create',{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({specId:SPEC_ID, days:S.d, name:U.name, phone:U.phone,
-                           via:U.via, socialId:U.kakaoId||U.googleId||'', email:U.email||''})});
+      body:JSON.stringify(body)});
     if(r.ok){ const d=await r.json(); orderId=d.orderId; orderName=d.orderName; amt=d.amount; }
+    /* 연장은 서버에 주문이 없으면 절대 결제창을 열지 않습니다 (404 포함) */
+    else if(EXT){
+      const d=await r.json().catch(()=>({}));
+      if(r.status===401){ localStorage.removeItem('kvc-user'); alert(d.error||'다시 로그인해 주세요.'); location.href=NEXT; return; }
+      alert(d.error||'연장 주문을 만들지 못했습니다. 카카오톡 상담으로 알려 주세요.');
+      if(d.needNew && confirm('새로 신청하시겠습니까?')) location.href='product.html?g='+SPEC_ID;
+      return;
+    }
     else if(r.status===401){
       /* 로그인이 풀렸습니다 — 다시 로그인하고 이 상품으로 돌아옵니다 */
       localStorage.removeItem('kvc-user');
@@ -552,7 +586,7 @@ async function startPay(){
   }catch(e){ alert('서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'); return; }
 
   sessionStorage.setItem('kvc-last-order',JSON.stringify(
-    {orderId,name:PROD.n+' '+PROD.core,days:S.d,amt,pm:S.p}));
+    {orderId,name:EXT?('연장 · '+(EXT_PN||PROD.n)):PROD.n+' '+PROD.core,days:S.d,amt,pm:S.p,ext:!!EXT}));
   /* 목록에서 고른 PC 가 있으면 성공 주소에 실어 보냅니다.
      결제 승인 때 서버가 이 PC 를 먼저 배정해 봅니다. */
   const common={
@@ -596,7 +630,8 @@ const P=[
 ];
 /* 상품이 주소(?g=)로 정해지므로 기준가도 그 상품 것을 씁니다 */
 const BASE=PROD.p, w=n=>n.toLocaleString('ko-KR'), $=i=>document.getElementById(i);
-let S={d:30,p:'vb'};
+/* 연장은 [내 가상컴] 에서 고른 기간으로 시작하고, 결제 즉시 늘어나는 카드를 먼저 골라 둡니다 */
+let S={d:EXT?EXT_D:30,p:EXT?'cd':'vb'};
 
 function terms(){$('terms').innerHTML=TM.map(t=>
  `<button class="${S.d===t.d?'on':''}" data-t="${t.d}"><b>${t.n}</b>
@@ -608,13 +643,14 @@ function pays(){$('pays').innerHTML=P.map(p=>
 function calc(){
  const m=TM.find(t=>t.d===S.d);
  const base=Math.round(BASE*S.d/30), dc=Math.round(base*m.o/100), tot=base-dc;
- $('s-t').textContent=`${PROD.n} · ${m.n}`;
+ $('s-t').textContent=EXT?`연장 · ${EXT_PN||PROD.n} · ${m.n}`:`${PROD.n} · ${m.n}`;
  $('s-b').textContent=w(base)+'원';
  $('s-dn').textContent=m.o?`장기 할인 ${m.o}%`:'장기 할인';
  $('s-d').textContent=dc?'−'+w(dc)+'원':'0원';
  $('s-o').textContent=w(tot)+'원';
  $('stk-p').textContent=w(tot)+'원';
- $('go').textContent=S.p==='vb'?'계좌 받고 바로 이용하기':'결제하고 바로 이용하기';
+ $('go').textContent=EXT?(S.p==='vb'?'계좌 받고 연장하기':'결제하고 연장하기')
+   :S.p==='vb'?'계좌 받고 바로 이용하기':'결제하고 바로 이용하기';
 }
 document.addEventListener('click',e=>{
  const t=e.target.closest('[data-t]'); if(t){S.d=+t.dataset.t;terms();calc();return}
