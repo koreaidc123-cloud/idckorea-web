@@ -86,4 +86,12 @@ const missingCol = (e, col) => {
   return /42703|PGRST204|does not exist|Could not find/.test(m) && (!col || m.includes(col));
 };
 
-module.exports = { ready, sb, upsert, authed, baseUrl, missingCol };
+/* ★ "그 데이터베이스 함수가 아직 없다" 는 오류인지 알아봅니다 (2026-11-08 연장 결제)
+   db/10-연장결제.sql 을 대표님이 돌리시기 전에는 apply_extension 같은 함수가 없습니다.
+   그때는 예전 방식으로 돌아가야 하므로, 이 오류일 때만 골라 냅니다. */
+const missingFn = (e, name) => {
+  const m = String((e && e.message) || e || '');
+  return /PGRST202|42883|Could not find the function/.test(m) && (!name || m.includes(name));
+};
+
+module.exports = { ready, sb, upsert, authed, baseUrl, missingCol, missingFn };

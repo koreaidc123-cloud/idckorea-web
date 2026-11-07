@@ -161,6 +161,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
     <div class="sec-h"><h2>이용 중인 PC</h2><span class="cnt" id="cnt">0</span>
       <div class="r"><a class="btn btn-r btn-sm" href="live.html">＋ PC 추가 임대</a></div></div>
     <div id="warnbox"></div>
+    <div id="gracebox"></div>
     <div class="cards" id="cards"></div>
   </div>
 
@@ -232,7 +233,7 @@ function paintUser(){
       /* ★ 예전 저장값(카카오·구글 번호 등)은 지우지 않고 그 위에 덮습니다.
          통째로 바꾸면 그 번호가 사라져 결제 때 회원을 못 찾았습니다 (2026-11-07). */
       U=Object.assign({}, U||{}, {name:d.user.name, phone:d.user.phone, via:d.user.via, email:d.user.email,
-         pcs:d.pcs, orders:d.orders});
+         pcs:d.pcs, orders:d.orders, grace:d.grace||[], extendReady:!!d.extendReady});
       SERVER=true;
       localStorage.setItem('kvc-user',JSON.stringify(U));   // 화면 표시용
       paintUser(); return;
@@ -251,6 +252,24 @@ $('logout').onclick=async()=>{
   location.href='index.html';
 };
 
+/* ═══ 연장 결제 (2026-11-08) ═══
+   서버가 extendReady=true 를 줄 때만(= db/10 SQL 을 돌리고 대표님이 켜 두셨을 때) 보입니다.
+   아니면 예전처럼 [연장 요청] 이 카카오톡 상담으로 이어집니다.
+   [연장하기] → 30·60·90일 중 고르면 결제 화면(product.html 연장 모드)으로 갑니다.
+   가격은 서버 가격표(_price.js)에서 받은 값을 그대로 보여줍니다. */
+const EXT_ON=()=>!!(U&&U.extendReady);
+const extUrl=(x,d)=>'product.html?g='+encodeURIComponent(x.specId)+'&ext='+encodeURIComponent(x.orderNo)
+  +'&pn='+encodeURIComponent(x.pn)+'&d='+d;
+function extBox(x,key){
+  if(x.extWait) return `<div class="extwait" style="font-size:13px;color:#8A5A00;margin-top:8px">
+    결제하신 연장을 담당자가 확인하고 있습니다. 곧 연락드립니다.</div>`;
+  const ext=x.ext||{};
+  return `<div class="extbox" id="extbox-${key}" style="margin-top:10px;display:none;gap:8px">
+    ${[30,60,90].filter(d=>ext[d]).map(d=>`<a class="btn btn-o" data-extgo="${d}" href="${extUrl(x,d)}">
+      ${d}일 연장 · <b class="num">${w(ext[d])}원</b></a>`).join('')}
+    <div style="font-size:12px;color:var(--ink4)">같은 PC 그대로 · 자료 그대로 · 셋팅비 없음</div></div>`;
+}
+
 function render(){
   const list=U.pcs||[];
   $('cnt').textContent=list.length+'대';
@@ -259,7 +278,20 @@ function render(){
     ? `<div class="expsoon"><b>⏰ ${soon.length}대가 곧 만료됩니다.</b>
        만료되면 PC가 초기화되고 <b>자료는 복구되지 않습니다.</b> 미리 연장해 주세요.<br>
        ${esc(soon.map(p=>p.pn+' (D-'+p.left+')').join(' · '))}<br>
-       연장은 <a href="${KAKAO_CHAT}" target="_blank" rel="noopener" style="text-decoration:underline;font-weight:800">카카오톡으로 요청</a>해 주세요 — 같은 PC 그대로 기간만 늘려 드립니다.</div>` : '';
+       ${EXT_ON()? '아래 카드의 <b>[연장하기]</b> 로 바로 결제하시면 같은 PC 그대로 기간만 늘어납니다.'
+         : `연장은 <a href="${KAKAO_CHAT}" target="_blank" rel="noopener" style="text-decoration:underline;font-weight:800">카카오톡으로 요청</a>해 주세요 — 같은 PC 그대로 기간만 늘려 드립니다.`}</div>` : '';
+  /* 반납 유예 중인 PC — 기간은 끝났지만 자료가 아직 남아 있어 지금 연장하면 그대로 씁니다 */
+  const G=EXT_ON()? (U.grace||[]) : [];
+  $('gracebox').innerHTML=G.length? `<div class="expsoon" id="grace">
+      <b>🗂 기간이 끝났지만 아직 자료가 남아 있는 PC 가 있습니다.</b><br>
+      지금 연장하시면 <b>같은 PC 그대로</b> 이어서 쓰실 수 있습니다. 보관 기간이 지나면 PC 가 초기화되어 자료를 되살릴 수 없습니다.
+      ${G.map((g,i)=>`<div class="pc" style="margin-top:12px"><div class="pc-b">
+        <div class="row"><span class="k">문의번호</span><span class="v"><b>${esc(g.pn)}</b></span></div>
+        <div class="row"><span class="k">끝난 날</span><span class="v num">${g.end?fmt(g.end):'—'}</span></div>
+        ${g.holdUntil?`<div class="row"><span class="k">자료 보관</span><span class="v num">${fmt(g.holdUntil)} 까지</span></div>`:''}
+        ${g.extWait?'':`<div class="acts"><button class="btn btn-r" data-extopen="g${i}">연장하기</button></div>`}
+        ${extBox(g,'g'+i)}
+      </div></div>`).join('')}</div>` : '';
 
   $('cards').innerHTML = list.length ? list.map((p,i)=>{
     const pct=Math.round(p.left/p.days*100);
@@ -290,9 +322,12 @@ function render(){
         <div class="acts">
           <a class="btn btn-o" href="${KAKAO_CHAT}" target="_blank" rel="noopener">재부팅 요청</a>
           <a class="btn btn-o" href="${KAKAO_CHAT}" target="_blank" rel="noopener">비번 재발급 요청</a>
-          <a class="btn btn-r" href="${KAKAO_CHAT}" target="_blank" rel="noopener">연장 요청</a>
+          ${/* 연장 결제가 켜져 있으면 [연장하기] (바로 결제), 아니면 예전처럼 카카오톡 요청 */''}
+          ${EXT_ON()&&p.ext&&!p.extWait? `<button class="btn btn-r" data-extopen="${i}">연장하기</button>`
+            : EXT_ON()&&p.extWait? '' : `<a class="btn btn-r" href="${KAKAO_CHAT}" target="_blank" rel="noopener">연장 요청</a>`}
         </div>
-        <div style="font-size:12px;color:var(--ink4);margin-top:6px">세 버튼 모두 <b>카카오톡 상담</b>으로 연결됩니다.
+        ${EXT_ON()&&p.ext? extBox(p,i) : ''}
+        <div style="font-size:12px;color:var(--ink4);margin-top:6px">${EXT_ON()&&p.ext?'재부팅 · 비번 재발급은':'세 버튼 모두'} <b>카카오톡 상담</b>으로 연결됩니다.
           문의번호 <b>${esc(p.pn)}</b> 를 알려 주시면 관리자가 확인 후 처리해 드립니다.</div>
       </div></div>`}).join('')
     : `<div class="empty"><b>아직 이용 중인 PC가 없습니다</b>
@@ -332,6 +367,9 @@ document.addEventListener('click',async e=>{
     }
     el.classList.remove('mask'); pw.remove(); return;
   }
+  /* [연장하기] — 30·60·90일 고르는 칸을 펼치고 접습니다 (고르면 결제 화면으로 갑니다) */
+  const eo=e.target.closest('[data-extopen]');
+  if(eo){ const b=$('extbox-'+eo.dataset.extopen); if(b) b.style.display=b.style.display==='grid'?'none':'grid'; return; }
   /* 재부팅·비번 재발급·연장 — 위 카드의 카카오톡 링크로 바로 이어집니다 (가짜 "접수" 창은 없앴습니다) */
 });
 </script>

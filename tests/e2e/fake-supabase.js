@@ -7,6 +7,7 @@
      · PATCH  /rest/v1/<표>?조건        고치기 (Prefer: return=representation 이면 바뀐 줄을 돌려줌)
      · DELETE /rest/v1/<표>?조건        지우기
      · POST   /rest/v1/rpc/sweep_expired · rpc/beat
+              rpc/apply_extension · revert_extension · admin_extend_order (db/10 을 켰을 때만 · setV10)
      · 조건: eq neq gt gte lt lte in is like ilike (앞에 not. 가능)
 
    표 모양은 db/schema.sql + 02-heartbeat + 06-B 를 따라 만들었습니다.
@@ -36,7 +37,17 @@ const COLS = {
    코드가 멈추지 않는지 시험하려고 둘 다 흉내 냅니다. */
 const V08 = { pcs: ['wipe_at', 'hold_until'], orders: ['refund_state', 'refund_done_at'] };
 let v08 = true;
-const colsOf = t => (v08 && V08[t] ? COLS[t].concat(V08[t]) : COLS[t]);
+/* db/10-연장결제.sql 을 돌리면 생기는 칸 · 함수 (2026-11-08)
+   ★ 기본은 "아직 안 돌린 Supabase" (v10=false) 입니다 — 월요일 결제 시험 때의 실제 상태라서,
+     예전 시험들이 그대로 통과해야 합니다. 연장 결제 시험(EX*)만 setV10(true) 로 켭니다. */
+const V10 = { orders: ['kind', 'parent_id', 'ext_from', 'ext_to', 'applied_at'] };
+let v10 = false;
+const colsOf = t => {
+  let c = COLS[t];
+  if (v08 && V08[t]) c = c.concat(V08[t]);
+  if (v10 && V10[t]) c = c.concat(V10[t]);
+  return c;
+};
 const PK = { pcs: 'pn', pcs_unregistered: 'hw_id', members: 'id', orders: 'order_id', view_log: 'id', settings: 'k' };
 
 /* 다른 표를 붙여 읽기 (select=*,pcs(pn,anydesk) 같은 것) — 외래키 방향 */
@@ -54,7 +65,8 @@ function defaults(table) {
     case 'pcs': return { status: 'new', online: false, in_use: false, created_at: now, updated_at: now };
     case 'pcs_unregistered': return { first_seen: now, last_beat: now };
     case 'members': return { id: crypto.randomUUID(), marketing: false, created_at: now };
-    case 'orders': return { status: 'ready', setup_fee: 5000, tax_invoice: false, created_at: now };
+    case 'orders': return Object.assign({ status: 'ready', setup_fee: 5000, tax_invoice: false, created_at: now },
+      v10 ? { kind: 'new' } : {});
     case 'view_log': return { id: seqLog++, at: now };
     default: return {};
   }
@@ -224,6 +236,19 @@ function checkRow(table, row, self) {
     if (row.member_id != null && !DB.members.some(m => m.id === row.member_id)) {
       throw new PgErr(409, '23503', 'insert or update on table "orders" violates foreign key constraint "orders_member_id_fkey"');
     }
+    /* db/10 — 종류 검사 · 원 주문 외래키 · "결제 대기 연장은 원 주문당 하나" 부분 유일 색인 */
+    if (v10) {
+      if (row.kind != null && !['new', 'extend'].includes(row.kind)) {
+        throw new PgErr(400, '23514', 'new row for relation "orders" violates check constraint "orders_kind_check"');
+      }
+      if (row.parent_id != null && !DB.orders.some(o => o.order_id === row.parent_id)) {
+        throw new PgErr(409, '23503', 'insert or update on table "orders" violates foreign key constraint "orders_parent_id_fkey"');
+      }
+      if (row.kind === 'extend' && row.status === 'ready' &&
+          others.some(o => o.kind === 'extend' && o.status === 'ready' && o.parent_id === row.parent_id)) {
+        throw new PgErr(409, '23505', 'duplicate key value violates unique constraint "orders_one_ready_ext"');
+      }
+    }
   }
   if (table === 'pcs' && row.room && !['K', 'Y', 'D'].includes(row.room)) {
     throw new PgErr(400, '23514', 'new row for relation "pcs" violates check constraint "pcs_room_check"');
@@ -276,7 +301,104 @@ function rpc(name, body) {
     if (pc.cmd) { const c = pc.cmd; pc.cmd = null; pc.cmd_at = null; pc.cmd_by = null; return 'CMD:' + c; }
     return 'OK';
   }
+  /* db/10 함수들 — SQL 과 같은 순서 · 같은 조건으로 흉내 냅니다 (한 요청이 한 번에 끝나므로 잠금과 같음) */
+  if (v10 && name === 'apply_extension') return applyExtension(String((body || {}).p_order || ''));
+  if (v10 && name === 'revert_extension') {
+    const b = body || {};
+    return revertExtension(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status);
+  }
+  if (v10 && name === 'admin_extend_order') return adminExtendOrder(body || {});
   throw new PgErr(404, 'PGRST202', 'Could not find the function public.' + name);
+}
+
+/* ── db/10 apply_extension 흉내 ── */
+const ACTIVE = ['assigned', 'paid'];
+function logExt(pn, act, who) {
+  DB.view_log.push(Object.assign(defaults('view_log'), { pn, act, who: who || 'system:extend' }));
+}
+function applyExtension(id) {
+  const c = DB.orders.find(o => o.order_id === id);
+  if (!c) return { ok: false, reason: 'no_order' };
+  if (c.kind !== 'extend') return { ok: false, reason: 'not_extend' };
+  if (c.status !== 'paid') return { ok: true, skip: 'done', status: c.status, pn: c.pn, endsAt: c.ext_to };
+  const p = DB.orders.find(o => o.order_id === c.parent_id);
+  if (!p) return { ok: false, reason: 'no_parent' };
+  if (!['assigned', 'expired'].includes(p.status) || !p.pn) return { ok: false, reason: 'parent_state', status: p.status };
+  if (DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id)) {
+    return { ok: false, reason: 'pc_taken', pn: p.pn };
+  }
+  const pc = DB.pcs.find(x => x.pn === p.pn);
+  if (!pc || !['rent', 'hold'].includes(pc.status)) return { ok: false, reason: 'pc_gone', pn: p.pn, pcStatus: pc ? pc.status : null };
+  const now = Date.now();
+  const base = Math.max(p.ends_at ? Date.parse(p.ends_at) : now, now);
+  const end = base + Number(c.days) * 86400000;
+  const iso = ms => new Date(ms).toISOString();
+  Object.assign(p, { ends_at: iso(end), status: 'assigned' });
+  Object.assign(pc, { status: 'rent', updated_at: iso(now) });
+  if (v08) pc.hold_until = null;
+  Object.assign(c, { status: 'applied', pn: p.pn, ext_from: iso(base), ext_to: iso(end),
+    starts_at: iso(base), ends_at: iso(end), applied_at: iso(now) });
+  logExt(p.pn, `연장 결제 적용 ${c.order_id} · ${c.days}일 · 원 주문 ${p.order_id}`);
+  return { ok: true, pn: p.pn, endsAt: iso(end), from: iso(base), parent: p.order_id };
+}
+/* ── db/10 revert_extension 흉내 ── */
+function revertExtension(id, st) {
+  if (!['refunded', 'canceled'].includes(st)) return { ok: false, reason: 'bad_status' };
+  const c = DB.orders.find(o => o.order_id === id);
+  if (!c) return { ok: false, reason: 'no_order' };
+  if (c.kind !== 'extend' || c.status !== 'applied') return { ok: false, reason: 'not_applied', status: c.status };
+  const p = DB.orders.find(o => o.order_id === c.parent_id);
+  if (!p) return { ok: false, reason: 'no_parent' };
+  if (DB.orders.some(o => o.parent_id === c.parent_id && o.kind === 'extend' && o.status === 'applied' &&
+      o.order_id !== c.order_id && Date.parse(o.ext_to) > Date.parse(c.ext_to))) return { ok: false, reason: 'not_latest' };
+  if (Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
+  const now = Date.now(), iso = ms => new Date(ms).toISOString();
+  const vEnd = Date.parse(c.ext_from);
+  let vSt;
+  if (vEnd > now) { p.ends_at = c.ext_from; vSt = p.status; }
+  else {
+    p.ends_at = c.ext_from;
+    if (p.status === 'assigned') p.status = 'expired';
+    vSt = 'expired';
+    const pc = DB.pcs.find(x => x.pn === p.pn);
+    const busy = DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id);
+    if (pc && ['rent', 'hold'].includes(pc.status) && !busy) Object.assign(pc, { status: 'wipe', wipe_at: iso(now), updated_at: iso(now) });
+  }
+  Object.assign(c, { status: st, canceled_at: iso(now), ends_at: iso(Math.min(Date.parse(c.ends_at), now)) });
+  logExt(p.pn, `연장 되돌림 ${c.order_id} · 원 주문 ${p.order_id}`);
+  return { ok: true, pn: p.pn, parentEnd: c.ext_from, parentStatus: vSt };
+}
+/* ── db/10 admin_extend_order 흉내 — 실패하면 넣은 줄까지 없던 일로 ── */
+function adminExtendOrder(b) {
+  const days = Number(b.p_days);
+  if (![30, 60, 90].includes(days)) return { ok: false, reason: 'bad_days' };
+  const p = DB.orders.find(o => o.order_id === b.p_parent);
+  if (!p) return { ok: false, reason: 'no_parent' };
+  if (!['assigned', 'expired'].includes(p.status)) return { ok: false, reason: 'parent_state', status: p.status };
+  const id = 'MXT' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' +
+    crypto.randomBytes(3).toString('hex').toUpperCase();
+  const snapshot = JSON.stringify({ orders: DB.orders, pcs: DB.pcs, view_log: DB.view_log });
+  const row = Object.assign(defaults('orders'), {
+    order_id: id, member_id: p.member_id, pn: null, spec_id: p.spec_id, days, amount: Math.max(Number(b.p_amount) || 0, 0),
+    setup_fee: 0, status: 'paid', pay_method: String(b.p_method || '수동').slice(0, 30) || '수동', paid_at: new Date().toISOString(),
+    payer_name: p.payer_name, user_name: p.user_name, user_phone: p.user_phone, kind: 'extend', parent_id: p.order_id,
+  });
+  for (const c of colsOf('orders')) if (row[c] === undefined) row[c] = null;
+  checkRow('orders', row, null);
+  DB.orders.push(row);
+  const r = applyExtension(id);
+  if (!r.ok || r.skip) {
+    /* 거래 취소 — 바꾼 것을 전부 되돌립니다 */
+    const s = JSON.parse(snapshot);
+    DB.orders.length = 0; DB.orders.push(...s.orders.filter(o => o.order_id !== id));
+    for (const pc of DB.pcs) Object.assign(pc, s.pcs.find(x => x.pn === pc.pn));
+    DB.view_log.length = 0; DB.view_log.push(...s.view_log);
+    const pc = DB.pcs.find(x => x.pn === p.pn);
+    return { ok: false, reason: r.reason || 'fail', pcStatus: pc ? pc.status : null };
+  }
+  const lg = DB.view_log.slice().reverse().find(v => v.who === 'system:extend' && v.act.startsWith('연장 결제 적용 ' + id));
+  if (lg) lg.who = String(b.p_who || 'admin').slice(0, 60);
+  return Object.assign({}, r, { child: id });
 }
 
 /* ── 요청 하나 처리 ── */
@@ -380,9 +502,22 @@ function start(port) {
 module.exports = {
   start,
   get db() { return DB; },
-  reset() { DB = makeDb(); calls.length = 0; v08 = true; },
+  reset() { DB = makeDb(); calls.length = 0; v08 = true; v10 = false; },
   /* false = db/08 SQL 을 아직 안 돌린 Supabase 흉내 (새 칸 없음 · 옛 만료 정리) */
   setV08(on) { v08 = !!on; },
   get v08() { return v08; },
+  /* true = db/10-연장결제.sql 을 돌린 Supabase 흉내 (칸 · 함수 · ext_pay=1).
+     SQL 처럼 예전 주문은 kind='new' 로 채웁니다. 끄면 칸 · 함수 · ext_pay 가 없어집니다
+     (이미 넣은 값은 남지만 "없는 칸" 이라 읽을 수 없습니다 — 진짜 DB 에서 칸을 지운 것과 비슷) */
+  setV10(on) {
+    v10 = !!on;
+    DB.settings = DB.settings.filter(s => s.k !== 'ext_pay');
+    if (v10) {
+      for (const o of DB.orders) if (!o.kind) o.kind = 'new';
+      for (const k of ['parent_id', 'ext_from', 'ext_to', 'applied_at']) for (const o of DB.orders) if (o[k] === undefined) o[k] = null;
+      DB.settings.push({ k: 'ext_pay', v: '1' });
+    }
+  },
+  get v10() { return v10; },
   calls,
 };

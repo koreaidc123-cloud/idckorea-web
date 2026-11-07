@@ -13,13 +13,16 @@
    아래 기본값은 토스 문서에 공개된 샌드박스 키입니다 (실결제 불가).
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { tossSecret, tossAuth, tossGet, grabPc, period } = require('./_pay');
+const { tossSecret, tossAuth, tossGet, grabPc, period, applyExtension, logExtFail } = require('./_pay');
 
 const LIVE_KEY = () => /^live_sk_/.test(tossSecret());
 
 /* 가상계좌 웹훅 대조값 — 토스 결제 정보의 맨 바깥(secret)에 들어 있습니다.
    예전에는 virtualAccount 안에서 찾아서 늘 빈 값이 저장됐습니다. */
 const vaSecretOf = d => (d && (d.secret || (d.virtualAccount && d.virtualAccount.secret))) || null;
+
+/* 연장 결제는 됐는데 기간을 못 늘렸을 때 고객에게 보여줄 말 (자동 환불은 하지 않습니다) */
+const EXT_WAIT = '결제 완료 — 담당자가 곧 연락드립니다';
 
 /* ── 이미 처리된 주문 — 지금 상태를 그대로 돌려줍니다 ─────────────
    결제 성공 화면을 새로고침하거나, 승인 요청이 두 번 들어오면 여기로 옵니다.
@@ -40,6 +43,13 @@ async function existing(orderId, paymentKey) {
     status: (o.status === 'paid' || o.status === 'assigned') ? 'DONE' : 'UNKNOWN',
     totalAmount: o.amount, method: o.pay_method || null, orderId,
   };
+  /* 연장 결제 — 새 PC 가 아니라 "같은 PC · 새 만료일" 을 보여줍니다 (2026-11-08) */
+  if (o.kind === 'extend') {
+    const ext = o.status === 'applied'
+      ? { extended: true, pn: o.pn, endsAt: o.ext_to || o.ends_at || null }
+      : o.status === 'paid' ? { extended: false, extendFailed: true, warn: EXT_WAIT } : { extended: false };
+    return { code: 200, body: Object.assign({ assigned: null, again: true }, ext, pay) };
+  }
   const pc = o.status === 'assigned' && o.pn ? { pn: o.pn, anydesk: (o.pcs && o.pcs.anydesk) || '' } : null;
   return { code: 200, body: Object.assign({ assigned: pc, endsAt: o.ends_at || null, again: true }, pay) };
 }
@@ -148,26 +158,44 @@ module.exports = async (req, res) => {
      ★ 결제는 이미 승인됐으므로, 여기부터는 실패해도 고객에게 실패라고 하지 않습니다. */
   const now = new Date();
   const per = period(order.days, now);
+  const isExt = order.kind === 'extend';
   let assigned = null;
   try {
+    const claimBody = {
+      status: 'paid',
+      pay_key: paymentKey,
+      pay_method: data.method || null,
+      payer_name: (data.card && data.card.ownerType) || null,
+      paid_at: now.toISOString(),
+    };
+    /* 연장 결제는 기간을 여기서 정하지 않습니다 — apply_extension 이 원 주문 끝 뒤에 붙여 정합니다 */
+    if (!isExt) { claimBody.starts_at = per.starts_at; claimBody.ends_at = per.ends_at; }
     const claimed = await sb('orders', {
       method: 'PATCH',
       query: `?order_id=eq.${encodeURIComponent(orderId)}&status=eq.ready&select=order_id`,
-      body: {
-        status: 'paid',
-        pay_key: paymentKey,
-        pay_method: data.method || null,
-        payer_name: (data.card && data.card.ownerType) || null,
-        paid_at: now.toISOString(),
-        starts_at: per.starts_at,
-        ends_at: per.ends_at,
-      },
+      body: claimBody,
       prefer: 'return=representation',
     });
     if (!(claimed && claimed[0])) {
       /* 다른 요청(또는 웹훅)이 이미 처리했습니다 — 그 결과를 보여줍니다 */
       const x = await existing(orderId, paymentKey);
       return res.status(x.code).json(x.body);
+    }
+
+    /* ── 4'. 연장 결제 — PC 를 새로 잡지 않고 같은 PC 의 기간을 늘립니다 (2026-11-08) ──
+       못 늘렸으면(그 사이 PC 가 초기화 대기로 넘어감 등) 결제완료(paid)로 남깁니다.
+       관리자 [오늘 할 일] 에 "연장 결제 — 원래 PC 반납됨" 으로 뜹니다. 자동 환불은 하지 않습니다. */
+    if (isExt) {
+      const r = await applyExtension(orderId);
+      if (r.ok && !r.skip) {
+        return res.status(200).json(Object.assign({ assigned: null, extended: true, pn: r.pn, endsAt: r.endsAt }, data));
+      }
+      if (r.ok && r.skip) {
+        const x = await existing(orderId, paymentKey);
+        return res.status(x.code).json(x.body);
+      }
+      await logExtFail(orderId, r, '결제 승인');
+      return res.status(200).json(Object.assign({ assigned: null, extended: false, extendFailed: true, warn: EXT_WAIT }, data));
     }
 
     /* ── 4. PC 자동 배정 ──────────────────────────────────────

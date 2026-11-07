@@ -11,6 +11,15 @@
    act = tax     세금계산서 요청 { bizNo:"123-45-67890" }
    act = quote   환불 예상액 + 30일 연장 가격 미리 보기 (아무것도 안 바꿈)
    act = refund-done  직접 송금해야 하는 환불을 "보냈음" 으로 표시 { memo:"신한 11/7 송금" }
+   act = ext-apply    결제는 됐는데 기간을 못 늘린 연장 결제를 다시 적용 (2026-11-08 · db/10 필요)
+
+   ★ 연장 결제 (2026-11-08 · db/10-연장결제.sql)
+     연장 한 번 = 주문 표의 "연장 줄" 한 줄 (kind='extend', parent_id=원 주문).
+     · [30일 연장] 은 데이터베이스 함수 admin_extend_order 가 연장 줄을 만들고 같은 거래 안에서
+       기간까지 늘립니다. 함수가 없으면(=db/10 전) 예전 방식으로 원 주문을 직접 고칩니다.
+     · 연장 줄 해지·환불은 그 연장의 결제키로 토스 취소 → revert_extension 으로 기간 되돌림.
+       가장 마지막 연장만 환불할 수 있습니다. PC 는 원 주문 것이라 풀지 않습니다.
+     · 기간을 늘린 연장이 붙은 원 주문은 연장부터 환불해야 해지할 수 있습니다 (409).
 
    ★ 환불 규정 (대표님이 정하신 것)
        7일 이내 — 초기 셋팅비 5,000원 + 쓰신 기간을 뺀 나머지 환불
@@ -18,16 +27,30 @@
      서버가 이 규칙대로 금액을 계산해 알려줍니다.
      관리자가 다른 금액을 넣으면 그 사실이 기록에 남습니다.
    ═══════════════════════════════════════════════════════════════ */
-const { ready, sb, missingCol } = require('./_supa');
+const { ready, sb, missingCol, missingFn } = require('./_supa');
 const { quote: priceQuote } = require('./_price');
 const { verify, who } = require('./admin-login');
-const { tossSecret, grabPc, lockPc, releasePc, pcBusyByOther, period } = require('./_pay');
+const { tossSecret, grabPc, lockPc, releasePc, pcBusyByOther, period, applyExtension } = require('./_pay');
 
 const DAY = 86400000;
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : null) || null;
 
 /* 환불 금액 계산 — 화면에서도 같은 값을 보여줄 수 있게 따로 뺐습니다 */
 function refundQuote(order, setupFee, at) {
+  /* ★ 연장 결제 줄 (2026-11-08) — 셋팅비가 없고(이미 셋팅된 같은 PC), 쓴 날은 "연장분이 시작된 날" 부터 셉니다.
+       · 아직 기간을 못 늘린 연장(paid)은 하루도 안 쓴 것이라 전액
+       · 원 주문이 끝나기 전에 미리 한 연장은 시작 전이면 0일 사용 → 전액 */
+  if (order.kind === 'extend' && ['paid', 'applied'].includes(order.status)) {
+    const perDay = order.days > 0 ? order.amount / order.days : 0;
+    if (order.status === 'paid') {
+      return { used: 0, perDay: Math.round(perDay), setupFee: 0, refund: Number(order.amount) || 0, rule: '연장 미적용 — 전액', allowed: true };
+    }
+    const from = Date.parse(order.ext_from || order.starts_at || order.paid_at || 0);
+    const used = Math.max(0, Math.ceil((at - from) / DAY));
+    if (used > 7) return { used, perDay: Math.round(perDay), setupFee: 0, refund: 0, rule: '연장분 7일 초과', allowed: false };
+    const refund = Math.max(0, Math.floor(order.amount - perDay * used));
+    return { used, perDay: Math.round(perDay), setupFee: 0, refund, rule: used ? '연장분 7일 이내' : '연장분 시작 전 — 전액', allowed: true };
+  }
   const start = order.starts_at ? Date.parse(order.starts_at) : Date.parse(order.paid_at || 0);
   const used = Math.max(1, Math.ceil((at - start) / DAY));          // 하루라도 쓰면 1일
   const perDay = order.days > 0 ? order.amount / order.days : 0;
@@ -110,7 +133,7 @@ module.exports = async (req, res) => {
   const no = str(b.no, 64);
   const act = str(b.act, 12);
   if (!no) return res.status(400).json({ error: '주문번호가 필요합니다' });
-  if (!['extend', 'cancel', 'move', 'assign', 'tax', 'quote', 'cust', 'refund-done'].includes(act)) {
+  if (!['extend', 'cancel', 'move', 'assign', 'tax', 'quote', 'cust', 'refund-done', 'ext-apply'].includes(act)) {
     return res.status(400).json({ error: '알 수 없는 처리입니다' });
   }
 
@@ -191,6 +214,44 @@ module.exports = async (req, res) => {
              + `자료가 지워졌을 수 있어 그대로 연장하지 않습니다.\n`
              + `빈 PC 로 [수동 주문 등록] 을 해 주세요.`,
       });
+      const addAmt0 = Math.round(Number(b.amount) || 0);
+      if (addAmt0 < 0) return res.status(400).json({ error: '금액이 올바르지 않습니다' });
+
+      /* ★ 연장 줄 자체를 또 연장하지는 않습니다 — 원 주문에서 연장합니다 (2026-11-08) */
+      if (order.kind === 'extend' && order.status !== 'assigned') {
+        return res.status(409).json({ error: `연장 결제 줄입니다. 원 주문(${order.parent_id || '?'})에서 연장해 주세요` });
+      }
+
+      /* ★ 새 방식 (db/10 후) — 데이터베이스 함수 하나가 "연장 줄 만들기 + 기간 늘리기 + PC 임대중" 을
+           한 거래로 끝냅니다 (Codex T-0182).
+             · 예전엔 PC 를 잡고 → 주문을 고치는 사이에 틈이 있었고,
+             · 응답이 끊기면 성공한 연장을 "실패" 로 보고 PC 를 되돌릴 수 있었습니다.
+           함수가 없으면(=db/10 전) 아래 예전 방식으로 갑니다 (기록에 "예전 방식" 이라고 남김). */
+      let useOld = false;
+      try {
+        const r = await sb('rpc/admin_extend_order', { method: 'POST', body: {
+          p_parent: no, p_days: days, p_amount: addAmt0,
+          p_method: str(b.payMethod, 30) || '수동', p_who: who(req) } });
+        if (r && r.ok) {
+          return res.status(200).json({ ok: true, endsAt: r.endsAt, child: r.child || null, via: 'extend-row' });
+        }
+        const why = (r && r.reason) || '';
+        if (why === 'pc_gone' && r.pcStatus === 'wipe') return wipeErr();
+        if (why === 'pc_gone') {
+          return res.status(409).json({ error: `${order.pn} 의 상태가 ${r.pcStatus || '없음'} 이라 연장할 수 없습니다.\n`
+            + `점검 중이면 점검을 마친 뒤, 아니면 [PC 이전] 이나 [수동 주문 등록] 을 해 주세요` });
+        }
+        if (why === 'pc_taken') {
+          return res.status(409).json({ error: `${order.pn} 은 지금 다른 주문이 쓰고 있습니다. 연장 대신 [PC 이전] 으로 빈 PC 를 배정해 주세요` });
+        }
+        if (why === 'parent_state') return res.status(409).json({ error: '이용중이거나 만료된 주문만 연장할 수 있습니다 (현재: ' + order.status + ')' });
+        return res.status(409).json({ error: '연장하지 못했습니다 (' + (why || '알 수 없음') + ')' });
+      } catch (e) {
+        if (!missingFn(e, 'admin_extend_order')) throw e;
+        useOld = true;
+        console.warn('[연장] admin_extend_order 함수가 없어 예전 방식으로 연장합니다 (db/10 SQL 실행 전)');
+      }
+      if (!useOld) return res.status(500).json({ error: '연장 처리 중 알 수 없는 상태입니다' });
       let grabbedFrom = null;          // 잡기 전 상태 (주문 저장이 실패하면 되돌릴 때 씀)
       if (order.pn) {
         const pq = `?pn=eq.${encodeURIComponent(order.pn)}`;
@@ -240,14 +301,43 @@ module.exports = async (req, res) => {
         }
         throw e;
       }
-      await log(order.pn, `연장 ${days}일 · ${addAmt.toLocaleString('ko-KR')}원 · ${str(b.payMethod, 30) || '수동'}`);
-      return res.status(200).json({ ok: true, endsAt: newEnd.toISOString(), days: Number(order.days) + days });
+      await log(order.pn, `연장 ${days}일 · ${addAmt.toLocaleString('ko-KR')}원 · ${str(b.payMethod, 30) || '수동'}`
+        + ' · 예전 방식 (db/10 실행 전)');
+      return res.status(200).json({ ok: true, endsAt: newEnd.toISOString(), days: Number(order.days) + days, via: 'old' });
     }
 
     /* ── 해지 · 환불 ── */
     if (act === 'cancel') {
       if (order.status === 'canceled' || order.status === 'refunded') {
         return res.status(409).json({ error: '이미 해지된 주문입니다' });
+      }
+      /* ── 연장 결제와 얽힌 해지 (2026-11-08 · db/10) ──────────────────
+         · 연장 줄(기간을 늘려 둔 것)은 "가장 마지막 연장" 만 환불합니다.
+           중간 것을 빼면 그 뒤 연장들의 날짜가 어긋납니다.
+         · 원 주문에 기간을 늘린 연장이 붙어 있으면 원 주문은 바로 해지하지 않습니다.
+           연장부터 하나씩 환불하라고 목록을 알려 드립니다. */
+      const extApplied = order.kind === 'extend' && order.status === 'applied';
+      if (extApplied) {
+        const sibs = await sb('orders', { query: `?select=order_id,ext_to&parent_id=eq.${encodeURIComponent(order.parent_id)}`
+          + `&kind=eq.extend&status=eq.applied&order_id=neq.${encodeURIComponent(no)}` }) || [];
+        const later = sibs.filter(x => Date.parse(x.ext_to) > Date.parse(order.ext_to));
+        if (later.length) {
+          return res.status(409).json({ error: '가장 마지막 연장부터 환불해 주세요.\n먼저 환불할 연장: '
+            + later.map(x => x.order_id).join(', '), notLatest: true });
+        }
+      } else if (order.kind !== 'extend') {
+        let kids = [];
+        try {
+          kids = await sb('orders', { query: `?select=order_id,days,ext_to&parent_id=eq.${encodeURIComponent(no)}`
+            + `&kind=eq.extend&status=eq.applied&order=ext_to.desc` }) || [];
+        } catch (e) { if (!missingCol(e)) throw e; kids = []; }   // db/10 전이면 연장 줄이 없습니다
+        if (kids.length) {
+          return res.status(409).json({
+            error: `이 주문에는 기간을 늘린 연장 결제가 ${kids.length}건 붙어 있습니다.\n`
+                 + `연장부터 마지막 것 순서로 하나씩 환불한 뒤 해지해 주세요.\n`
+                 + kids.map(x => `· ${x.order_id} (${x.days}일)`).join('\n'),
+            extensions: kids.map(x => x.order_id) });
+        }
       }
       const q = refundQuote(order, setupFee, now.getTime());
       const asked = (b.refund === undefined || b.refund === null || b.refund === '')
@@ -289,6 +379,21 @@ module.exports = async (req, res) => {
            db/08 SQL 을 아직 안 돌려 칸이 없으면, 그 칸만 빼고 저장합니다
            (해지 자체가 막히면 안 되므로). 그때는 기록(view_log)에만 남습니다. */
       const refundState = tc.done ? 'toss_done' : asked > 0 ? 'manual_pending' : null;
+
+      /* ★ 기간을 늘려 둔 연장이면, 돈을 돌려준 뒤 원 주문의 기간을 되돌립니다 (revert_extension).
+           데이터베이스 함수가 원 주문 · 연장 줄 · PC 를 한 번에 고칩니다.
+           되돌리기에 실패해도(그 사이 다른 연장이 붙음 등) 돈은 이미 돌려줬으므로
+           연장 줄의 환불 기록은 남기고, 화면에 "기간은 직접 확인" 이라고 알립니다. */
+      let reverted = null;
+      if (extApplied) {
+        try {
+          reverted = await sb('rpc/revert_extension', { method: 'POST',
+            body: { p_order: no, p_status: asked > 0 ? 'refunded' : 'canceled' } });
+        } catch (e) { reverted = { ok: false, reason: 'rpc', detail: String(e.message || e).slice(0, 120) }; }
+        if (!(reverted && reverted.ok)) {
+          await log(order.pn, `⚠ 연장 ${no} 환불 후 기간 되돌리기 실패 (${(reverted && reverted.reason) || '?'}) — 원 주문 ${order.parent_id} 기간 직접 확인`);
+        }
+      }
       const cancelBody = {
         status: asked > 0 ? 'refunded' : 'canceled',
         canceled_at: now.toISOString(),
@@ -316,7 +421,10 @@ module.exports = async (req, res) => {
          ★ 그 PC 를 지금 다른 주문이 쓰고 있으면 건드리지 않습니다 (2026-11-07).
            만료된 옛 주문을 뒤늦게 해지하면, 그 사이 같은 PC 를 받은 새 고객의
            PC 가 "임대 가능" 으로 풀려 또 팔릴 수 있었습니다. */
-      const pcRes = await releasePc(order.pn, no, now);
+      /* ★ 연장 줄의 PC 는 원 주문 것입니다 — 풀면 고객이 쓰던 PC 가 초기화 대기로 갑니다.
+           (기간이 끝났으면 revert_extension 이 알아서 초기화 대기로 보냅니다) */
+      const isExtRow = order.kind === 'extend' && ['applied', 'paid'].includes(order.status);
+      const pcRes = isExtRow ? 'none' : await releasePc(order.pn, no, now);
       /* 돈이 실제로 돌아갔는지를 기록에 남깁니다.
          나중에 "환불했다는데 안 들어왔다" 는 문의가 오면 여기를 봅니다. */
       const 방법 = tc.done ? '토스 취소 완료'
@@ -331,6 +439,9 @@ module.exports = async (req, res) => {
         refundState, refundTracked: stateSaved,               // 송금 추적 칸에 적었는가 (db/08 전이면 false)
         moneyBack: tc.done,                                   // 토스가 실제로 돌려줬는가
         manualRefund: !tc.done && asked > 0,                  // 관리자가 직접 보내야 하는가
+        /* 연장 줄 환불이면 원 주문 기간을 되돌렸는가 (false 면 직접 확인) */
+        extReverted: extApplied ? !!(reverted && reverted.ok) : undefined,
+        parentEnd: extApplied && reverted && reverted.ok ? reverted.parentEnd : undefined,
       });
     }
 
@@ -390,6 +501,10 @@ module.exports = async (req, res) => {
 
     /* ── PC 이전 (고장 · 사양 변경) ── */
     if (act === 'move') {
+      /* 연장 줄은 원 주문의 기간 기록일 뿐입니다 — PC 이전은 원 주문에서 합니다 (2026-11-08) */
+      if (order.kind === 'extend' && order.status === 'applied') {
+        return res.status(409).json({ error: `연장 결제 줄입니다. 원 주문(${order.parent_id || '?'})에서 PC 이전을 해 주세요` });
+      }
       const toPn = String(b.toPn || '').toUpperCase().trim();
       if (!/^[KYD]-\d{3}$/.test(toPn)) return res.status(400).json({ error: '옮길 품번을 정확히 적어 주세요' });
       if (toPn === order.pn) return res.status(400).json({ error: '같은 PC 입니다' });
@@ -442,6 +557,24 @@ module.exports = async (req, res) => {
       }
       await log(toPn, `PC 이전 ${from || '없음'} → ${toPn} · ${str(b.why, 100) || '사유 없음'}`);
       return res.status(200).json({ ok: true, from, to: toPn, anydesk: to.anydesk || null });
+    }
+
+    /* ── 연장 결제 다시 적용 (2026-11-08) ─────────────────────────────
+       고객이 연장 결제를 했는데 그 순간 PC 가 초기화 대기 등이라 기간을 못 늘린 경우
+       (결제완료 · "연장 결제 — 원래 PC 반납됨"). 관리자가 PC 를 반납 유예/임대중으로
+       되돌린 뒤 여기서 다시 적용합니다. 안 되면 [PC 배정] 으로 새 PC 를 드리거나 [해지·환불] 합니다. */
+    if (act === 'ext-apply') {
+      if (order.kind !== 'extend' || order.status !== 'paid') {
+        return res.status(409).json({ error: '기간을 못 늘린 연장 결제(결제완료)만 다시 적용할 수 있습니다' });
+      }
+      const r = await applyExtension(no);
+      if (r.ok && !r.skip) {
+        return res.status(200).json({ ok: true, pn: r.pn, endsAt: r.endsAt });
+      }
+      const why = { pc_gone: `원래 PC 상태가 ${r.pcStatus || '없음'} 입니다 (임대중·반납 유예여야 함)`,
+        pc_taken: '원래 PC 를 다른 주문이 쓰고 있습니다', parent_state: '원 주문이 해지·환불된 상태입니다',
+        rpc: '데이터베이스 함수가 없습니다 (db/10 실행 필요)' }[r.reason] || (r.reason || r.skip || '알 수 없음');
+      return res.status(409).json({ error: '다시 적용하지 못했습니다 — ' + why + '\n[PC 배정] 으로 새 PC 를 드리거나 [해지 · 환불] 해 주세요' });
     }
 
     /* ── 세금계산서 요청 ── */

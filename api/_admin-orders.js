@@ -50,30 +50,45 @@ module.exports = async (req, res) => {
     /* 환불 송금 추적 칸(refund_state·refund_done_at)은 db/08 SQL 을 돌려야 생깁니다.
        없으면 그 칸만 빼고 다시 받습니다 — 목록 전체가 안 나오면 안 되므로. */
     let refundCols = true;
-    const load = async (c, withRefund) => {
+    /* ★ 연장 결제 칸(kind·parent_id·ext_from·ext_to·applied_at)은 db/10 SQL 을 돌려야 생깁니다 (2026-11-08).
+         없으면 그 칸만 빼고 받습니다. 있으면
+           · 기간을 늘려 둔 연장 줄(applied) 중 아직 안 끝난 것은 개수 제한 없이 받습니다
+             (원 주문 상세에 "연장 내역" 을 보여주고, 마지막 연장만 환불할 수 있게)
+           · 끝난 연장 줄은 지난 주문과 같이 최근 2000건 안에서 받습니다 */
+    let extCols = true;
+    const load = async (c, withRefund, withExt) => {
       const active = await fetchAll(
         `?select=${c}&status=in.(paid,assigned,ready)&order=ends_at.asc.nullslast,order_id.asc`);
       /* 1건 더 받아 봐서, 정말 2000건을 넘을 때만 "생략됨" 이라고 합니다 (딱 2000건이면 생략 아님) */
       const hist = all ? await fetchAll(
-        `?select=${c}&status=in.(expired,refunded,canceled)&order=ends_at.desc.nullslast,order_id.asc`, HIST_MAX + 1) : [];
+        `?select=${c}&status=in.(expired,refunded,canceled${withExt ? ',applied' : ''})&order=ends_at.desc.nullslast,order_id.asc`, HIST_MAX + 1) : [];
       /* ★ 직접 송금 대기 환불은 오래됐어도 끝까지 받습니다. 2000건 밖으로 밀려
            [오늘 할 일] 에서 사라지면 고객에게 돈을 안 보낸 채 잊게 됩니다 (Codex T-0179) */
       const owed = withRefund ? await fetchAll(
         `?select=${c}&status=in.(refunded,canceled)&refund_state=eq.manual_pending&order=order_id.asc`) : [];
-      return { active, hist, owed };
+      const ext = withExt ? await fetchAll(
+        `?select=${c}&status=eq.applied&ends_at=gte.${new Date().toISOString()}&order=order_id.asc`) : [];
+      return { active, hist, owed, ext };
     };
+    const EXT_SEL = ',kind,parent_id,ext_from,ext_to,applied_at';
+    const REF_SEL = ',refund_state,refund_done_at';
     let got;
-    try {
-      got = await load(cols + ',refund_state,refund_done_at', true);
-    } catch (e) {
-      if (!missingCol(e, 'refund_')) throw e;
-      refundCols = false;
-      got = await load(cols, false);
+    /* 칸이 없다는 오류가 나면 그 묶음만 빼고 다시 — 08 · 10 을 각각 돌렸는지와 상관없이 목록이 나와야 합니다 */
+    for (let tries = 0; ; tries++) {
+      try {
+        got = await load(cols + (refundCols ? REF_SEL : '') + (extCols ? EXT_SEL : ''), refundCols, extCols);
+        break;
+      } catch (e) {
+        if (tries < 2 && extCols && /kind|parent_id|ext_from|ext_to|applied_at/.test(String(e.message || '')) && missingCol(e)) { extCols = false; continue; }
+        if (tries < 2 && refundCols && missingCol(e, 'refund_')) { refundCols = false; continue; }
+        throw e;
+      }
     }
     const historyCut = got.hist.length > HIST_MAX;
     const hist = got.hist.slice(0, HIST_MAX);
     const seen = new Set(got.active.concat(hist).map(o => o.order_id));
-    const rows = got.active.concat(hist, got.owed.filter(o => !seen.has(o.order_id)));
+    const extra = got.owed.concat(got.ext).filter(o => !seen.has(o.order_id) && (seen.add(o.order_id), true));
+    const rows = got.active.concat(hist, extra);
 
     const now = Date.now();
     const orders = (rows || []).map(o => {
@@ -112,6 +127,12 @@ module.exports = async (req, res) => {
         /* 환불 송금 상태 — toss_done · manual_pending(직접 보내야 함) · manual_done */
         refundState: o.refund_state || null,
         refundDoneAt: o.refund_done_at || null,
+        /* 연장 결제 (db/10) — kind:'extend' 면 원 주문 parent 의 기간을 extFrom ~ extTo 만큼 늘린 줄 */
+        kind: o.kind || 'new',
+        parent: o.parent_id || null,
+        extFrom: o.ext_from || null,
+        extTo: o.ext_to || null,
+        appliedAt: o.applied_at || null,
       };
     });
 
@@ -139,9 +160,11 @@ module.exports = async (req, res) => {
         live: orders.filter(o => o.st === 'assigned').length,
         waiting: orders.filter(o => o.st === 'ready').length,
         unassigned: orders.filter(o => o.st === 'paid').length,   // 결제됐는데 배정 안 된 것
-        expiring: orders.filter(o => o.left !== null && o.left <= 5 && o.left >= 0).length,
-        expired: orders.filter(o => o.left !== null && o.left < 0).length,
+        /* 연장 줄은 원 주문과 같은 날 끝나므로 두 번 세지 않습니다 */
+        expiring: orders.filter(o => o.kind !== 'extend' && o.left !== null && o.left <= 5 && o.left >= 0).length,
+        expired: orders.filter(o => o.kind !== 'extend' && o.left !== null && o.left < 0).length,
       },
+      extCols,             // 연장 결제 칸이 있는가 (false 면 db/10 SQL 전)
       revenue: orders.reduce((s, o) => s + (o.amt || 0), 0),
       members,
       orders,
