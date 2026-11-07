@@ -1,0 +1,17 @@
+{
+  "name": "kvc-e2e",
+  "version": "1.0.0",
+  "description": "한국 가상컴 E2E 시험 (가짜 DB·가짜 토스)",
+  "main": "index.js",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright-core": "^1.49.1"
+  },
+  "private": "true"
+}
