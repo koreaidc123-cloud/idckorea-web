@@ -177,12 +177,17 @@ module.exports = async (req, res) => {
       /* 이미 있는 품번이면 토큰을 새로 발급합니다.
          위치를 적어 오셨으면 그 위치로 옮기고, 안 적으셨으면 원래 자리를 둡니다. */
       if (!hasLoc) { delete row.rack; delete row.fl; delete row.slot; }
-      await sb('pcs', {
+      /* 저장하는 순간에도 "임대 중이 아님"을 조건으로 겁니다.
+         확인과 저장 사이에 임대가 시작되면 아무 줄도 바뀌지 않습니다. */
+      const changed = await sb('pcs', {
         method: 'PATCH',
-        query: `?pn=eq.${encodeURIComponent(finalPn)}`,
+        query: `?pn=eq.${encodeURIComponent(finalPn)}&status=neq.rent&select=pn`,
         body: row,
-        prefer: 'return=minimal',
+        prefer: 'return=representation',
       });
+      if (!changed || !changed.length) {
+        return res.status(409).json({ error: `${finalPn} 은 고객이 쓰고 있는 PC 라서 다시 등록할 수 없습니다.` });
+      }
     } else {
       /* 자리까지 적어 오셨으면 "검증 대기", 안 적으셨으면 "미등록" 으로 둡니다.
          검증 대기 = 담당자가 실제 접속만 확인하면 판매 재고로 올라갑니다. */

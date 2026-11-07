@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
       : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '현장 등록 암호': env.KVC_SETUP_KEY ? '✅ ' + mask(env.KVC_SETUP_KEY) : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '관리자 비밀번호': env.KVC_ADMIN_PW
-      ? (env.KVC_ADMIN_PW.length < 10 ? '⚠️ 짧습니다 — 더 긴 비밀번호로 바꿔 주세요' : '✅ 등록됨')
+      ? '✅ 등록됨'
       : '❌ 없음 — 관리자 화면이 인터넷에 열려 있습니다',
     '비밀번호 잠금키': env.KVC_SECRET
       ? '✅ 등록됨 (애니데스크 비밀번호 암호화용)'

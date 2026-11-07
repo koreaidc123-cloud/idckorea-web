@@ -84,7 +84,8 @@ Write-Host "  가져온 곳 : $from"
 
 # ── 검사 — 하나라도 어긋나면 바꾸지 않습니다 ──
 $bad = $null
-if ([string]::IsNullOrWhiteSpace($new) -or $new.Length -lt 5000) { $bad = '파일이 너무 짧습니다' }
+if (-not $newBytes -or $newBytes.Length -lt 5000) { $bad = '서명 확인된 파일이 없습니다' }
+elseif ([string]::IsNullOrWhiteSpace($new) -or $new.Length -lt 5000) { $bad = '파일이 너무 짧습니다' }
 elseif ($new -notlike "*$Mark*")                                { $bad = '우리 프로그램이 아닙니다' }
 else { try { $null = [ScriptBlock]::Create($new) } catch { $bad = '파일이 깨졌습니다' } }
 
