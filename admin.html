@@ -71,6 +71,11 @@ a{color:inherit;text-decoration:none}
 .nav .sep{margin:12px 12px 8px;font-size:10.5px;font-weight:800;color:#4A5260;letter-spacing:.06em}
 .side .ft{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:11.5px;color:#6B7381}
 .side .ft b{color:#9AA2AE}
+.side .me{padding:8px 18px 2px;font-size:12px;color:#9AA2AE}
+.side .me b{color:#fff;font-weight:800}
+.logtbl td{font-size:12.5px;vertical-align:top}
+.recon-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.recon-h input{height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px}
 
 .main{margin-left:224px;padding:22px 26px 60px;min-height:100vh}
 .top{display:flex;align-items:center;gap:14px;margin-bottom:20px}
@@ -300,7 +305,7 @@ a{color:inherit;text-decoration:none}
 @media(max-width:820px){
   .side{width:64px}
   .side .lg{justify-content:center;padding:16px 8px}.side .lg b,.side .lg span{display:none}
-  .nav a span,.nav .sep,.side .ft{display:none}
+  .nav a span,.nav .sep,.side .ft,.side .me{display:none}
   .nav a{justify-content:center;position:relative}
   /* ★ 2026-11-07 — 휴대폰에서도 숫자 배지를 보여줍니다 (예전엔 통째로 숨겨서
        오늘 할 일이 몇 건인지 휴대폰으로는 알 수 없었습니다). 아이콘 오른쪽 위에 작게. */
@@ -378,8 +383,12 @@ a{color:inherit;text-decoration:none}
     <a href="#noti" data-v="noti"><i>🔔</i><span>알림 발송</span><em class="bd" id="bd-noti"></em></a>
     <div class="sep">도구</div>
     <a href="#find" data-v="find"><i>🔎</i><span>통합검색</span></a>
+    <!-- 토스 거래내역과 우리 주문을 맞대 보는 화면 (읽기만 · 2026-11-08) -->
+    <a href="#recon" data-v="recon"><i>💳</i><span>정산 · 대사</span></a>
     <a href="#set" data-v="set"><i>⚙️</i><span>설정</span></a>
   </nav>
+  <!-- 지금 로그인한 관리자 이름 — 관리자마다 비밀번호가 따로라 기록에 이 이름이 남습니다 (2026-11-08) -->
+  <div class="me" id="adm-me" hidden></div>
   <!-- 로그아웃 — 다른 사람과 같이 쓰는 PC 에서 관리자 화면을 닫을 때 -->
   <div class="nav" style="flex:none;padding-top:0"><a href="#" id="adm-logout"><i>🚪</i><span>로그아웃</span></a></div>
   <div class="ft" id="ftstate">불러오는 중…</div>
@@ -514,13 +523,30 @@ function racksFromPCS(){
 const rackOcc=(room,rack)=>PCS.filter(p=>p.room===room&&p.rack===rack);
 const floorMaxSlot=(room,rack,fl)=>rackOcc(room,rack).filter(p=>p.fl===fl).reduce((m,p)=>Math.max(m,p.slot),0);
 
-/* 열람 기록 */
-let VLOG=[];
-try{ VLOG=JSON.parse(localStorage.getItem('kvc-vlog')||'[]') }catch(e){}
-function logView(pn,act){
-  VLOG.unshift({pn, t:new Date().toLocaleString('ko-KR'), act:act||'열람'});
-  VLOG=VLOG.slice(0,80);
-  localStorage.setItem('kvc-vlog',JSON.stringify(VLOG));
+/* 열람 기록
+   ★ 2026-11-08 — 예전엔 이 브라우저(localStorage)에만 적어 두는 메모였습니다.
+     다른 PC·휴대폰에서 한 일은 안 보였고, 누가 했는지도 남지 않았습니다.
+     이제 기록은 서버(view_log)에서 읽어 옵니다 — 서버가 일을 처리할 때 로그인한 관리자 이름으로 남깁니다.
+     logView 는 남겨 두되(부르는 곳이 많아서) 이 브라우저에는 아무것도 저장하지 않고,
+     열려 있는 PC 상세의 기록만 서버에서 다시 받아옵니다. 예전에 이 브라우저에 쌓인 메모는 지웁니다. */
+try{ localStorage.removeItem('kvc-vlog') }catch(e){}
+function logView(pn){
+  const el=$('dr-log');
+  if(el && pn && el.dataset.pn===pn) setTimeout(()=>loadPcLog(pn),300);
+}
+/* 서버 기록 한 줄 → 화면 글자 (모두 esc 로 글자 그대로) */
+const logLine=r=>esc(new Date(r.at).toLocaleString('ko-KR')+' — '+(r.act||'')+(r.who?' · '+r.who:''));
+/* PC 상세의 "변경 · 열람 기록" — 최근 90일 중 최근 6건 */
+async function loadPcLog(pn){
+  const el=$('dr-log'); if(!el || el.dataset.pn!==pn) return;
+  if(!LIVE){ el.textContent='서버에 연결된 상태에서만 보입니다'; return; }
+  try{
+    const r=await fetch('/api/admin?do=log&days=90&pn='+encodeURIComponent(pn),{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    const now=$('dr-log'); if(!now || now.dataset.pn!==pn) return;     // 그 사이 다른 PC 를 열었으면 버립니다
+    if(!r.ok){ now.textContent=d.error||'기록을 불러오지 못했습니다'; return; }
+    now.innerHTML=(d.rows||[]).slice(0,6).map(logLine).join('<br>')||'기록 없음';
+  }catch(e){ const now=$('dr-log'); if(now) now.textContent='기록을 불러오지 못했습니다'; }
 }
 
 /* ═══════════════ 공통 렌더 ═══════════════ */
@@ -1267,7 +1293,120 @@ function vSet(){
     <button class="btn btn-b" id="set-save">저장</button>
     <button class="btn btn-o" id="set-reset">기본값으로</button>
     <span id="set-msg" style="align-self:center;font-size:13px;color:var(--gr);font-weight:700"></span>
+  </div>
+  ${vAdminLog()}`;
+}
+
+/* ═══════════════ 설정 아래 — 관리자 기록 (2026-11-08) ═══════════════
+   누가 · 언제 · 무엇을 했는지 서버 기록(view_log)을 그대로 보여줍니다.
+   · 품번 · 주문번호 · 기간(1~90일) 으로 걸러 봅니다. 최근 것부터 200건까지.
+   · [로그인 기록] 을 고르면 로그인 성공 · 실패만 봅니다 (실패는 IP 대신 섞은 값으로만 남습니다).
+   ★ 30초마다 화면을 다시 그려도 결과가 사라지지 않게, 조건(LOGF)과 결과(LOGR)를 따로 들고 있습니다. */
+const LOGF={pn:'',q:'',days:'7',kind:''};
+const LOGR={rows:null,err:'',loading:false,cut:false};
+function vAdminLog(){
+  const sel=(k,opts)=>`<select data-lf="${k}" style="height:36px;border:1px solid var(--line);border-radius:8px">
+    ${opts.map(([v,t])=>`<option value="${v}" ${LOGF[k]===v?'selected':''}>${t}</option>`).join('')}</select>`;
+  const body = LOGR.loading ? '<div class="empty2">불러오는 중…</div>'
+    : LOGR.err ? `<div class="empty2" style="color:var(--red)">${esc(LOGR.err)}</div>`
+    : !LOGR.rows ? '<div class="empty2">조건을 고르고 [조회] 를 눌러 주세요</div>'
+    : !LOGR.rows.length ? '<div class="empty2">해당 기간에 기록이 없습니다</div>'
+    : `<table class="tbl mc logtbl"><thead><tr><th>시각</th><th>품번</th><th>한 일</th><th>누가</th></tr></thead><tbody>${
+        LOGR.rows.map(r=>`<tr ${r.pn?`data-pc="${esc(r.pn)}"`:''}><td data-label="시각" class="dim num">${esc(new Date(r.at).toLocaleString('ko-KR'))}</td>
+        <td data-label="품번" class="pn">${esc(r.pn||'—')}</td><td data-label="한 일">${esc(r.act)}</td>
+        <td data-label="누가"><b>${esc(r.who)}</b></td></tr>`).join('')}</tbody></table>
+      ${LOGR.cut?'<div class="histcut">200건까지만 보입니다 — 기간을 줄이거나 품번·주문번호로 좁혀 주세요</div>':''}`;
+  return `
+  <div class="card" style="margin-top:22px" id="adm-log">
+    <div class="sec-h"><h3>🗂 관리자 기록</h3>
+      <div class="r"><span class="dim" style="font-size:12px">누가 · 언제 · 무엇을 했는지 (서버 기록 · 고칠 수 없음)</span></div></div>
+    <div class="sec-b" style="padding:12px 16px">
+      <div class="recon-h" style="margin-bottom:12px">
+        <input id="lf-pn" data-lf="pn" value="${esc(LOGF.pn)}" placeholder="품번 (Y-042)" style="width:120px">
+        <input id="lf-q" data-lf="q" value="${esc(LOGF.q)}" placeholder="주문번호" style="width:170px">
+        ${sel('days',[['1','오늘·어제'],['7','7일'],['30','30일'],['90','90일']])}
+        ${sel('kind',[['','변경 · 열람'],['login','로그인 기록']])}
+        <button class="btn btn-b btn-sm" id="log-go">조회</button>
+      </div>
+      ${body}
+    </div>
   </div>`;
+}
+async function loadAdminLog(){
+  if(!LIVE){ LOGR.err='서버에 연결된 상태에서만 볼 수 있습니다'; route(); return; }
+  const qs=new URLSearchParams({days:LOGF.days});
+  if(LOGF.pn.trim()) qs.set('pn',LOGF.pn.trim().toUpperCase());
+  if(LOGF.q.trim()) qs.set('q',LOGF.q.trim());
+  if(LOGF.kind) qs.set('kind',LOGF.kind);
+  LOGR.loading=true; LOGR.err=''; route();
+  try{
+    const r=await fetch('/api/admin?do=log&'+qs.toString(),{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    LOGR.loading=false;
+    if(!r.ok){ LOGR.err=d.error||('기록을 불러오지 못했습니다 ('+r.status+')'); LOGR.rows=null; }
+    else { LOGR.rows=d.rows||[]; LOGR.cut=!!d.cut; }
+  }catch(e){ LOGR.loading=false; LOGR.err='서버에 연결하지 못했습니다'; }
+  route();
+}
+
+/* ═══════════════ 정산 · 대사 (2026-11-08) ═══════════════
+   토스 거래내역과 우리 주문을 기간별로 맞대 봅니다. 읽기만 하고 아무것도 바꾸지 않습니다.
+   다섯 묶음 중 "돈은 받았는데 PC 없음" 이 가장 급합니다 — 손님이 문의하기 전에 먼저 연락드립니다. */
+const kstDay=ms=>new Date(ms+9*3600000).toISOString().slice(0,10);
+const RECON={from:kstDay(Date.now()-6*86400000), to:kstDay(Date.now()), data:null, err:'', loading:false};
+const RECON_GROUPS=[
+  ['doneButNotPaid','💥 돈은 받았는데 PC 없음','토스는 결제 완료인데 우리 주문은 결제 대기·취소 — 가장 먼저 확인해 주세요'],
+  ['tossOnly','❓ 토스에만 있는 결제','우리 DB 에 그 주문번호가 없습니다'],
+  ['canceledButActive','↩ 토스는 취소 · 우리는 이용중','전액 취소된 결제인데 주문은 아직 결제완료·이용중입니다'],
+  ['amountDiff','≠ 결제 금액이 다름','토스가 받은 금액과 주문 금액이 다릅니다'],
+  ['refundDiff','≠ 환불 금액이 다름','토스가 돌려준 금액과 주문의 환불 금액이 다릅니다 (직접 송금 환불은 제외)'],
+];
+const tossStTx=s=>({DONE:'결제 완료',CANCELED:'취소',PARTIAL_CANCELED:'부분 취소',WAITING_FOR_DEPOSIT:'입금 대기'})[s]||s||'';
+const dbStTx=s=>({ready:'결제 대기',paid:'결제완료·배정 대기',assigned:'이용중',expired:'만료',refunded:'환불',canceled:'취소'})[s]||s||'없음';
+function vRecon(){
+  const d=RECON.data;
+  const groups = RECON.loading ? '<div class="card"><div class="empty2">토스에 묻는 중…</div></div>'
+    : RECON.err ? `<div class="card"><div class="empty2" style="color:var(--red)">${esc(RECON.err)}</div></div>`
+    : !d ? '<div class="card"><div class="empty2">기간을 고르고 [대조] 를 눌러 주세요 (한 번에 31일까지)</div></div>'
+    : `<div class="card" style="margin-bottom:14px;padding:14px 18px;font-size:13px" id="recon-sum">
+        ${esc(d.from)} ~ ${esc(d.to)} · 토스 거래 ${w(d.tossCount)}줄 (주문 ${w(d.tossOrders)}건) · 우리 주문 ${w(d.dbOrders)}건 대조
+        ${RECON_GROUPS.every(([k])=>!(d.groups[k]||[]).length)?' · <b style="color:var(--gr)">어긋난 것 없음</b>':''}</div>`
+      + RECON_GROUPS.map(([k,title,sub])=>{
+        const rows=d.groups[k]||[];
+        return `<div class="card" style="margin-bottom:14px${rows.length&&k==='doneButNotPaid'?';border-color:#F7CDD3':''}" id="recon-${k}">
+          <div class="sec-h"><h3>${title}</h3><span class="cnt">${rows.length}</span>
+            <div class="r"><span class="dim" style="font-size:12px">${sub}</span></div></div>
+          <div class="sec-b"><table class="tbl mc"><tbody>${rows.map(r=>`
+            <tr data-reconord="${esc(r.orderId)}" style="cursor:pointer"><td data-label="주문번호" class="dim num">${esc(r.orderId)}</td>
+            <td data-label="토스">${esc(tossStTx(r.tossStatus))} · ${w(r.tossPaid||0)}원${r.tossCanceled?' · 취소 '+w(r.tossCanceled)+'원':''}</td>
+            <td data-label="우리 주문">${esc(dbStTx(r.dbStatus))}${r.dbAmount!=null?' · '+w(r.dbAmount)+'원':''}${r.dbRefund?' · 환불 '+w(r.dbRefund)+'원':''}</td>
+            <td data-label="품번" class="pn">${esc(r.pn||'—')}</td>
+            <td data-label="시각" class="dim num">${r.tossAt?esc(String(r.tossAt).slice(0,16).replace('T',' ')):''}</td></tr>`).join('')
+            ||'<tr><td class="dim" style="padding:16px">없음</td></tr>'}</tbody></table></div></div>`;}).join('');
+  return `
+  <div class="top"><h1>정산 · 대사</h1><span class="live">토스 거래내역 ↔ 우리 주문 · 읽기만 합니다 (아무것도 바꾸지 않음)</span></div>
+  <div class="card" style="margin-bottom:14px;padding:14px 18px">
+    <div class="recon-h">
+      <input type="date" id="rc-from" value="${esc(RECON.from)}"> ~ <input type="date" id="rc-to" value="${esc(RECON.to)}">
+      <button class="btn btn-r btn-sm" id="rc-go">대조</button>
+      <span class="dim" style="font-size:12px">한국 날짜 기준 · 한 번에 31일까지 · 줄을 누르면 주문 상세</span>
+    </div>
+  </div>
+  ${groups}`;
+}
+async function loadRecon(){
+  RECON.from=$('rc-from').value; RECON.to=$('rc-to').value;
+  if(!LIVE){ RECON.err='서버에 연결된 상태에서만 대조할 수 있습니다'; route(); return; }
+  RECON.loading=true; RECON.err=''; route();
+  try{
+    const r=await fetch('/api/admin?do=recon&from='+encodeURIComponent(RECON.from)+'&to='+encodeURIComponent(RECON.to),
+      {credentials:'same-origin',cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    RECON.loading=false;
+    if(!r.ok){ RECON.err=d.error||('대조하지 못했습니다 ('+r.status+')'); RECON.data=null; }
+    else RECON.data=d;
+  }catch(e){ RECON.loading=false; RECON.err='서버에 연결하지 못했습니다'; }
+  route();
 }
 
 /* 화면에서 PC 한 대를 찾습니다.
@@ -1363,8 +1502,8 @@ function openPc(key,edit){
          <span class="dim">${esc(상태[o.st]||o.st)}${o.refundAmt?' '+w(o.refundAmt)+'원':''}</span></div>`).join('')}
       </div>
       ${HISTORY_CUT?'<div class="histcut" id="histcut">오래된 기록은 생략됨 — 지난 주문은 최근 2,000건까지만 불러옵니다</div>':''}`;})()}
-    <div class="blockttl">변경 · 열람 기록 (최근 6건)</div>
-    <div class="viewlog">${VLOG.filter(v=>v.pn===(p.pn||p.ad)).slice(0,6).map(v=>esc(v.t+' — '+(v.act||'열람'))).join('<br>')||'기록 없음'}</div>
+    <div class="blockttl">변경 · 열람 기록 (최근 6건 · 누가 했는지 포함)</div>
+    <div class="viewlog" id="dr-log" data-pn="${esc(p.pn||'')}">${p.pn?'불러오는 중…':'품번이 붙은 뒤부터 기록이 남습니다'}</div>
   </div>
   <div class="dracts">
     ${/* 임대 가능한 PC 는 여기서 바로 고객을 붙일 수 있어야 합니다.
@@ -1407,6 +1546,7 @@ function openPc(key,edit){
     <button class="btn btn-o" data-close>닫기</button>
   </div>`;
   $('drawer').classList.add('on');$('overlay').classList.add('on');
+  if(p.pn) loadPcLog(p.pn);              // 기록은 서버에서 따로 받아 채웁니다
 }
 
 /* ═══════════════ 드로어: 주문 상세 ═══════════════ */
@@ -1526,14 +1666,17 @@ function closeDrawer(){$('drawer').classList.remove('on');$('overlay').classList
      바로 [임대 가능] 이 됐습니다. 그러면 앞 손님이 다음 손님 PC 에 들어올 수 있습니다.
      세 가지를 모두 체크하고 새 비밀번호를 적어야 버튼이 켜집니다.
      서버(_admin-pc-update.js)도 새 비밀번호 없이는 판매로 돌리지 않습니다. */
-function openWipe(pn){
+/* ★ 2026-11-08 — 점검(fix) PC 를 판매로 돌릴 때도 최근 90일 안에 손님이 있었으면 같은 체크리스트를 씁니다.
+   mode='fix' 면 제목만 바꾸고, 저장은 똑같이 상태 ok + 새 비밀번호를 보냅니다 (서버가 같은 규칙으로 확인). */
+function openWipe(pn,mode){
   const p=findPc(pn); if(!p)return;
+  const fix=mode==='fix';
   const ck=(t,s)=>`<label class="wck"><input type="checkbox" data-wck><span><b>${t}</b><small>${s}</small></span></label>`;
   $('drawer').innerHTML=`
-  <div class="hd"><b>반납 초기화 — ${esc(p.pn)}</b>${stTag({st:'wipe'})}<button class="x" data-close>✕</button></div>
+  <div class="hd"><b>${fix?'점검 완료 · 판매 전 초기화':'반납 초기화'} — ${esc(p.pn)}</b>${stTag({st:fix?'fix':'wipe'})}<button class="x" data-close>✕</button></div>
   <div class="bd">
     <p class="dim" style="font-size:13px;margin-bottom:14px">
-      앞 손님의 자료나 접속 비밀번호가 남은 채 다음 손님에게 가면 개인정보 사고입니다.
+      ${fix?'최근 90일 안에 손님이 쓰던 PC 입니다. ':''}앞 손님의 자료나 접속 비밀번호가 남은 채 다음 손님에게 가면 개인정보 사고입니다.
       <b style="color:var(--ink)">세 가지를 모두 하신 뒤</b> 체크해 주세요.</p>
     <div class="kv">
       <span class="k">위치</span><span class="v big">${esc(locStr(p))}</span>
@@ -1657,7 +1800,7 @@ function openManual(pn){
 }
 
 /* ═══════════════ 라우터 ═══════════════ */
-const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,members:vMembers,orders:vOrders,noti:vNoti,find:vFind,set:vSet};
+const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,members:vMembers,orders:vOrders,noti:vNoti,find:vFind,recon:vRecon,set:vSet};
 function route(){
   const v=(location.hash||'#dash').slice(1);
   const fn=VIEWS[v]||vDash;
@@ -1679,7 +1822,7 @@ function route(){
      예전에는 목업을 먼저 보여줘서 "가짜가 떴다가 사라지는" 것처럼 보였습니다. */
   if(!LIVE && (LOADING || LOAD_ERR)){
     $('main').innerHTML = LOADING
-      ? `<div class="top"><h1>${({dash:'대시보드',newpc:'미등록 PC',verify:'검증 대기',today:'오늘 할 일',rack:'랙맵',pcs:'PC 관리',members:'회원 관리',orders:'주문 · 고객',noti:'알림 발송',find:'통합검색',set:'설정'})[v]||'대시보드'}</h1></div>
+      ? `<div class="top"><h1>${({dash:'대시보드',newpc:'미등록 PC',verify:'검증 대기',today:'오늘 할 일',rack:'랙맵',pcs:'PC 관리',members:'회원 관리',orders:'주문 · 고객',noti:'알림 발송',find:'통합검색',recon:'정산 · 대사',set:'설정'})[v]||'대시보드'}</h1></div>
          <div class="card" style="padding:60px 20px;text-align:center;color:var(--ink4)">
            <div style="font-size:17px;font-weight:800;color:var(--ink2);margin-bottom:8px">불러오는 중입니다</div>
            서버에서 PC 목록을 받아오고 있습니다.</div>`
@@ -1717,6 +1860,13 @@ document.addEventListener('click',async e=>{
   if(pc&&!t.closest('button')){openPc(pc.dataset.pc);return}
   const od=t.closest('[data-ord]');
   if(od&&!t.closest('button')){openOrd(od.dataset.ord);return}
+  /* 정산·대사 줄 — 우리 주문 목록에 있으면 상세를 엽니다 (토스에만 있는 결제는 우리 주문이 없음) */
+  const ro=t.closest('[data-reconord]');
+  if(ro){ const no=ro.dataset.reconord; if(findOrd(no)) openOrd(no);
+    else alert(no+' 은 관리자 주문 목록에 없습니다.\n(토스에만 있는 결제이거나, 결제 대기로 남은 주문입니다 — 토스 상점관리자에서 확인해 주세요)');
+    return; }
+  if(t.id==='rc-go'){ loadRecon(); return; }
+  if(t.id==='log-go'){ loadAdminLog(); return; }
 
   const rm=t.closest('[data-room]');
   if(rm){RSEL.room=rm.dataset.room;RSEL.rack=1;route();return}
@@ -1828,6 +1978,9 @@ document.addEventListener('click',async e=>{
     stBtn.disabled=true;
     const r=await pcSave(pn,{status:to});
     stBtn.disabled=false;
+    /* ★ 2026-11-08 — 점검 PC 가 최근 90일 안에 손님이 쓰던 PC 면 서버가 새 비밀번호를 요구합니다 (needPw).
+       그때는 반납 초기화와 같은 체크리스트를 띄웁니다. */
+    if(!r.ok && r.needPw && d.took){ openWipe(pn,'fix'); return; }
     if(!r.ok){alert(r.error);return}
     p.st=to;
     if(d.verok||d.tofix||d.took) closeDrawer();
@@ -2443,9 +2596,18 @@ document.addEventListener('click',async e=>{
   if(t.closest('#adm-logout')){ e.preventDefault(); adminLogout(); return; }
 });
 /* 반납 초기화 체크리스트 — 칸을 체크하거나 비밀번호를 칠 때마다 버튼을 켜고 끕니다 */
-document.addEventListener('change',e=>{ if(e.target.matches&&e.target.matches('[data-wck]')) wipeReady(); });
+document.addEventListener('change',e=>{
+  if(e.target.matches&&e.target.matches('[data-wck]')) wipeReady();
+  if(e.target.dataset&&e.target.dataset.lf) LOGF[e.target.dataset.lf]=e.target.value;
+  if(e.target.id==='rc-from') RECON.from=e.target.value;
+  if(e.target.id==='rc-to') RECON.to=e.target.value;
+});
 document.addEventListener('input',e=>{
   if(e.target.matches&&e.target.matches('[data-wck],#w-pw')){ wipeReady(); return; }
+  /* 관리자 기록 조건 · 대사 날짜 — 30초마다 화면을 다시 그려도 적은 값이 남게 바로 기억합니다 */
+  if(e.target.dataset&&e.target.dataset.lf){ LOGF[e.target.dataset.lf]=e.target.value; return; }
+  if(e.target.id==='rc-from'){ RECON.from=e.target.value; return; }
+  if(e.target.id==='rc-to'){ RECON.to=e.target.value; return; }
   const f=e.target.closest('[data-f]');
   if(f){PF[f.dataset.f]=f.value.toLowerCase?f.value.toLowerCase():f.value;
     if(f.dataset.f!=='q')PF[f.dataset.f]=f.value; PF.pg=1;
@@ -2471,6 +2633,7 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='findq'){FQ=e.target.value;route()}
   if(e.key==='Enter'&&e.target.id==='gate-pw'){tryGate()}
+  if(e.key==='Enter'&&(e.target.id==='lf-pn'||e.target.id==='lf-q')){loadAdminLog()}
   if(e.key==='Escape')closeDrawer();
 });
 
@@ -2496,6 +2659,7 @@ async function tryGate(){
     return;
   }
   if(r.ok){
+    try{ const d=await r.clone().json(); if(d&&d.name) showMe(d.name); }catch(e){}
     sessionStorage.setItem('kvc-adm','1'); $('gate').classList.add('off');
     $('gate-err').textContent=''; $('gate-pw').value=''; $('gate-msg').textContent='관리자 비밀번호를 입력해 주세요';
     LOADING=true; LOAD_ERR=''; syncLive(); return;
@@ -2533,6 +2697,11 @@ window.fetch=async(url,opt)=>{
   return r;
 };
 
+/* 지금 로그인한 관리자 이름을 왼쪽 메뉴에 (글자 그대로 넣습니다) */
+function showMe(name){
+  const el=$('adm-me'); if(!el) return;
+  el.innerHTML='👤 <b>'+esc(name)+'</b> 님 로그인중'; el.hidden=false;
+}
 /* 로그아웃 — 서버가 출입증 쿠키를 지우고(Max-Age=0), 이 탭의 표시도 지웁니다 */
 async function adminLogout(){
   if(!confirm('관리자 화면에서 로그아웃할까요?')) return;
@@ -2615,6 +2784,7 @@ function applyLive(d){
   if(has(s.noti_day))  SET.notiDay = Number(s.noti_day);
   /* hold_days 는 db/08-반납초기화.sql 이 넣습니다. 없으면 아직 안 돌린 것 → 안내 한 줄 */
   HAS_HOLD = s.hold_days!==undefined && s.hold_days!==null;
+  if(d.me) showMe(d.me);
   const ft=document.querySelector('.ft');
   if(ft) ft.innerHTML='실서버 연동중<br><b>PC '+w(d.pcs.length)+'대 · '
     +LIVE_AT.toLocaleTimeString('ko-KR')+'</b>';
@@ -2649,7 +2819,7 @@ async function pcSave(key, patch){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({key},patch))});
     const d=await r.json().catch(()=>({}));
-    if(!r.ok) return {ok:false,error:d.error||('저장 실패 ('+r.status+')')};
+    if(!r.ok) return {ok:false,error:d.error||('저장 실패 ('+r.status+')'),needPw:!!d.needPw};
     return {ok:true,pn:d.pn,note:d.note||''};
   }catch(e){ return {ok:false,error:'서버에 연결하지 못했습니다'}; }
 }
