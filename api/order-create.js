@@ -76,24 +76,15 @@ module.exports = async (req, res) => {
       const me = await sb('members', { query: `?select=id&id=eq.${encodeURIComponent(ticketId)}&limit=1` });
       if (me && me[0]) memberId = me[0].id;
     }
-    if (!memberId && kv.ready()) {
-      /* 출입증을 확인할 수 있는 환경인데 출입증이 없거나 만료 → 다시 로그인 */
-      return res.status(401).json({ error: '로그인이 만료됐습니다. 다시 로그인해 주세요.' });
+    if (!memberId && !kv.ready()) {
+      /* ★ 2026-11-07 Codex 검토 — 출입증을 못 쓰는 환경에서 브라우저가 보낸
+         카카오·구글 번호를 믿으면, 남의 번호로 남의 회원에 주문을 붙일 수 있습니다.
+         KVC_SECRET 이 없으면 주문을 받지 않습니다. */
+      return res.status(503).json({ error: 'KVC_SECRET 이 등록되지 않아 주문을 받을 수 없습니다' });
     }
-    /* 아래는 KVC_SECRET 이 없어 출입증을 못 쓰는 환경(시험용)에서만 씁니다 */
-    if (!memberId && b.via && b.socialId) {
-      const found = await sb('members', {
-        query: `?select=id&via=eq.${encodeURIComponent(b.via)}&social_id=eq.${encodeURIComponent(b.socialId)}&limit=1`,
-      });
-      if (found && found[0]) memberId = found[0].id;
-      else {
-        const made = await sb('members', {
-          method: 'POST',
-          body: [{ via: b.via, social_id: String(b.socialId), name, phone, email: b.email || null }],
-          prefer: 'return=representation',
-        });
-        memberId = made && made[0] ? made[0].id : null;
-      }
+    if (!memberId) {
+      /* 출입증이 없거나 만료 → 다시 로그인 */
+      return res.status(401).json({ error: '로그인이 만료됐습니다. 다시 로그인해 주세요.' });
     }
 
     const setRows = await sb('settings', { query: '?select=k,v&k=eq.setup_fee' });

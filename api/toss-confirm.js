@@ -110,7 +110,9 @@ module.exports = async (req, res) => {
     /* 이미 승인된 결제 (두 요청이 거의 동시에 온 경우) — 토스에 다시 물어 이어갑니다 */
     if (data && data.code === 'ALREADY_PROCESSED_PAYMENT') {
       const t = await tossGet({ paymentKey });
-      if (t.ok && t.pay.orderId === orderId) { data = t.pay; status = 200; }
+      /* 주문번호·결제키·금액이 모두 맞을 때만 이어갑니다 (Codex 검토) */
+      if (t.ok && t.pay.orderId === orderId && t.pay.paymentKey === paymentKey &&
+          Number(t.pay.totalAmount) === Number(paid)) { data = t.pay; status = 200; }
     }
     if (status !== 200) return res.status(status).json(data);
   }

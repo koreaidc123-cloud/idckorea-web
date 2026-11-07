@@ -81,7 +81,12 @@ module.exports = async (req, res) => {
     const now = new Date();
 
     /* ── 결제 취소·환불 (토스가 취소됐다고 답한 경우만) ─────────── */
-    if (st === 'CANCELED' || st === 'PARTIAL_CANCELED') {
+    /* 부분취소는 이용을 끝내지 않습니다. 관리자 화면 환불은 주문을 먼저 정리하므로
+       여기서는 기록만 남기고 넘어갑니다 (토스 상점관리자에서 직접 부분취소한 경우 포함). */
+    if (st === 'PARTIAL_CANCELED') {
+      return res.status(200).json({ ok: true, skip: '부분취소 — 관리자 확인' });
+    }
+    if (st === 'CANCELED') {
       /* 이미 처리한 주문이면 아무것도 안 합니다 (관리자 화면에서 환불하면
          토스가 뒤이어 이 웹훅을 보내 줍니다 — 두 번 처리하지 않습니다) */
       if (['canceled', 'refunded', 'expired'].includes(order.status)) {

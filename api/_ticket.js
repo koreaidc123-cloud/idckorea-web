@@ -30,7 +30,8 @@ function readTicket(req) {
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim())
     .find(s => s.startsWith('kvc_cust='));
   if (!raw) return null;
-  const parts = decodeURIComponent(raw.slice(9)).split('.');
+  let parts;
+  try { parts = decodeURIComponent(raw.slice(9)).split('.'); } catch (e) { return null; }
   if (parts.length !== 3) return null;
   const [id, exp, sig] = parts;
   if (Number(exp) < Date.now()) return null;
