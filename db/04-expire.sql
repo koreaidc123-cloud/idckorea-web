@@ -57,17 +57,21 @@ begin
   update pcs set status = 'ok', updated_at = now()
    where status = 'rent'
      and pn in (select pn from orders
-                 where status = 'assigned' and ends_at < now() and pn is not null);
+                 where status = 'assigned' and ends_at < now() and pn is not null)
+     -- ★ 같은 PC 를 지금 쓰는(아직 안 끝난) 다른 주문이 있으면 풀지 않습니다 (2026-11-07)
+     and pn not in (select pn from orders
+                     where status in ('assigned', 'paid') and pn is not null
+                       and (ends_at is null or ends_at >= now()));
 
   -- ② 주문을 만료로 표시합니다.
   update orders set status = 'expired'
    where status = 'assigned' and ends_at < now();
   get diagnostics n = row_count;
 
-  -- ③ 결제만 되고 배정을 못 받은 채 하루가 지난 주문도 표시합니다.
-  --    (배정 실패 후 사람이 처리하지 않은 것 — 관리자 화면에서 눈에 띄게)
-  update orders set status = 'expired'
-   where status = 'paid' and paid_at < now() - interval '1 day';
+  -- ③ (2026-11-07 삭제) 예전에는 결제만 되고 배정을 못 받은 채 하루가 지난 주문(paid)을
+  --    만료로 바꿨습니다. 그러면 돈은 받았는데 관리자 화면에서 사라졌습니다.
+  --    결제완료(paid) 주문은 절대 자동으로 만료시키지 않습니다.
+  --    관리자 [오늘 할 일] 의 "결제 완료 · PC 배정 대기" 에서 사람이 배정합니다.
 
   return n;
 end;
