@@ -272,7 +272,10 @@ document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',
    auth-config.js 에 앱 키를 넣으면 진짜 카카오·구글 창이 뜬다.
    키가 없으면 무엇을 어디서 받아야 하는지 화면으로 안내한다. */
 const CFG=window.KVC_AUTH||{};
-const AFTER=new URLSearchParams(location.search).get('next')||'mypage.html';
+/* 돌아갈 곳은 우리 사이트 안의 페이지만 받습니다 (예: product.html?g=3&pc=Y-001).
+   아무 주소나 받으면 남의 사이트나 javascript: 로 보내는 데 악용될 수 있습니다. */
+const _next=new URLSearchParams(location.search).get('next')||'';
+const AFTER=/^[a-z0-9_-]+\.html(\?[a-z0-9=&_.%-]*)?$/i.test(_next)? _next : 'mypage.html';
 
 function saveSession(u){
   localStorage.setItem('kvc-user',JSON.stringify(u));
@@ -507,5 +510,19 @@ $('join').addEventListener('click',()=>{
   saveSession(u);
 });
 </script>
+<!-- ★ 사업자 정보 — 토스 가맹 심사에서 결제 관련 모든 화면에 요구합니다 (index.html 맨 아래 ft-b 와 같은 내용).
+     내용을 바꾸실 때는 index · about · qa · terms · privacy 와 이 6개 화면(product · live · login · mypage · success · fail)을 같이 고칩니다. -->
+<footer class="kvc-biz">
+  상호 한국가상컴 · 대표 서민영 · 개인정보관리책임자 서민영 · 전화 <a href="tel:01084468710">010-8446-8710</a><br>
+  주소 경기도 파주시 평화로 45 · 사업자등록번호 102-05-08486 · 통신판매업신고 제2023-경기파주-0488<br>
+  이메일 <a href="mailto:Abc11009977@gmail.com">Abc11009977@gmail.com</a> · <a href="terms.html">이용약관</a> · <a href="privacy.html">개인정보처리방침</a><br>
+  <b>COPYRIGHT© 한국 가상컴. ALL RIGHTS RESERVED.</b>
+</footer>
+<style>
+.kvc-biz{width:100%;max-width:1200px;margin:28px auto 0;padding:22px 20px 110px;font-size:12px;line-height:1.85;
+  color:#8A94A6;text-align:center;border-top:1px solid #E3E6EC;word-break:keep-all}
+.kvc-biz a{color:#6B7381;text-decoration:none}.kvc-biz a:hover{color:#0B0E14}
+.kvc-biz b{color:#6B7381;font-weight:600}
+</style>
 </body>
 </html>

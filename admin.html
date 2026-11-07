@@ -486,7 +486,7 @@ function badges(){
   $('bd-unv').textContent=cnt('unv');
   $('bd-noti').textContent=ORDERS.filter(o=>o.left<=SET.notiDay).length;
   if(dn>0){$('bd-warn').hidden=false;$('bd-warn').textContent=dn}else{$('bd-warn').hidden=true}
-  const tc=todayCounts(); const tn=tc.downs.length+tc.hub.length+tc.d1.length;
+  const tc=todayCounts(); const tn=tc.downs.length+tc.hub.length+tc.d1.length+tc.wait.length;
   $('bd-today').textContent=tn; $('bd-today').hidden=tn===0;
 }
 
@@ -540,7 +540,7 @@ function vDash(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>사양</th><th>회원</th><th>결제</th><th>기간</th><th>금액</th><th></th></tr></thead>
       <tbody>${ORDERS.slice().sort(()=>0).slice(0,7).map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${oPn(o)}</td>
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':oPn(o)}</td>
       <td>${oSpec(o)}</td><td>${o.nm}${o.mis?' <span class="warnbadge">⚠ 명의다름</span>':''}</td>
       <td class="dim">${o.pm}</td><td class="dim num">${o.days}일</td>
       <td class="num"><b>${w(o.amt)}원</b></td>
@@ -674,15 +674,25 @@ function todayCounts(){
   const downs=PCS.filter(p=>p.st==='down');
   const g={}; downs.forEach(p=>{const k=p.roomName+' '+p.rack+'랙 '+p.fl+'층';(g[k]=g[k]||[]).push(p)});
   const hub=Object.entries(g).filter(e=>e[1].length>=2);
-  return {downs,hub,fix:PCS.filter(p=>p.st==='fix'),d1:ORDERS.filter(o=>o.left<=1)};
+  return {downs,hub,fix:PCS.filter(p=>p.st==='fix'),d1:ORDERS.filter(o=>o.left<=1&&!isWait(o)),wait:ORDERS.filter(isWait)};
 }
+/* 결제는 끝났는데 PC 가 안 붙은 주문 — 돈을 받았으니 가장 먼저 처리합니다 */
+function isWait(o){ return o.st==='paid'&&!o.pn; }
 function vToday(){
-  const {downs,hub,fix,d1}=todayCounts();
+  const {downs,hub,fix,d1,wait}=todayCounts();
   const rentFirst=downs.slice().sort((a,b)=>((b.order?1:0)-(a.order?1:0)));
   const hubKeys=new Set(hub.flatMap(e=>e[1].map(p=>p.pn)));
   return `
   <div class="top"><h1>오늘 할 일</h1>
     <span class="live">현장에서 처리할 순서대로 — 고객 영향이 큰 것부터</span></div>
+  ${wait.length? `<div class="card" style="margin-bottom:14px;border-color:#F7CDD3">
+    <div class="sec-h"><h3>💳 결제 완료 · PC 배정 대기 — 가장 먼저</h3><span class="cnt">${wait.length}</span>
+      <div class="r"><span class="dim" style="font-size:12px">줄을 눌러 [PC 배정] 하세요</span></div></div>
+    <div class="sec-b"><table class="tbl"><tbody>${wait.map(o=>`
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td>${o.nm}</td>
+      <td class="dim num">${o.ph}</td><td class="dim">${oSpec(o)} · ${o.days}일</td>
+      <td><span class="warnbadge">배정 대기</span></td></tr>`).join('')}</tbody></table></div>
+  </div>`:''}
   <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
     <div class="card">
       <div class="sec-h"><h3>🔌 랙 장애 의심 — 허브·회선 먼저 확인</h3><span class="cnt">${hub.length}</span></div>
@@ -993,7 +1003,7 @@ function vOrders(){
     <div class="sec-b"><table class="tbl">
       <thead><tr><th>주문번호</th><th>품번</th><th>회원(결제자)</th><th>실제 이용자</th><th>가입</th><th>결제</th><th>기간</th><th>만료</th></tr></thead>
       <tbody>${V.map(o=>`
-      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${oPn(o)}</td>
+      <tr data-ord="${o.no}"><td class="dim num">${o.no}</td><td class="pn">${isWait(o)?'<span class="warnbadge">배정 대기</span>':oPn(o)}</td>
       <td>${o.nm}<div class="dim">${o.ph}</div></td>
       <td>${o.mis? o.userNm+' <span class="warnbadge">⚠ 다름</span>':'<span class="dim">본인</span>'}</td>
       <td class="dim">${o.via==='kakao'?'카카오':'구글'}</td>
@@ -1263,6 +1273,8 @@ function openOrd(no){
       </div></div>`})()}
   </div>
   <div class="dracts">
+    ${/* 결제는 됐는데 PC 가 안 붙은 주문 — 여기서 바로 배정합니다 (2026-11-07) */''}
+    ${isWait(o)? `<button class="btn btn-r" data-assignpaid="${o.no}">🖥 PC 배정 (결제 완료 · 배정 대기)</button>`:''}
     <button class="btn btn-b" data-copycust="${o.no}">📋 고객 전달용 복사 (위치 제외)</button>
     <button class="btn btn-o" data-extend="${o.no}">30일 연장</button>
     ${/* 서버에는 있는데 버튼이 없어 못 쓰던 것들입니다 */''}
@@ -1938,6 +1950,27 @@ document.addEventListener('click',async e=>{
     o.taxInvoice=true; o.bizNo=only||null;
     logView(o.pn||o.no,'세금계산서 요청'+(only?' · '+only:''));
     closeDrawer(); route(); return;
+  }
+
+  /* 배정 대기 주문에 PC 붙이기 — 품번을 비우면 같은 사양에서 서버가 골라 줍니다 */
+  const ap=t.closest('[data-assignpaid]');
+  if(ap){
+    const o=ORDERS.find(x=>x.no===ap.dataset.assignpaid); if(!o)return;
+    const pn=prompt(o.nm+'님 주문('+oSpec(o)+' · '+o.days+'일)에 PC 를 배정합니다.\n\n'
+      +'배정할 품번을 적어 주세요 (예: Y-055)\n비워 두시면 같은 사양 중 켜져 있는 빈 PC 를 자동으로 고릅니다.','');
+    if(pn===null)return;
+    if(!LIVE){ alert('서버에 연결된 상태에서만 배정할 수 있습니다.'); return; }
+    ap.disabled=true;
+    try{
+      const r=await fetch('/api/admin?do=order-action',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({no:o.no, act:'assign', toPn:pn.trim()})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok){ ap.disabled=false; alert(d.error||'배정하지 못했습니다'); return; }
+      alert(d.to+' 배정 완료.\n고객님 [내 가상컴] 에 바로 보입니다. 카카오톡·전화로 알려 드려 주세요.');
+      logView(d.to,'배정 대기 주문 배정 · '+o.no);
+    }catch(e){ ap.disabled=false; alert('서버에 연결하지 못했습니다'); return; }
+    closeDrawer(); syncLive(); return;
   }
 
   const ex=t.closest('[data-extend]');

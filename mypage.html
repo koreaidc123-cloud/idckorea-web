@@ -222,8 +222,10 @@ function paintUser(){
     const r=await fetch('/api/customer?do=me',{credentials:'same-origin',cache:'no-store'});
     if(r.ok){
       const d=await r.json();
-      U={name:d.user.name, phone:d.user.phone, via:d.user.via, email:d.user.email,
-         pcs:d.pcs, orders:d.orders};
+      /* ★ 예전 저장값(카카오·구글 번호 등)은 지우지 않고 그 위에 덮습니다.
+         통째로 바꾸면 그 번호가 사라져 결제 때 회원을 못 찾았습니다 (2026-11-07). */
+      U=Object.assign({}, U||{}, {name:d.user.name, phone:d.user.phone, via:d.user.via, email:d.user.email,
+         pcs:d.pcs, orders:d.orders});
       SERVER=true;
       localStorage.setItem('kvc-user',JSON.stringify(U));   // 화면 표시용
       paintUser(); return;
@@ -320,6 +322,20 @@ document.addEventListener('click',async e=>{
   if(ex){location.href='product.html?ext='+ex.dataset.ext;return}
 });
 </script>
+<!-- ★ 사업자 정보 — 토스 가맹 심사에서 결제 관련 모든 화면에 요구합니다 (index.html 맨 아래 ft-b 와 같은 내용).
+     내용을 바꾸실 때는 index · about · qa · terms · privacy 와 이 6개 화면(product · live · login · mypage · success · fail)을 같이 고칩니다. -->
+<footer class="kvc-biz">
+  상호 한국가상컴 · 대표 서민영 · 개인정보관리책임자 서민영 · 전화 <a href="tel:01084468710">010-8446-8710</a><br>
+  주소 경기도 파주시 평화로 45 · 사업자등록번호 102-05-08486 · 통신판매업신고 제2023-경기파주-0488<br>
+  이메일 <a href="mailto:Abc11009977@gmail.com">Abc11009977@gmail.com</a> · <a href="terms.html">이용약관</a> · <a href="privacy.html">개인정보처리방침</a><br>
+  <b>COPYRIGHT© 한국 가상컴. ALL RIGHTS RESERVED.</b>
+</footer>
+<style>
+.kvc-biz{width:100%;max-width:1200px;margin:28px auto 0;padding:22px 20px 110px;font-size:12px;line-height:1.85;
+  color:#8A94A6;text-align:center;border-top:1px solid #E3E6EC;word-break:keep-all}
+.kvc-biz a{color:#6B7381;text-decoration:none}.kvc-biz a:hover{color:#0B0E14}
+.kvc-biz b{color:#6B7381;font-weight:600}
+</style>
 <div class="kvc-float">
   <a class="kf-call" href="tel:01084468710" aria-label="전화 연결">
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.6a1 1 0 0 1-.25 1l-2.22 2.2Z"/></svg><b>전화</b></a>
