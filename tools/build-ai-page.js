@@ -39,7 +39,7 @@ const html = [
   '<meta property="og:title" content="노트북을 덮으면 AI도 멈춥니다 | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
-  '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/ai/desk.jpg">',
+  '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/hero1.jpg">',
   '<meta property="og:locale" content="ko_KR">',
   font,
   style,
