@@ -72,8 +72,10 @@ module.exports = async (req, res) => {
            결제해도 자동배정이 spec_id 로 찾으므로 배정도 안 됩니다.
            번호가 붙을 때까지 점검중으로 보입니다 — 관리자 화면을 한 번
            열면 자동으로 붙습니다. */
+      /* ★ 반납 유예(hold)·초기화 대기(wipe) 는 "임대중" 으로 보여줍니다 (2026-11-07).
+           앞 손님 자료가 남아 있어 팔 수 없는 PC 입니다. 절대 임대 가능으로 나가면 안 됩니다. */
       let st = 'fix';
-      if (p.status === 'rent') st = 'busy';
+      if (p.status === 'rent' || p.status === 'hold' || p.status === 'wipe') st = 'busy';
       else if (p.status === 'ok' && !dead && p.online && p.spec_id) st = 'free';
       return {
         id: p.pn,

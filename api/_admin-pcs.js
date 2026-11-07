@@ -81,6 +81,16 @@ module.exports = async (req, res) => {
     } catch (e) { cmdRows = []; }
     const pending = Object.fromEntries(cmdRows.map(r => [r.pn, r]));
 
+    /* 반납 유예가 언제 끝나는지 · 언제부터 초기화 대기인지 — 같은 이유로 따로 물어봅니다.
+       hold_until·wipe_at 칸은 db/08-반납초기화.sql 을 돌려야 생깁니다. 없으면 빈 채로 둡니다. */
+    let retRows = [];
+    try {
+      retRows = await sb('pcs', {
+        query: '?select=pn,hold_until,wipe_at&status=in.(hold,wipe)&limit=2000',
+      }) || [];
+    } catch (e) { retRows = []; }
+    const ret = Object.fromEntries(retRows.map(r => [r.pn, r]));
+
     const set = Object.fromEntries((setRows || []).map(r => [r.k, r.v]));
 
     /* 관리자가 지운 미등록 PC 는 다시 신호가 와도 안 보이게 걸러냅니다.
@@ -107,6 +117,11 @@ module.exports = async (req, res) => {
         beatAge: age,
         live: !dead && p.online,
         status: dead && p.status !== 'new' ? 'down' : p.status,
+        /* 표에 적힌 원래 상태 — 신호가 끊겨 "다운" 으로 보이는 PC 라도
+           반납 초기화 대기(wipe)·유예(hold) 인지는 알아야 [오늘 할 일] 에서 빠지지 않습니다 */
+        rawStatus: p.status,
+        holdUntil: ret[p.pn] ? ret[p.pn].hold_until : null,
+        wipeAt: ret[p.pn] ? ret[p.pn].wipe_at : null,
         /* 대기중인 명령 — 화면에 "재부팅 대기중" 으로 보여줍니다.
            그 PC 가 다음 신호를 보낼 때 받아가고 이 값은 사라집니다. */
         cmd: q ? q.cmd : null,

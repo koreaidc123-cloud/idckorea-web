@@ -98,7 +98,15 @@ module.exports = async (req, res) => {
         body: { status: 'refunded', canceled_at: now.toISOString(), ends_at: now.toISOString() },
         prefer: 'return=representation',
       });
-      /* 쓰던 PC 를 다시 판매 재고로 — 다른 주문이 그 PC 를 쓰고 있으면 그대로 둡니다 */
+      /* 토스가 돌려준 환불이라고 적어 둡니다 (송금 추적 칸 — db/08 전이면 칸이 없어 조용히 넘어갑니다) */
+      if (got && got[0]) {
+        try {
+          await sb('orders', { method: 'PATCH', prefer: 'return=minimal',
+            query: `?order_id=eq.${encodeURIComponent(orderId)}`, body: { refund_state: 'toss_done' } });
+        } catch (e) {}
+      }
+      /* 쓰던 PC 를 놓아줍니다 — 바로 판매가 아니라 초기화 대기(wipe)로 갑니다 (_pay.js releasePc).
+         다른 주문이 그 PC 를 쓰고 있으면 그대로 둡니다 */
       let pc = 'none';
       if (got && got[0]) pc = await releasePc(order.pn, orderId, now);
       return res.status(200).json({ ok: true, canceled: orderId, pc });

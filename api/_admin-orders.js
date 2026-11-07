@@ -2,13 +2,13 @@
    주문 · 회원 조회 — 관리자 화면이 읽는 곳
 
    GET /api/orders          이용중 + 최근 끝난 것
-   GET /api/orders?all=1    전부
+   GET /api/orders?all=1    진행중 전부 + 끝난 것 최근 2000건 (넘으면 historyCut=true)
 
    · 관리자 출입증(쿠키)이 없으면 아무것도 안 줍니다.
    · 애니데스크 비밀번호는 여기로 나가지 않습니다 (/api/pc-secret 에서 한 대씩).
    · 회원 목록은 주문에서 뽑아 만들어 줍니다 — 화면이 따로 계산할 필요가 없게.
    ═══════════════════════════════════════════════════════════════ */
-const { ready, sb } = require('./_supa');
+const { ready, sb, missingCol } = require('./_supa');
 const { verify } = require('./admin-login');
 
 const DAY = 86400000;
@@ -28,10 +28,44 @@ module.exports = async (req, res) => {
                  'canceled_at,refund_amt,refund_why,tax_invoice,biz_no,created_at,' +
                  'members(name,phone,email,via),' +
                  'pcs(pn,room,rack,fl,slot,anydesk,spec_id,status,cpu,core,ram_gb,ssd_gb,gpu)';
-    const where = all ? '' : '&status=in.(paid,assigned,ready)';
-    const rows = await sb('orders', {
-      query: `?select=${cols}${where}&order=ends_at.asc.nullslast&limit=3000`,
-    });
+    /* ★ 2026-11-07 — 예전엔 all=1 일 때 전부를 만료일 오름차순으로 3000건만 받았습니다.
+         지난 주문(만료·환불)이 쌓여 3000건을 넘으면, 만료일이 늦은 "지금 쓰는 주문" 이
+         뒤로 밀려 잘렸습니다 — 이용중인 고객이 관리자 화면에서 사라지는 사고입니다.
+       이제 두 번에 나눠 받습니다.
+         ① 진행중(결제 대기·결제완료·이용중) — 개수 제한 없이 전부 (1000건씩 여러 번)
+         ② 끝난 것(만료·환불·취소) — 최근 것부터 2000건까지만. 넘으면 historyCut=true
+       ※ Supabase 는 한 번에 최대 1000줄만 주므로 1000건씩 끊어 받습니다. */
+    const fetchAll = async (q, max) => {
+      const out = [];
+      for (let off = 0; off < max; off += 1000) {
+        const n = Math.min(1000, max - off);
+        const page = await sb('orders', { query: `${q}&limit=${n}&offset=${off}` }) || [];
+        out.push(...page);
+        if (page.length < n) break;
+      }
+      return out;
+    };
+    const HIST_MAX = 2000;
+    /* 환불 송금 추적 칸(refund_state·refund_done_at)은 db/08 SQL 을 돌려야 생깁니다.
+       없으면 그 칸만 빼고 다시 받습니다 — 목록 전체가 안 나오면 안 되므로. */
+    let refundCols = true;
+    const load = async (c) => {
+      const active = await fetchAll(
+        `?select=${c}&status=in.(paid,assigned,ready)&order=ends_at.asc.nullslast,order_id.asc`, 100000);
+      const hist = all ? await fetchAll(
+        `?select=${c}&status=in.(expired,refunded,canceled)&order=ends_at.desc.nullslast,order_id.asc`, HIST_MAX) : [];
+      return { active, hist };
+    };
+    let got;
+    try {
+      got = await load(cols + ',refund_state,refund_done_at');
+    } catch (e) {
+      if (!missingCol(e, 'refund_')) throw e;
+      refundCols = false;
+      got = await load(cols);
+    }
+    const historyCut = got.hist.length >= HIST_MAX;
+    const rows = got.active.concat(got.hist);
 
     const now = Date.now();
     const orders = (rows || []).map(o => {
@@ -67,6 +101,9 @@ module.exports = async (req, res) => {
         refundWhy: o.refund_why,
         taxInvoice: !!o.tax_invoice,
         bizNo: o.biz_no || null,
+        /* 환불 송금 상태 — toss_done · manual_pending(직접 보내야 함) · manual_done */
+        refundState: o.refund_state || null,
+        refundDoneAt: o.refund_done_at || null,
       };
     });
 
@@ -88,6 +125,8 @@ module.exports = async (req, res) => {
     res.status(200).json({
       ok: true,
       at: new Date().toISOString(),
+      historyCut,          // 지난 주문이 너무 많아 오래된 것은 빼고 보냈는가
+      refundCols,          // 환불 송금 추적 칸이 있는가 (false 면 db/08 SQL 실행 필요)
       counts: {
         live: orders.filter(o => o.st === 'assigned').length,
         waiting: orders.filter(o => o.st === 'ready').length,
