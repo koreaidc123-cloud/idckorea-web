@@ -1534,7 +1534,7 @@ async function main() {
     await post('/api/toss-confirm', { paymentKey: 'tcard_ex8_a', orderId: p1, amount: 65000 });
     ok(orderOf(p1).status === 'paid', '미적용 연장 준비 실패 ' + orderOf(p1).status);
     pcOf('Y-023').status = 'hold';
-    let x = await rpc('begin_ext_refund', { p_order: p1 });
+    let x = await rpc('begin_ext_refund', { p_order: p1, p_amount: 65000 });
     ok(x.ok && x.was === 'paid' && orderOf(p1).status === 'refunding', '환불 시작 ' + JSON.stringify(x));
     x = await rpc('apply_extension', { p_order: p1 });
     ok(x.ok && x.skip && orderOf(p1).status === 'refunding' && orderOf('KVC260101-SEEDG4').status === 'expired', '환불 중인데 적용됨 ' + JSON.stringify(x));
@@ -1589,7 +1589,7 @@ async function main() {
 
     /* ⑤ 환불이 돈 단계 뒤에 끊긴 연장 → 오늘 할 일에 뜸 → 다시 누르면 토스 안 부르고 마무리 */
     const parG5 = orderOf('KVC260101-SEEDG5');
-    x = await rpc('begin_ext_refund', { p_order: a.id });
+    x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 65000 });
     ok(x.ok, '끊긴 환불 만들기 ' + JSON.stringify(x));
     Object.assign(orderOf(a.id), { refund_amt: 65000, refund_state: 'toss_done', refund_why: '시험' });
     srv.toss.payments['tcard_ex8_b'].status = 'CANCELED';
@@ -1605,7 +1605,48 @@ async function main() {
     ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
   });
 
-  await scenario('EX7', 'db/10 SQL — 함수 8개 · 잠금 · service_role 만 · 한 원 주문당 결제 대기 연장 하나 · 실명 없음 · CRLF', async () => {
+  await scenario('EX9', '연장 — Codex T-0194 지적: 다른 창의 환불에 합류하면 처음 정한 금액 그대로 · 해지 잠금은 그 요청만 풂 · 환불 중 원 주문이 만료돼도 기간 되돌림', async () => {
+    srv.fakeDb.setV10(true);
+    await ensureAdmin();
+    /* ① 한 창이 10,000원으로 환불을 시작한 뒤(끊김) 다른 창이 다른 금액으로 눌러도 10,000원으로 이어감 */
+    const a = await makeApplied('Y-027', 8, 'KVC260101-SEEDG8', 'tcard_ex9_a');
+    ok(a.conf.d.extended === true, '준비 연장');
+    let x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 10000 });
+    ok(x.ok && x.amount === 10000 && orderOf(a.id).status === 'refunding', '환불 시작 ' + JSON.stringify(x));
+    x = await rpc('begin_ext_refund', { p_order: a.id, p_amount: 65000 });
+    ok(x.ok && x.again && x.amount === 10000, '합류했는데 금액이 바뀜 ' + JSON.stringify(x));
+    x = await rpc('apply_extension', { p_order: a.id });
+    ok(x.skip && orderOf(a.id).status === 'refunding', '환불 중인데 적용 함수가 상태를 바꿈');
+    let r = await apiIn(ap, '/api/admin?do=order-action', { no: a.id, act: 'cancel', why: '시험', refund: 50000, force: true });
+    ok(r.status === 200 && r.d.refund === 10000 && r.d.extFinished, '합류 환불 ' + JSON.stringify(r.d));
+    const last = srv.toss.cancels[srv.toss.cancels.length - 1];
+    ok(last.paymentKey === 'tcard_ex9_a' && last.cancelAmount === 10000, '토스 취소 금액 ' + JSON.stringify(last));
+    ok(orderOf(a.id).refund_amt === 10000 && orderOf(a.id).status === 'refunded', '기록 금액 ' + orderOf(a.id).refund_amt);
+    /* ② 해지 잠금 — 나중 요청이 넘겨받으면 먼저 요청은 못 풂 · 넘겨받은 요청만 풂 */
+    x = await rpc('begin_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-A' });
+    ok(x.ok && orderOf('KVC260101-SEEDA1').cancel_job === 'job-A', '잠금 A ' + JSON.stringify(x));
+    x = await rpc('begin_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-B' });
+    ok(x.ok && orderOf('KVC260101-SEEDA1').cancel_job === 'job-B', '잠금 넘겨받기 ' + JSON.stringify(x));
+    x = await rpc('abort_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-A' });
+    ok(!x.ok && orderOf('KVC260101-SEEDA1').cancel_lock_at, '다른 요청이 잠금을 풂');
+    r = await callAs(A_ID, '/api/order-create', { extendOf: 'KVC260101-SEEDA1', days: 30 });
+    ok(r.status === 409, '해지 중인 주문에 연장 주문이 만들어짐 ' + r.status);
+    x = await rpc('abort_parent_cancel', { p_order: 'KVC260101-SEEDA1', p_job: 'job-B' });
+    ok(x.ok && !orderOf('KVC260101-SEEDA1').cancel_lock_at, '자기 잠금을 못 풂');
+    /* ③ 환불 도중 만료 정리가 원 주문을 expired 로 바꿔도 날짜는 되돌림 */
+    const b2 = await makeApplied('Y-028', 9, 'KVC260101-SEEDG9', 'tcard_ex9_b');
+    ok(b2.conf.d.extended === true, '준비 연장 2');
+    const c2 = orderOf(b2.id), par = orderOf('KVC260101-SEEDG9');
+    x = await rpc('begin_ext_refund', { p_order: b2.id, p_amount: 65000 });
+    ok(x.ok, '환불 시작 2');
+    par.status = 'expired';                          // 그 사이 만료 정리
+    r = await apiIn(ap, '/api/admin?do=order-action', { no: b2.id, act: 'cancel', why: '시험' });
+    ok(r.status === 200 && r.d.extFinished && r.d.extReverted, '만료된 원 주문 환불 ' + JSON.stringify(r.d));
+    ok(par.ends_at === c2.ext_from && par.status === 'expired', '원 주문 날짜가 안 돌아감 ' + par.ends_at + ' / ' + c2.ext_from);
+    ok(pcOf('Y-028').status === 'wipe', 'PC ' + pcOf('Y-028').status);
+  });
+
+  await scenario('EX7', 'db/10 SQL — 함수 9개 · 잠금 · service_role 만 · 한 원 주문당 결제 대기 연장 하나 · 실명 없음 · CRLF', async () => {
     const sql = fs.readFileSync(path.join(srv.ROOT, 'db', '10-연장결제.sql'), 'utf8');
     for (const w of ['apply_extension', 'revert_extension', 'admin_extend_order', 'begin_ext_refund', 'finish_ext_refund',
       'abort_ext_refund', 'begin_parent_cancel', 'abort_parent_cancel', 'orders_ext_req_uq', 'cancel_lock_at', 'for update', 'security definer',
@@ -1615,8 +1656,9 @@ async function main() {
       ok(sql.includes(w), 'SQL 에 「' + w + '」 없음');
     }
     const nFn = (sql.match(/create or replace function/g) || []).length;
-    ok(nFn === 8 && (sql.match(/security definer/g) || []).length === 8 && (sql.match(/set search_path = public/g) || []).length === 8, '함수 보안 설정 개수 ' + nFn);
-    ok((sql.match(/^revoke all on function/gm) || []).length === 8 && (sql.match(/^grant execute on function/gm) || []).length === 8, 'revoke/grant 개수');
+    ok(nFn === 9 && (sql.match(/security definer/g) || []).length === 9 && (sql.match(/set search_path = public/g) || []).length === 9, '함수 보안 설정 개수 ' + nFn);
+    ok((sql.match(/^revoke all on function/gm) || []).length === 9 && (sql.match(/^grant execute on function/gm) || []).length === 9, 'revoke/grant 개수');
+    for (const w of ['record_ext_refund', 'refund_plan', 'cancel_job']) ok(sql.includes(w), 'SQL 에 「' + w + '」 없음');
     ok(!/파주|금촌|영태리|등원리/.test(sql), 'SQL 에 서버실 실명');
     ok(/\r\n/.test(sql) && !/[^\r]\n/.test(sql), 'SQL 줄바꿈이 다른 db 파일(CRLF)과 다름');
     srv.fakeDb.setV10(false);         // 뒤 시험(A13 · Z1)은 예전 상태로

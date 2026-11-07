@@ -60,12 +60,12 @@ async function createExtension(req, res, b) {
   let parent;
   try {
     const rows = await sb('orders', {
-      query: `?select=order_id,member_id,pn,spec_id,status,ends_at,kind,user_name,user_phone` +
+      query: `?select=order_id,member_id,pn,spec_id,status,ends_at,kind,user_name,user_phone,cancel_lock_at` +
              `&order_id=eq.${encodeURIComponent(parentId)}&limit=1`,
     });
     parent = rows && rows[0];
   } catch (e) {
-    if (missingCol(e, 'kind')) return res.status(409).json(NOT_READY);
+    if (missingCol(e, 'kind') || missingCol(e, 'cancel_lock_at')) return res.status(409).json(NOT_READY);
     throw e;
   }
   if (!parent || parent.member_id !== memberId) {
@@ -75,6 +75,8 @@ async function createExtension(req, res, b) {
   if (!parent.pn || !['assigned', 'expired'].includes(parent.status)) {
     return res.status(409).json({ error: NEW, needNew: true });
   }
+  /* 관리자가 이 주문을 해지하는 중이면 결제를 받지 않습니다 (받아도 기간을 못 늘림) */
+  if (parent.cancel_lock_at) return res.status(409).json(NOT_READY);
 
   /* PC 상태 — 이용중이면 rent, 끝난 주문이면 반납 유예(hold) 중이어야 자료가 그대로 있습니다.
      초기화 대기(wipe)로 넘어갔으면 자료가 지워졌을 수 있어 같은 PC 연장을 받지 않습니다. */

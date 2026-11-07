@@ -40,7 +40,7 @@ let v08 = true;
 /* db/10-연장결제.sql 을 돌리면 생기는 칸 · 함수 (2026-11-08)
    ★ 기본은 "아직 안 돌린 Supabase" (v10=false) 입니다 — 월요일 결제 시험 때의 실제 상태라서,
      예전 시험들이 그대로 통과해야 합니다. 연장 결제 시험(EX*)만 setV10(true) 로 켭니다. */
-const V10 = { orders: ['kind', 'parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at'] };
+const V10 = { orders: ['kind', 'parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at', 'cancel_job', 'refund_plan'] };
 let v10 = false;
 const colsOf = t => {
   let c = COLS[t];
@@ -325,7 +325,7 @@ function applyExtension(id) {
   if (!p) return { ok: false, reason: 'no_parent' };
   if (!['assigned', 'expired'].includes(p.status) || !p.pn) return { ok: false, reason: 'parent_state', status: p.status };
   const now = Date.now();
-  if (p.cancel_lock_at && Date.parse(p.cancel_lock_at) > now - 10 * 60000) return { ok: false, reason: 'parent_busy', pn: p.pn };
+  if (p.cancel_lock_at) return { ok: false, reason: 'parent_busy', pn: p.pn };   // 해지 중 — 시간이 지나도 저절로 안 풀림 (SQL 과 같음)
   if (DB.orders.some(o => o.parent_id === p.order_id && o.kind === 'extend' && o.status === 'refunding')) return { ok: false, reason: 'parent_busy', pn: p.pn };
   if (DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id)) {
     return { ok: false, reason: 'pc_taken', pn: p.pn };
@@ -345,12 +345,16 @@ function applyExtension(id) {
   logExt(p.pn, `연장 결제 적용 ${c.order_id} · ${c.days}일 · 원 주문 ${p.order_id}`);
   return { ok: true, pn: p.pn, endsAt: isoOf(end), from: isoOf(base), parent: p.order_id };
 }
-function beginExtRefund(id) {
+function beginExtRefund(id, amount) {
   const c = findOrder(id);
   if (!c) return { ok: false, reason: 'no_order' };
   if (c.kind !== 'extend') return { ok: false, reason: 'not_extend' };
-  if (c.status === 'refunding') return { ok: true, was: c.applied_at ? 'applied' : 'paid', again: true };
+  if (c.status === 'refunding') {
+    return { ok: true, was: c.applied_at ? 'applied' : 'paid', again: true, amount: c.refund_plan, moneyDone: c.refund_amt != null };
+  }
   if (!['paid', 'applied'].includes(c.status)) return { ok: false, reason: 'bad_state', status: c.status };
+  const amt = amount === null || amount === undefined ? null : Number(amount);
+  if (amt === null || !(amt >= 0) || amt > Number(c.amount)) return { ok: false, reason: 'bad_amount' };
   if (c.status === 'applied') {
     const p = findOrder(c.parent_id);
     if (DB.orders.some(o => o.parent_id === c.parent_id && o.kind === 'extend' && ['applied', 'refunding'].includes(o.status) &&
@@ -358,8 +362,17 @@ function beginExtRefund(id) {
     if (!p || Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
   }
   const was = c.status;
-  c.status = 'refunding';
-  return { ok: true, was };
+  Object.assign(c, { status: 'refunding', refund_plan: amt });
+  return { ok: true, was, amount: amt, moneyDone: false };
+}
+function recordExtRefund(id, state, why) {
+  const c = findOrder(id);
+  if (!c || c.kind !== 'extend') return { ok: false, reason: 'no_order' };
+  if (['refunded', 'canceled'].includes(c.status)) return { ok: true, skip: 'done' };
+  if (c.refund_plan == null) return { ok: false, reason: 'no_plan' };
+  Object.assign(c, { status: 'refunding', refund_amt: c.refund_plan, refund_state: state,
+    refund_why: String(why || '고객 요청').slice(0, 200), canceled_at: c.canceled_at || isoOf(Date.now()) });
+  return { ok: true, amount: c.refund_plan };
 }
 function finishExtRefund(id, st) {
   if (!['refunded', 'canceled'].includes(st)) return { ok: false, reason: 'bad_status' };
@@ -374,11 +387,13 @@ function finishExtRefund(id, st) {
     if (!p) return { ok: false, reason: 'no_parent' };
     if (Date.parse(p.ends_at) !== Date.parse(c.ext_to)) return { ok: false, reason: 'parent_changed' };
     vEnd = c.ext_from;
-    if (Date.parse(vEnd) > now) { p.ends_at = vEnd; vSt = p.status; }
-    else {
-      p.ends_at = vEnd;
-      if (p.status === 'assigned') p.status = 'expired';
-      vSt = 'expired';
+    /* 만료 정리가 이미 expired 로 바꿨어도 날짜는 되돌립니다 (SQL 과 같음) */
+    if (!['assigned', 'expired'].includes(p.status)) return { ok: false, reason: 'parent_state', status: p.status };
+    const past = Date.parse(vEnd) <= now;
+    p.ends_at = vEnd;
+    if (p.status === 'assigned' && past) p.status = 'expired';
+    vSt = p.status;
+    if (past) {
       const pc = DB.pcs.find(x => x.pn === p.pn);
       const busy = DB.orders.some(o => o.pn === p.pn && ACTIVE.includes(o.status) && o.order_id !== p.order_id);
       if (pc && ['rent', 'hold'].includes(pc.status) && !busy) Object.assign(pc, { status: 'wipe', wipe_at: isoOf(now), updated_at: isoOf(now) });
@@ -393,17 +408,18 @@ function abortExtRefund(id) {
   const c = findOrder(id);
   if (!c || c.status !== 'refunding') return { ok: false, reason: 'not_refunding' };
   if (c.refund_amt !== null && c.refund_amt !== undefined) return { ok: false, reason: 'money_done' };
-  c.status = c.applied_at ? 'applied' : 'paid';
+  Object.assign(c, { status: c.applied_at ? 'applied' : 'paid', refund_plan: null });
   return { ok: true };
 }
-function beginParentCancel(id) {
+function beginParentCancel(id, job) {
+  if (!job) return { ok: false, reason: 'no_job' };
   const p = findOrder(id);
   if (!p) return { ok: false, reason: 'no_order' };
   const kids = DB.orders.filter(o => o.parent_id === id && o.kind === 'extend' && ['applied', 'paid', 'refunding'].includes(o.status))
     .sort((a, b) => (b.ext_to ? Date.parse(b.ext_to) : Infinity) - (a.ext_to ? Date.parse(a.ext_to) : Infinity))
     .map(o => ({ no: o.order_id, days: o.days, status: o.status }));
   if (kids.length) return { ok: false, reason: 'has_ext', kids };
-  p.cancel_lock_at = isoOf(Date.now());
+  Object.assign(p, { cancel_lock_at: isoOf(Date.now()), cancel_job: String(job).slice(0, 64) });
   return { ok: true };
 }
 /* 관리자 수동 연장 — 실패하면 넣은 줄까지 없던 일로 (apply 는 실패할 때 아무것도 안 바꾸므로 줄만 빼면 됨) */
@@ -440,15 +456,25 @@ function adminExtendOrder(b) {
 }
 const FN10 = {
   apply_extension: b => applyExtension(String(b.p_order || '')),
-  begin_ext_refund: b => beginExtRefund(String(b.p_order || '')),
+  begin_ext_refund: b => beginExtRefund(String(b.p_order || ''), b.p_amount),
+  record_ext_refund: b => recordExtRefund(String(b.p_order || ''), b.p_state, b.p_why),
   finish_ext_refund: b => finishExtRefund(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status),
   abort_ext_refund: b => abortExtRefund(String(b.p_order || '')),
+  /* 웹훅용 — 시작(전액) + 돈 기록 + 마무리 */
   revert_extension: b => {
-    const r = beginExtRefund(String(b.p_order || ''));
-    return r.ok ? finishExtRefund(String(b.p_order || ''), b.p_status === undefined ? 'refunded' : b.p_status) : r;
+    const id = String(b.p_order || ''), c = findOrder(id);
+    let r = beginExtRefund(id, c ? c.amount : null);
+    if (!r.ok) return r;
+    r = recordExtRefund(id, 'toss_done', '토스에서 직접 취소');
+    if (!r.ok) return r;
+    return finishExtRefund(id, b.p_status === undefined ? 'refunded' : b.p_status);
   },
-  begin_parent_cancel: b => beginParentCancel(String(b.p_order || '')),
-  abort_parent_cancel: b => { const p = findOrder(String(b.p_order || '')); if (p) p.cancel_lock_at = null; return { ok: true }; },
+  begin_parent_cancel: b => beginParentCancel(String(b.p_order || ''), b.p_job),
+  abort_parent_cancel: b => {
+    const p = findOrder(String(b.p_order || ''));
+    if (p && p.cancel_job && p.cancel_job === b.p_job) { p.cancel_lock_at = null; p.cancel_job = null; return { ok: true }; }
+    return { ok: false };
+  },
   admin_extend_order: adminExtendOrder,
 };
 
@@ -565,7 +591,7 @@ module.exports = {
     DB.settings = DB.settings.filter(s => s.k !== 'ext_pay');
     if (v10) {
       for (const o of DB.orders) if (!o.kind) o.kind = 'new';
-      for (const k of ['parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at']) for (const o of DB.orders) if (o[k] === undefined) o[k] = null;
+      for (const k of ['parent_id', 'ext_from', 'ext_to', 'applied_at', 'ext_req', 'cancel_lock_at', 'cancel_job', 'refund_plan']) for (const o of DB.orders) if (o[k] === undefined) o[k] = null;
       DB.settings.push({ k: 'ext_pay', v: '1' });
     }
   },

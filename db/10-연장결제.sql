@@ -42,13 +42,15 @@
 --      update settings set v = '0' where k = 'ext_pay';
 --      drop function if exists public.admin_extend_order(text, int, int, text, text, text);
 --      drop function if exists public.revert_extension(text, text);
---      drop function if exists public.begin_ext_refund(text);
+--      drop function if exists public.begin_ext_refund(text, int);
+--      drop function if exists public.record_ext_refund(text, text, text);
 --      drop function if exists public.finish_ext_refund(text, text);
 --      drop function if exists public.abort_ext_refund(text);
---      drop function if exists public.begin_parent_cancel(text);
---      drop function if exists public.abort_parent_cancel(text);
+--      drop function if exists public.begin_parent_cancel(text, text);
+--      drop function if exists public.abort_parent_cancel(text, text);
 --      drop function if exists public.apply_extension(text);
---    새로 만든 칸(kind · parent_id · ext_from · ext_to · applied_at · ext_req · cancel_lock_at)은
+--    새로 만든 칸(kind · parent_id · ext_from · ext_to · applied_at · ext_req · cancel_lock_at ·
+--    cancel_job · refund_plan)은
 --    남겨 두셔도 됩니다. 코드는 함수가 없으면 관리자 연장을 예전 방식으로 하고, 고객 [연장하기] 를 숨깁니다.
 --    이미 만들어진 연장 줄은 기록으로 남습니다 (지우지 마세요 — 결제 기록입니다).
 -- ═══════════════════════════════════════════════════════════════
@@ -75,8 +77,12 @@ alter table orders add column if not exists ext_to         timestamptz;
 alter table orders add column if not exists applied_at     timestamptz;
 -- 관리자 수동 연장 요청 번호 — 같은 요청이 두 번 와도 한 번만 연장 (Codex T-0193)
 alter table orders add column if not exists ext_req        text;
--- 원 주문 해지 진행 중 표시 — 이 동안(10분)은 연장을 적용하지 않습니다 (Codex T-0193)
+-- 원 주문 해지 진행 중 표시 — 이 표시가 있는 동안은 연장을 적용하지 않습니다 (Codex T-0193 · T-0194)
 alter table orders add column if not exists cancel_lock_at timestamptz;
+-- 그 해지를 시작한 요청 번호 — 같은 요청만 잠금을 풀 수 있습니다 (Codex T-0194)
+alter table orders add column if not exists cancel_job     text;
+-- 연장 환불을 시작할 때 정한 환불 금액 — 끊겼다 다시 눌러도 같은 금액으로 이어갑니다 (Codex T-0194)
+alter table orders add column if not exists refund_plan    int;
 
 -- 종류는 두 가지만
 do $$
@@ -141,8 +147,11 @@ begin
   if p.status not in ('assigned', 'expired') or p.pn is null then
     return jsonb_build_object('ok', false, 'reason', 'parent_state', 'status', p.status);
   end if;
-  -- 관리자가 원 주문을 해지하는 중이면(10분 안) 늘리지 않습니다
-  if p.cancel_lock_at is not null and p.cancel_lock_at > now() - interval '10 minutes' then
+  -- 관리자가 원 주문을 해지하는 중이면 늘리지 않습니다.
+  -- ★ 시간이 지나도 저절로 풀리지 않습니다 (Codex T-0194). 토스 취소 결과를 모르는 채로
+  --   연장이 붙으면 안 되기 때문입니다. 풀리는 길은 ① 그 해지 요청이 토스 거절로 abort
+  --   ② 관리자가 [해지 · 환불] 을 다시 눌러 끝내기 뿐입니다.
+  if p.cancel_lock_at is not null then
     return jsonb_build_object('ok', false, 'reason', 'parent_busy', 'pn', p.pn);
   end if;
   -- 같은 원 주문의 다른 연장을 환불하는 중이면 날짜가 엇갈리므로 늘리지 않습니다
@@ -187,17 +196,22 @@ end;
 $$;
 
 
--- ── 3. 연장 환불 — 시작 · 마무리 · 취소 ────────────────────────
--- ★ 왜 세 단계인가 (Codex T-0193)
+-- ── 3. 연장 환불 — 시작 · 돈 기록 · 마무리 · 취소 ──────────────────
+-- ★ 왜 여러 단계인가 (Codex T-0193 · T-0194)
 --   토스 취소는 데이터베이스 밖(인터넷)에서 일어나서 한 거래로 묶을 수 없습니다.
---   그래서 ① 시작(begin): 연장 줄을 [환불 처리 중(refunding)] 으로 먼저 잡아 두고
---           (이때부터 apply_extension 은 이 줄을 적용하지 않음 — 결제완료였던 줄이 그 사이 적용되는 경쟁을 막음)
---         ② 토스 취소 (코드)
---         ③ 마무리(finish): 기간을 늘려 둔 줄이면 원 주문 기간을 되돌리고 refunded/canceled 로.
---   중간에 끊기면 줄이 refunding 으로 남아 관리자 [오늘 할 일] 에 뜨고, 다시 누르면 ③ 부터 이어집니다.
---   토스 취소가 실패하면 abort 로 원래 상태(paid/applied)로 돌려놓습니다.
+--   ① 시작(begin_ext_refund): 연장 줄을 [환불 처리 중(refunding)] 으로 잡고 환불 금액(refund_plan)을 정해 둡니다.
+--      이때부터 apply_extension 은 이 줄을 적용하지 않습니다.
+--      이미 refunding 이면(다른 창에서 진행 중 · 중간에 끊김) 새 금액을 받지 않고 처음 정한 금액으로 "합류" 합니다.
+--      → 두 요청이 동시에 와도 같은 금액 · 같은 토스 취소 번호(Idempotency-Key)로 가서 토스가 한 번만 취소합니다.
+--   ② 토스 취소 (코드)
+--   ③ 돈 기록(record_ext_refund): 토스가 돌려줬으면(또는 직접 송금으로 정했으면) 환불액을 적고
+--      줄을 다시 refunding 으로 확정합니다 (그 사이 누가 abort 로 풀었어도 돈은 나갔으므로 되돌립니다).
+--   ④ 마무리(finish_ext_refund): 기간을 늘려 둔 줄이면 원 주문 기간을 되돌리고 refunded/canceled 로.
+--   중간에 끊기면 줄이 refunding 으로 남아 관리자 [오늘 할 일] 에 뜨고, 다시 누르면 이어서 합니다.
+--   토스가 "취소 안 됨" 이라고 분명히 답했을 때만 abort 로 원래 상태(paid/applied)로 돌려놓습니다
+--   (연결 끊김처럼 결과를 모르면 풀지 않습니다 — 코드에서 지킴).
 -- 기간을 늘린 연장은 "가장 마지막" 것만 환불합니다 (중간 것을 빼면 그 뒤 연장들의 날짜가 어긋남).
-create or replace function public.begin_ext_refund(p_order text)
+create or replace function public.begin_ext_refund(p_order text, p_amount int default null)
 returns jsonb
 language plpgsql
 security definer
@@ -215,10 +229,15 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'not_extend');
   end if;
   if c.status = 'refunding' then
-    return jsonb_build_object('ok', true, 'was', case when c.applied_at is null then 'paid' else 'applied' end, 'again', true);
+    -- 합류 — 처음 정한 금액 그대로
+    return jsonb_build_object('ok', true, 'was', case when c.applied_at is null then 'paid' else 'applied' end,
+                              'again', true, 'amount', c.refund_plan, 'moneyDone', c.refund_amt is not null);
   end if;
   if c.status not in ('paid', 'applied') then
     return jsonb_build_object('ok', false, 'reason', 'bad_state', 'status', c.status);
+  end if;
+  if p_amount is null or p_amount < 0 or p_amount > c.amount then
+    return jsonb_build_object('ok', false, 'reason', 'bad_amount');
   end if;
   if c.status = 'applied' then
     perform 1 from pcs where pn = (select pn from orders where order_id = c.parent_id) for update;
@@ -233,8 +252,36 @@ begin
       return jsonb_build_object('ok', false, 'reason', 'parent_changed');
     end if;
   end if;
-  update orders set status = 'refunding' where order_id = c.order_id;
-  return jsonb_build_object('ok', true, 'was', c.status);
+  update orders set status = 'refunding', refund_plan = p_amount where order_id = c.order_id;
+  return jsonb_build_object('ok', true, 'was', c.status, 'amount', p_amount, 'moneyDone', false);
+end;
+$$;
+
+-- 돈 단계가 끝났다는 기록 — 토스가 돌려줬거나(toss_done) 직접 송금으로 정함(manual_pending)
+create or replace function public.record_ext_refund(p_order text, p_state text, p_why text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  c orders%rowtype;
+begin
+  select * into c from orders where order_id = p_order for update;
+  if not found or c.kind <> 'extend' then
+    return jsonb_build_object('ok', false, 'reason', 'no_order');
+  end if;
+  if c.status in ('refunded', 'canceled') then
+    return jsonb_build_object('ok', true, 'skip', 'done');
+  end if;
+  if c.refund_plan is null then
+    return jsonb_build_object('ok', false, 'reason', 'no_plan');
+  end if;
+  update orders
+     set status = 'refunding', refund_amt = c.refund_plan, refund_state = p_state,
+         refund_why = left(coalesce(p_why, '고객 요청'), 200), canceled_at = coalesce(canceled_at, now())
+   where order_id = c.order_id;
+  return jsonb_build_object('ok', true, 'amount', c.refund_plan);
 end;
 $$;
 
@@ -249,6 +296,7 @@ declare
   p     orders%rowtype;
   v_end timestamptz;
   v_st  text;
+  n     int;
 begin
   if p_status not in ('refunded', 'canceled') then
     return jsonb_build_object('ok', false, 'reason', 'bad_status');
@@ -275,14 +323,19 @@ begin
       return jsonb_build_object('ok', false, 'reason', 'parent_changed');
     end if;
     v_end := c.ext_from;
-    if v_end > now() then
-      update orders set ends_at = v_end where order_id = p.order_id;
-      v_st := p.status;
-    else
-      -- 되돌린 날이 이미 지났으면 원 주문은 만료, PC 는 바로 초기화 대기 (해지·환불과 같은 규칙)
-      update orders set ends_at = v_end, status = 'expired'
-       where order_id = p.order_id and status = 'assigned';
-      v_st := 'expired';
+    -- ★ 환불 도중 만료 정리가 원 주문을 이미 expired 로 바꿨어도 날짜는 되돌립니다 (Codex T-0194)
+    --   이용중(assigned)이면서 되돌린 날이 지났으면 만료로. 실제로 한 줄이 바뀌었는지 확인합니다.
+    update orders
+       set ends_at = v_end,
+           status  = case when status = 'assigned' and v_end <= now() then 'expired' else status end
+     where order_id = p.order_id and status in ('assigned', 'expired');
+    get diagnostics n = row_count;
+    if n <> 1 then
+      return jsonb_build_object('ok', false, 'reason', 'parent_state', 'status', p.status);
+    end if;
+    select status into v_st from orders where order_id = p.order_id;
+    if v_end <= now() then
+      -- 되돌린 날이 이미 지났으면 PC 는 바로 초기화 대기 (해지·환불과 같은 규칙) — 다른 주문이 쓰면 그대로
       update pcs set status = 'wipe', wipe_at = now(), updated_at = now()
        where pn = p.pn and status in ('rent', 'hold')
          and not exists (select 1 from orders o
@@ -302,7 +355,7 @@ begin
 end;
 $$;
 
--- 토스 취소가 안 됐을 때 — 환불 시작 표시를 풀고 원래 상태로 (돈이 이미 나간 줄은 풀지 않음)
+-- 토스가 "취소 안 됨" 이라고 분명히 답했을 때 — 환불 시작 표시를 풀고 원래 상태로 (돈이 나간 줄은 풀지 않음)
 create or replace function public.abort_ext_refund(p_order text)
 returns jsonb
 language plpgsql
@@ -319,13 +372,13 @@ begin
   if c.refund_amt is not null then
     return jsonb_build_object('ok', false, 'reason', 'money_done');
   end if;
-  update orders set status = case when c.applied_at is null then 'paid' else 'applied' end
+  update orders set status = case when c.applied_at is null then 'paid' else 'applied' end, refund_plan = null
    where order_id = c.order_id;
   return jsonb_build_object('ok', true);
 end;
 $$;
 
--- 토스 상점관리자에서 직접 취소된 연장 (웹훅) — 시작 + 마무리를 한 번에
+-- 토스 상점관리자에서 직접 (전액) 취소된 연장 (웹훅) — 시작 + 돈 기록 + 마무리를 한 번에
 create or replace function public.revert_extension(p_order text, p_status text default 'refunded')
 returns jsonb
 language plpgsql
@@ -335,7 +388,11 @@ as $$
 declare
   r jsonb;
 begin
-  r := public.begin_ext_refund(p_order);
+  r := public.begin_ext_refund(p_order, (select amount from orders where order_id = p_order));
+  if not coalesce((r->>'ok')::boolean, false) then
+    return r;
+  end if;
+  r := public.record_ext_refund(p_order, 'toss_done', '토스에서 직접 취소');
   if not coalesce((r->>'ok')::boolean, false) then
     return r;
   end if;
@@ -344,11 +401,15 @@ end;
 $$;
 
 
--- ── 4. 원 주문 해지 잠금 (Codex T-0193) ─────────────────────────
+-- ── 4. 원 주문 해지 잠금 (Codex T-0193 · T-0194) ─────────────────
 -- 관리자가 원 주문을 해지하는 동안 연장이 적용되면, 해지 뒤 PC 가 초기화되는데 연장분은 남습니다.
 -- 해지를 시작할 때 원 주문을 잠그고, 연장 줄(적용됨·결제완료·환불 중)이 있으면 거절합니다.
--- 없으면 cancel_lock_at 을 찍어 10분 동안 apply_extension 이 이 주문을 늘리지 못하게 합니다.
-create or replace function public.begin_parent_cancel(p_order text)
+-- 없으면 cancel_lock_at · cancel_job(요청 번호)을 찍어 apply_extension 이 이 주문을 늘리지 못하게 합니다.
+-- ★ 새 해지 요청은 잠금을 "넘겨받습니다" (cancel_job 을 자기 번호로). 그러면 먼저 온 요청이 토스 거절로
+--   풀려고 해도 번호가 달라 풀리지 않습니다 — 잠금은 마지막으로 넘겨받은 요청 번호로만 풀립니다.
+--   (토스 취소 번호가 주문마다 하나라, 다시 눌러 같은 취소가 두 번 가도 토스가 한 번만 처리합니다.)
+-- ★ 시간이 지나도 저절로 풀리지 않습니다 — 연결이 끊겨 결과를 모를 때는 [해지 · 환불] 을 다시 눌러 끝냅니다.
+create or replace function public.begin_parent_cancel(p_order text, p_job text)
 returns jsonb
 language plpgsql
 security definer
@@ -358,6 +419,9 @@ declare
   p    orders%rowtype;
   kids jsonb;
 begin
+  if p_job is null or p_job = '' then
+    return jsonb_build_object('ok', false, 'reason', 'no_job');
+  end if;
   perform 1 from pcs where pn = (select pn from orders where order_id = p_order) for update;
   select * into p from orders where order_id = p_order for update;
   if not found then
@@ -369,22 +433,31 @@ begin
   if jsonb_array_length(kids) > 0 then
     return jsonb_build_object('ok', false, 'reason', 'has_ext', 'kids', kids);
   end if;
-  update orders set cancel_lock_at = now() where order_id = p_order;
+  update orders set cancel_lock_at = now(), cancel_job = left(p_job, 64) where order_id = p_order;
   return jsonb_build_object('ok', true);
 end;
 $$;
 
-create or replace function public.abort_parent_cancel(p_order text)
+create or replace function public.abort_parent_cancel(p_order text, p_job text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  n int;
 begin
-  update orders set cancel_lock_at = null where order_id = p_order;
-  return jsonb_build_object('ok', true);
+  update orders set cancel_lock_at = null, cancel_job = null
+   where order_id = p_order and cancel_job = p_job;
+  get diagnostics n = row_count;
+  return jsonb_build_object('ok', n = 1);
 end;
 $$;
+
+-- 예전 판(인자 개수가 다른 것)이 남아 있으면 지웁니다 — 같은 이름이 둘이면 서버가 헷갈립니다
+drop function if exists public.begin_ext_refund(text);
+drop function if exists public.begin_parent_cancel(text);
+drop function if exists public.abort_parent_cancel(text);
 
 
 -- ── 5. 관리자 수동 연장 (계좌이체·전화로 받은 연장) ────────────────
@@ -458,20 +531,22 @@ drop function if exists public.admin_extend_order(text, int, int, text, text);
 -- ── 6. 권한 — 서버(service_role)만 부릅니다 ─────────────────────
 -- 고객 브라우저(공개키 anon · 로그인 authenticated)로는 절대 못 부르게 막습니다.
 revoke all on function public.apply_extension(text)                               from public, anon, authenticated;
-revoke all on function public.begin_ext_refund(text)                              from public, anon, authenticated;
+revoke all on function public.begin_ext_refund(text, int)                         from public, anon, authenticated;
+revoke all on function public.record_ext_refund(text, text, text)                 from public, anon, authenticated;
 revoke all on function public.finish_ext_refund(text, text)                       from public, anon, authenticated;
 revoke all on function public.abort_ext_refund(text)                              from public, anon, authenticated;
 revoke all on function public.revert_extension(text, text)                        from public, anon, authenticated;
-revoke all on function public.begin_parent_cancel(text)                           from public, anon, authenticated;
-revoke all on function public.abort_parent_cancel(text)                           from public, anon, authenticated;
+revoke all on function public.begin_parent_cancel(text, text)                     from public, anon, authenticated;
+revoke all on function public.abort_parent_cancel(text, text)                     from public, anon, authenticated;
 revoke all on function public.admin_extend_order(text, int, int, text, text, text) from public, anon, authenticated;
 grant execute on function public.apply_extension(text)                               to service_role;
-grant execute on function public.begin_ext_refund(text)                              to service_role;
+grant execute on function public.begin_ext_refund(text, int)                         to service_role;
+grant execute on function public.record_ext_refund(text, text, text)                 to service_role;
 grant execute on function public.finish_ext_refund(text, text)                       to service_role;
 grant execute on function public.abort_ext_refund(text)                              to service_role;
 grant execute on function public.revert_extension(text, text)                        to service_role;
-grant execute on function public.begin_parent_cancel(text)                           to service_role;
-grant execute on function public.abort_parent_cancel(text)                           to service_role;
+grant execute on function public.begin_parent_cancel(text, text)                     to service_role;
+grant execute on function public.abort_parent_cancel(text, text)                     to service_role;
 grant execute on function public.admin_extend_order(text, int, int, text, text, text) to service_role;
 
 
@@ -484,7 +559,7 @@ insert into settings (k, v) values ('ext_pay', '1')
 -- 아래 세 줄이 나오면 성공입니다.
 select k, v from settings where k = 'ext_pay';
 select count(*) as "예전 주문 (전부 new 여야 함)" from orders where kind = 'new';
-select proname as "만든 함수 (8개)" from pg_proc
- where proname in ('apply_extension', 'begin_ext_refund', 'finish_ext_refund', 'abort_ext_refund',
+select proname as "만든 함수 (9개)" from pg_proc
+ where proname in ('apply_extension', 'begin_ext_refund', 'record_ext_refund', 'finish_ext_refund', 'abort_ext_refund',
                    'revert_extension', 'begin_parent_cancel', 'abort_parent_cancel', 'admin_extend_order')
  order by proname;

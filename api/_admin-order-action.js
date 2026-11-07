@@ -27,6 +27,7 @@
      서버가 이 규칙대로 금액을 계산해 알려줍니다.
      관리자가 다른 금액을 넣으면 그 사실이 기록에 남습니다.
    ═══════════════════════════════════════════════════════════════ */
+const crypto = require('crypto');
 const { ready, sb, missingCol, missingFn } = require('./_supa');
 const { quote: priceQuote } = require('./_price');
 const { verify, who } = require('./admin-login');
@@ -125,26 +126,25 @@ async function tossCancel(order, amount, why, acct) {
   return { done: true };
 }
 
-/* ═══ 연장 결제 줄 환불 (2026-11-08 · db/10 · Codex T-0193) ═════════════
-   세 단계로 나눕니다. 토스 취소는 데이터베이스 밖에서 일어나 한 거래로 묶을 수 없기 때문입니다.
-     ① begin_ext_refund  — 연장 줄을 [환불 처리 중(refunding)] 으로 먼저 잡습니다.
-                           이때부터 apply_extension 은 이 줄을 적용하지 않습니다
-                           (결제완료였던 줄이 환불 도중 적용돼 "환불했는데 기간은 남는" 경쟁을 막음).
-                           기간을 늘린 줄은 "가장 마지막 연장" 일 때만 잡힙니다.
-     ② 토스 취소 (그 연장의 결제키 · Idempotency-Key 가 같아 다시 불러도 두 번 취소되지 않음)
-        실패하면 abort_ext_refund 로 원래 상태로 되돌리고 아무것도 바꾸지 않습니다.
-     ③ 환불 금액·송금 상태를 먼저 적고 → finish_ext_refund 가 원 주문 기간을 되돌리고 마무리.
-   ★ ③ 이 실패하면(연결 끊김 등) 줄이 refunding 으로 남아 [오늘 할 일] 에 뜨고,
-     [해지 · 환불] 을 다시 누르면 돈 단계는 건너뛰고 ③ 부터 이어서 합니다.
+/* ═══ 연장 결제 줄 환불 (2026-11-08 · db/10 · Codex T-0193 · T-0194) ═════════
+   토스 취소는 데이터베이스 밖에서 일어나 한 거래로 묶을 수 없어 단계를 나눕니다.
+     ① begin_ext_refund  — 연장 줄을 [환불 처리 중(refunding)] 으로 잡고 환불 금액을 그때 정해 저장합니다.
+                           이때부터 apply_extension 은 이 줄을 적용하지 않습니다.
+                           이미 refunding 이면(다른 창에서 진행 중 · 중간에 끊김) 처음 정한 금액으로 "합류" 합니다.
+     ② 토스 취소 — 그 연장의 결제키 · 같은 취소 번호(Idempotency-Key)라 두 창이 동시에 불러도 한 번만 취소.
+        토스가 "취소 안 됨" 이라고 분명히 답할 때만 abort 로 원래 상태로 돌립니다.
+        연결이 끊겨 결과를 모르면 그대로 둡니다 — 다시 누르면 같은 금액·같은 번호로 이어서 합니다.
+     ③ record_ext_refund — 돈 단계가 끝났다고 적습니다 (그 사이 누가 풀었어도 다시 refunding 으로 확정).
+     ④ finish_ext_refund — 기간을 늘린 줄이면 원 주문 기간을 되돌리고 refunded/canceled 로 마무리.
+   ★ ③·④ 가 끊기면 줄이 refunding 으로 남아 [오늘 할 일] 에 뜨고, 다시 누르면 남은 단계만 합니다.
    ★ PC 는 원 주문 것이라 풀지 않습니다 (기간이 이미 끝났으면 finish 가 초기화 대기로 보냄). */
 async function cancelExtension(req, res, { order, no, b, now, log }) {
   const fn = (name, body) => sb('rpc/' + name, { method: 'POST', body });
-  /* 이미 돈은 돌려준 줄 (③ 에서 끊겼던 것) — 마무리만 */
-  const moneyDone = order.status === 'refunding' && order.refund_amt !== null && order.refund_amt !== undefined;
+  const fresh = order.status !== 'refunding';
   const q = refundQuote(order, 0, now.getTime());
-  let asked = moneyDone ? Number(order.refund_amt)
-    : (b.refund === undefined || b.refund === null || b.refund === '') ? q.refund : Math.round(Number(b.refund));
-  if (!moneyDone) {
+  let asked = null;
+  if (fresh) {
+    asked = (b.refund === undefined || b.refund === null || b.refund === '') ? q.refund : Math.round(Number(b.refund));
     if (!Number.isFinite(asked) || asked < 0) return res.status(400).json({ error: '환불 금액이 올바르지 않습니다' });
     if (asked > Number(order.amount)) return res.status(400).json({ error: '받은 금액보다 많이 환불할 수 없습니다' });
     if (asked !== q.refund && !b.force) {
@@ -155,9 +155,9 @@ async function cancelExtension(req, res, { order, no, b, now, log }) {
     }
   }
 
-  /* ① 환불 시작 */
+  /* ① 환불 시작 (또는 합류) */
   let bg;
-  try { bg = await fn('begin_ext_refund', { p_order: no }); }
+  try { bg = await fn('begin_ext_refund', { p_order: no, p_amount: asked }); }
   catch (e) {
     if (missingFn(e, 'begin_ext_refund')) return res.status(409).json({ error: '연장 환불 함수가 없습니다. db/10-연장결제.sql 을 먼저 실행해 주세요' });
     throw e;
@@ -175,19 +175,22 @@ async function cancelExtension(req, res, { order, no, b, now, log }) {
     }
     return res.status(409).json({ error: '환불을 시작하지 못했습니다 (' + (why || '알 수 없음') + ')' });
   }
-  /* 방금 읽은 상태와 실제 잡은 상태가 다르면(그 사이 적용됨) 금액이 달라지므로 다시 하게 합니다 */
-  const wasSt = bg.was;
-  const readSt = order.status === 'refunding' ? (order.applied_at ? 'applied' : 'paid') : order.status;
-  if (!moneyDone && wasSt !== readSt) {
+  /* 새로 시작했는데, 처음 읽은 상태와 실제로 잡은 상태가 다르면(그 사이 기간이 적용됨) 금액이 달라지므로 다시 하게 합니다 */
+  if (fresh && bg.was !== order.status) {
     try { await fn('abort_ext_refund', { p_order: no }); } catch (e) {}
     return res.status(409).json({ error: '방금 이 연장의 상태가 바뀌었습니다 (기간이 적용됨). 새로고침 후 다시 눌러 주세요' });
   }
+  /* 합류면 처음 정한 금액을 씁니다 (새로 계산하지 않음) */
+  asked = Number(bg.amount);
+  if (!Number.isFinite(asked)) return res.status(409).json({ error: '환불 금액 기록이 없습니다. 관리자 기록을 확인해 주세요' });
+  const moneyDone = !!bg.moneyDone;
 
   /* ② 토스 취소 */
   let tc = { done: false, reason: '이미' };
   if (!moneyDone) {
     tc = await tossCancel(order, asked, str(b.why, 100), b.account);
-    if (!tc.done && ['계좌필요', '거절', '연결실패'].includes(tc.reason)) {
+    if (!tc.done && (tc.reason === '계좌필요' || tc.reason === '거절')) {
+      /* 토스가 분명히 "안 됨" — 원래 상태로 (이 줄의 돈은 안 나갔음) */
       try { await fn('abort_ext_refund', { p_order: no }); } catch (e) {}
       if (tc.reason === '계좌필요') {
         return res.status(409).json({ error: '가상계좌로 받은 결제입니다. 돌려드릴 통장을 알려 주셔야 취소됩니다.\n'
@@ -196,14 +199,26 @@ async function cancelExtension(req, res, { order, no, b, now, log }) {
       return res.status(502).json({ error: '토스에서 취소되지 않았습니다. 아무것도 바꾸지 않았습니다.\n'
         + (tc.detail || '') + '\n\n계속 안 되면 토스 콘솔에서 직접 취소하신 뒤 다시 눌러 주세요.', tossCode: tc.code || null });
     }
-    /* 돈 단계가 끝났다는 것을 먼저 적어 둡니다 (③ 이 끊겨도 다시 누르면 토스를 또 부르지 않게) */
-    await sb('orders', { method: 'PATCH', prefer: 'return=minimal',
-      query: `?order_id=eq.${encodeURIComponent(no)}&status=eq.refunding`,
-      body: { refund_amt: asked, refund_why: str(b.why, 200) || '고객 요청', canceled_at: now.toISOString(),
-              refund_state: tc.done ? 'toss_done' : asked > 0 ? 'manual_pending' : null } });
+    if (!tc.done && tc.reason === '연결실패') {
+      /* 결과를 모름 — 풀지 않고 [환불 처리 중] 으로 둡니다 */
+      await log(order.pn, `⚠ 연장 ${no} 환불 중 토스 연결 끊김 — [환불 처리 중] 으로 둠 · 다시 누르면 같은 금액으로 이어서`);
+      return res.status(502).json({ error: '토스와 연결이 끊겨 취소됐는지 알 수 없습니다.\n'
+        + '이 연장은 [환불 처리 중] 으로 두었습니다. 잠시 뒤 [해지 · 환불] 을 다시 누르시면 같은 금액으로 이어서 처리합니다.' });
+    }
+    /* ③ 돈 단계 기록 */
+    let rec;
+    try {
+      rec = await fn('record_ext_refund', { p_order: no,
+        p_state: tc.done ? 'toss_done' : asked > 0 ? 'manual_pending' : null, p_why: str(b.why, 200) || '고객 요청' });
+    } catch (e) { rec = { ok: false, reason: 'rpc' }; }
+    if (!(rec && rec.ok)) {
+      await log(order.pn, `⚠ 연장 ${no} 환불 돈 단계는 끝났는데 기록 실패 (${(rec && rec.reason) || '?'}) — [해지 · 환불] 을 다시 눌러 마무리`);
+      return res.status(200).json({ ok: true, refund: asked, quote: q, moneyBack: !!tc.done,
+        manualRefund: !tc.done && asked > 0, extFinished: false, extReverted: false });
+    }
   }
 
-  /* ③ 마무리 — 기간을 늘린 줄이면 원 주문 기간을 되돌립니다 */
+  /* ④ 마무리 — 기간을 늘린 줄이면 원 주문 기간을 되돌립니다 */
   let fin;
   try { fin = await fn('finish_ext_refund', { p_order: no, p_status: asked > 0 ? 'refunded' : 'canceled' }); }
   catch (e) { fin = { ok: false, reason: 'rpc' }; }
@@ -214,10 +229,11 @@ async function cancelExtension(req, res, { order, no, b, now, log }) {
   const 방법 = moneyDone ? '이전에 처리됨' : tc.done ? '토스 취소 완료' : asked > 0 ? '⚠ 직접 송금 필요 (토스 결제가 아님)' : '환불액 없음';
   await log(order.pn, `연장 환불 ${no} · ${asked.toLocaleString('ko-KR')}원 (${q.rule}) · ${방법}`
     + (finished && fin.reverted ? ` · 원 주문 ${order.parent_id} 기간 되돌림` : ''));
+  const manual = moneyDone ? order.refund_state === 'manual_pending' : (!tc.done && asked > 0);
   return res.status(200).json({
     ok: true, refund: asked, quote: q, pcReturned: false, pcBusy: false, pcWipe: false,
     refundState: moneyDone ? order.refund_state : (tc.done ? 'toss_done' : asked > 0 ? 'manual_pending' : null),
-    refundTracked: true, moneyBack: !!tc.done, manualRefund: !moneyDone && !tc.done && asked > 0,
+    refundTracked: true, moneyBack: !moneyDone && !!tc.done, manualRefund: manual,
     extFinished: finished,                                   // false 면 [환불 처리 중] 으로 남음 — 다시 눌러 마무리
     extReverted: finished ? !!fin.reverted : false,
     parentEnd: finished ? fin.parentEnd : undefined,
@@ -426,9 +442,14 @@ module.exports = async (req, res) => {
          ② 없으면 "해지 중" 표시를 찍어 10분 동안 연장이 적용되지 않게 합니다.
          함수가 없으면(=db/10 전) 연장 줄도 없으므로 예전처럼 진행합니다. */
       let parentLocked = false;
+      /* 이 해지 요청의 번호 — 잠금은 이 번호로만 풀립니다 (다른 창의 해지가 내 잠금을 풀지 못하게 · Codex T-0194) */
+      const job = 'C' + Date.now().toString(36) + crypto.randomBytes(6).toString('hex');
       try {
-        const lk = await sb('rpc/begin_parent_cancel', { method: 'POST', body: { p_order: no } });
+        const lk = await sb('rpc/begin_parent_cancel', { method: 'POST', body: { p_order: no, p_job: job } });
         if (lk && lk.ok) parentLocked = true;
+        else if (lk && lk.reason === 'busy') {
+          return res.status(409).json({ error: '다른 창에서 이 주문을 해지하는 중입니다. 잠시 뒤 새로고침해 확인해 주세요' });
+        }
         else if (lk && lk.reason === 'has_ext') {
           const kids = lk.kids || [];
           const stTx = { applied: '기간 늘림', paid: '결제완료 · 적용 대기', refunding: '환불 처리 중' };
@@ -443,10 +464,13 @@ module.exports = async (req, res) => {
       } catch (e) {
         if (!missingFn(e, 'begin_parent_cancel')) throw e;
       }
-      /* 토스 취소가 안 되면 "해지 중" 표시를 풀어 연장이 다시 적용될 수 있게 합니다 */
+      /* 토스가 "취소 안 됨" 이라고 분명히 답했거나 시작 전에 멈췄을 때만 "해지 중" 표시를 풉니다.
+         ★ 연결이 끊겨 결과를 모를 때는 풀지 않습니다 (Codex T-0194) — 실제로는 돈이 돌아갔는데
+           연장이 붙으면 안 되기 때문입니다. 이때는 [해지 · 환불] 을 다시 누르면 같은 토스 취소 번호로
+           이어서 처리됩니다 (새 요청이 잠금을 넘겨받으므로 먼저 온 요청은 더는 못 풂). */
       const unlock = async () => {
         if (!parentLocked) return;
-        try { await sb('rpc/abort_parent_cancel', { method: 'POST', body: { p_order: no } }); } catch (e) {}
+        try { await sb('rpc/abort_parent_cancel', { method: 'POST', body: { p_order: no, p_job: job } }); } catch (e) {}
       };
 
       const q = refundQuote(order, setupFee, now.getTime());
@@ -477,7 +501,7 @@ module.exports = async (req, res) => {
         });
       }
       if (!tc.done && (tc.reason === '거절' || tc.reason === '연결실패')) {
-        await unlock();
+        if (tc.reason === '거절') await unlock();          // 연결실패(결과 모름)면 잠금 유지
         return res.status(502).json({
           error: '토스에서 취소되지 않았습니다. 아무것도 바꾸지 않았습니다.\n'
                + (tc.detail || '') + '\n\n계속 안 되면 토스 콘솔에서 직접 취소하신 뒤 다시 눌러 주세요.',
