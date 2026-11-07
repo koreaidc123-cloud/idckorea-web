@@ -39,7 +39,21 @@ $LogFile = Join-Path $CfgDir 'agent.log'
 # 이 파일이 우리 프로그램이 맞는지 확인하는 표식입니다.
 # 자동 갱신할 때 엉뚱한 내용을 받아 덮어쓰는 사고를 막습니다.
 $AgentMark = 'KVC-AGENT-FILE-OK'
-$AgentVer  = '2026-08-19'
+$AgentVer  = '2026-11-07'
+
+# 전자서명 확인용 공개키입니다. 서명은 회사 PC의 비밀키로만 만들 수 있습니다.
+# 사이트나 USB의 파일이 바뀌어도 서명이 맞지 않으면 설치하지 않습니다.
+$KvcSignKey = '<RSAKeyValue><Modulus>tl4okd7+6NImhkzB+jqcvEGGyvh18LjRa+zxuIYu6t1mwf1sF4PbrfENQPGi/mRy1Nt85r4FsOi2ouIGoIKXH/ZkDkFzWLu5Cmy9eXXl9x/qP+B2VSnIJ3jVJ+cYg7hwCWdxf33RAB6fOsJKDgqpGgY3eB4NpCTCGTr+KdHXiMLVb93cyf+7erBv34/bs+ZCYV/IH0CWpjRwW/G5WljGOsRnRMqOtHQVhVMxAR4EyNDiDEkNotO2qHAQ9u0uB/DfUlcpaMuwMsxICOfWpb4ZECW5f5kMM1sNP0T6UnQr53+7jkLd/szMLpknKdcuT0Fb7cPhlafd3GZrOhWcCEYVWq/czNxhKlFiWPA+BbcNhTbnJyte7EeqZ29ymAcMHGoKktznKX7tUN3IHyDwqm5Om4UFDxGEf9gkOp2Bs8R3bqN+4cvlAqaQSYWJOwCWdeC8wnRiolQL3TQ083JoVcirmdOVrY6KdPPo83eEkwX61tFB4o1jX6eKxbL0z4LWc3pp</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
+function Test-KvcSig([byte[]]$Data, [string]$SigText) {
+  try {
+    if (-not $Data -or [string]::IsNullOrWhiteSpace($SigText)) { return $false }
+    $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+    $rsa.PersistKeyInCsp = $false
+    $rsa.FromXmlString($KvcSignKey)
+    $sha = New-Object Security.Cryptography.SHA256CryptoServiceProvider
+    return $rsa.VerifyData($Data, $sha, [Convert]::FromBase64String($SigText.Trim()))
+  } catch { return $false }
+}
 
 # ── 지금 누가 쓰고 있는지 ─────────────────────────────────────────
 #    ★ 예약 작업은 SYSTEM 계정으로 돕니다. SYSTEM 은 화면이 없는 별도 공간에서
@@ -333,6 +347,14 @@ function Update-Self {
     Invoke-WebRequest -Uri "$Server/agent/kvc-agent.ps1" -OutFile $tmp `
       -TimeoutSec 30 -UseBasicParsing
     $new = Get-Content $tmp -Raw -Encoding UTF8
+
+    # 서명이 맞아야만 바꿉니다. 서명 파일이 없거나 틀리면 지금 프로그램을 그대로 씁니다.
+    $sig = (Invoke-WebRequest -Uri "$Server/agent/kvc-agent.ps1.sig" -TimeoutSec 30 -UseBasicParsing).Content
+    if ($sig -is [byte[]]) { $sig = [Text.Encoding]::ASCII.GetString($sig) }
+    if (-not (Test-KvcSig ([IO.File]::ReadAllBytes($tmp)) $sig)) {
+      Log '자동 갱신 거부 : 전자서명이 맞지 않습니다.'
+      return
+    }
 
     if ([string]::IsNullOrWhiteSpace($new) -or $new.Length -lt 5000) { return }
     if ($new -notlike "*$AgentMark*")                                { return }

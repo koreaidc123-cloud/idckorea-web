@@ -16,6 +16,20 @@ $Self = Join-Path $Dir 'kvc-agent.ps1'
 $Mark = 'KVC-AGENT-FILE-OK'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# 전자서명 확인용 공개키입니다. 서명은 회사 PC의 비밀키로만 만들 수 있습니다.
+# 사이트나 USB의 파일이 바뀌어도 서명이 맞지 않으면 설치하지 않습니다.
+$KvcSignKey = '<RSAKeyValue><Modulus>tl4okd7+6NImhkzB+jqcvEGGyvh18LjRa+zxuIYu6t1mwf1sF4PbrfENQPGi/mRy1Nt85r4FsOi2ouIGoIKXH/ZkDkFzWLu5Cmy9eXXl9x/qP+B2VSnIJ3jVJ+cYg7hwCWdxf33RAB6fOsJKDgqpGgY3eB4NpCTCGTr+KdHXiMLVb93cyf+7erBv34/bs+ZCYV/IH0CWpjRwW/G5WljGOsRnRMqOtHQVhVMxAR4EyNDiDEkNotO2qHAQ9u0uB/DfUlcpaMuwMsxICOfWpb4ZECW5f5kMM1sNP0T6UnQr53+7jkLd/szMLpknKdcuT0Fb7cPhlafd3GZrOhWcCEYVWq/czNxhKlFiWPA+BbcNhTbnJyte7EeqZ29ymAcMHGoKktznKX7tUN3IHyDwqm5Om4UFDxGEf9gkOp2Bs8R3bqN+4cvlAqaQSYWJOwCWdeC8wnRiolQL3TQ083JoVcirmdOVrY6KdPPo83eEkwX61tFB4o1jX6eKxbL0z4LWc3pp</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
+function Test-KvcSig([byte[]]$Data, [string]$SigText) {
+  try {
+    if (-not $Data -or [string]::IsNullOrWhiteSpace($SigText)) { return $false }
+    $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
+    $rsa.PersistKeyInCsp = $false
+    $rsa.FromXmlString($KvcSignKey)
+    $sha = New-Object Security.Cryptography.SHA256CryptoServiceProvider
+    return $rsa.VerifyData($Data, $sha, [Convert]::FromBase64String($SigText.Trim()))
+  } catch { return $false }
+}
+
 Write-Host ''
 Write-Host '  한국 가상컴 — 랙PC 프로그램 갱신' -ForegroundColor Cyan
 Write-Host '  ─────────────────────────────────────────' -ForegroundColor DarkGray
@@ -39,10 +53,13 @@ Write-Host "  지금 상태 : $before"
 $new = $null
 $from = $null
 $usb = Join-Path $Here 'kvc-agent.ps1'
-if (Test-Path $usb) {
+$newBytes = $null
+if ((Test-Path $usb) -and (Test-Path "$usb.sig")) {
   try {
-    $t = Get-Content $usb -Raw -Encoding UTF8
-    if ($t -like "*$Mark*") { $new = $t; $from = 'USB' }
+    $b = [IO.File]::ReadAllBytes($usb)
+    if (Test-KvcSig $b (Get-Content "$usb.sig" -Raw)) {
+      $newBytes = $b; $new = [Text.Encoding]::UTF8.GetString($b).TrimStart([char]0xFEFF); $from = 'USB'
+    } else { Write-Host '  USB 파일의 전자서명이 맞지 않아 쓰지 않습니다.' -ForegroundColor Yellow }
   } catch {}
 }
 if (-not $new) {
@@ -50,7 +67,11 @@ if (-not $new) {
     Write-Host '  사이트에서 받는 중...'
     $tmp = Join-Path $Dir 'kvc-agent.new'
     Invoke-WebRequest -Uri $Url -OutFile $tmp -TimeoutSec 40 -UseBasicParsing
-    $new = Get-Content $tmp -Raw -Encoding UTF8
+    $sig = (Invoke-WebRequest -Uri "$Url.sig" -TimeoutSec 40 -UseBasicParsing).Content
+    if ($sig -is [byte[]]) { $sig = [Text.Encoding]::ASCII.GetString($sig) }
+    $b = [IO.File]::ReadAllBytes($tmp)
+    if (-not (Test-KvcSig $b $sig)) { throw '전자서명이 맞지 않습니다' }
+    $newBytes = $b; $new = [Text.Encoding]::UTF8.GetString($b).TrimStart([char]0xFEFF)
     $from = '사이트'
     Remove-Item $tmp -Force -ErrorAction SilentlyContinue
   } catch {
@@ -73,11 +94,11 @@ if ($bad) {
   Write-Host ''; Read-Host '  엔터를 누르면 닫힙니다'; exit 1
 }
 
-if ((Test-Path $Self) -and ((Get-Content $Self -Raw -Encoding UTF8) -eq $new)) {
+if ((Test-Path $Self) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($Self)) -eq [Convert]::ToBase64String($newBytes))) {
   Write-Host '  [OK] 이미 최신입니다. 바꿀 것이 없습니다.' -ForegroundColor Green
 } else {
   if (Test-Path $Self) { Copy-Item $Self (Join-Path $Dir 'kvc-agent.bak') -Force }
-  Set-Content -Path $Self -Value $new -Encoding UTF8
+  [IO.File]::WriteAllBytes($Self, $newBytes)
   Write-Host '  [OK] 최신본으로 바꿨습니다.' -ForegroundColor Green
 }
 

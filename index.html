@@ -530,6 +530,7 @@ section.cta .btn-w{color:var(--red)}
   <nav class="gnb">
     <a href="about.html">회사소개</a>
     <a href="#price">요금제</a>
+    <a href="ai.html">AI 작업용 PC<i class="nw"></i></a>
     <a href="live.html">실시간 PC임대<i class="nw"></i></a>
     <a href="qa.html">Q&amp;A안내</a>
   </nav>
@@ -572,6 +573,27 @@ section.cta .btn-w{color:var(--red)}
       모든 기종 메모리 · SSD · 그래픽카드 추가 별도협의</div>
   </div>
 </section>
+
+<!-- ═══ AI 작업용 PC 안내 띠 (2026-11) ═══ -->
+<section class="ai-band"><div class="shell">
+  <a class="ai-band-in" href="ai.html">
+    <span class="t">NEW · 시범 운영</span>
+    <b>노트북을 덮으면 AI도 멈춥니다.</b>
+    <span class="d">클로드 코드 · 코덱스를 돌릴 메모리 32GB 윈도우 원격PC</span>
+    <span class="go">AI 작업용 PC 보기 →</span>
+  </a>
+</div></section>
+<style>
+.ai-band{padding:8px 0 40px}
+.ai-band-in{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"t b go" "t d go";column-gap:22px;row-gap:4px;align-items:center;
+  background:var(--navy);color:#fff;border-radius:20px;padding:26px 30px;text-decoration:none;box-shadow:var(--sh)}
+.ai-band-in .t{grid-area:t;background:var(--red);font-weight:800;font-size:13px;padding:7px 12px;border-radius:99px;white-space:nowrap}
+.ai-band-in b{grid-area:b;font-size:clamp(19px,2.2vw,26px);font-weight:900;letter-spacing:-.02em}
+.ai-band-in .d{grid-area:d;color:#C9D0E4;font-size:15px}
+.ai-band-in .go{grid-area:go;background:#fff;color:var(--blue);font-weight:800;padding:12px 18px;border-radius:12px;white-space:nowrap}
+@media (max-width:760px){.ai-band-in{grid-template-columns:1fr;grid-template-areas:"t" "b" "d" "go";padding:22px 20px;row-gap:8px}
+  .ai-band-in .t{justify-self:start}.ai-band-in .go{text-align:center;margin-top:6px}}
+</style>
 
 <!-- ═══ 활용 분야 ═══ -->
 <section class="sec sec-g">

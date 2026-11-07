@@ -6,11 +6,12 @@
    환경변수를 넣은 뒤 이 주소를 열어서 전부 ok 인지 확인합니다.
    무엇이 빠졌는지 한글로 알려주므로, 뭐가 안 되는지 헤맬 일이 없습니다.
 
-   ※ 키 값 자체는 절대 보여주지 않습니다. "있다/없다"와 앞 8글자만 보여줍니다.
+   ※ 이 주소는 누구나 열 수 있습니다. 그래서 키는 "있다/없다"만 보여주고
+     앞 글자나 길이도 보여주지 않습니다. (2026-11 보안 점검 반영)
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
 
-const mask = v => (v ? v.slice(0, 8) + '…(' + v.length + '자)' : null);
+const mask = v => (v ? '등록됨' : null);
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -33,7 +34,7 @@ module.exports = async (req, res) => {
 
   const 환경변수 = {
     'Supabase 주소': env.SUPABASE_URL
-      ? '✅ ' + env.SUPABASE_URL.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '')
+      ? '✅ 등록됨'
       : '❌ 없음',
     'Supabase 키': env.SUPABASE_SERVICE_KEY
       ? '✅ ' + mask(env.SUPABASE_SERVICE_KEY) +
@@ -49,7 +50,7 @@ module.exports = async (req, res) => {
       : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '현장 등록 암호': env.KVC_SETUP_KEY ? '✅ ' + mask(env.KVC_SETUP_KEY) : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '관리자 비밀번호': env.KVC_ADMIN_PW
-      ? (env.KVC_ADMIN_PW.length < 10 ? '⚠️ 너무 짧습니다 — 10자 이상 권장' : '✅ 등록됨')
+      ? (env.KVC_ADMIN_PW.length < 10 ? '⚠️ 짧습니다 — 더 긴 비밀번호로 바꿔 주세요' : '✅ 등록됨')
       : '❌ 없음 — 관리자 화면이 인터넷에 열려 있습니다',
     '비밀번호 잠금키': env.KVC_SECRET
       ? '✅ 등록됨 (애니데스크 비밀번호 암호화용)'

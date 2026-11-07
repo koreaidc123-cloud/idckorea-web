@@ -147,8 +147,17 @@ module.exports = async (req, res) => {
        나중에 이 값으로 또 잘못 묶이는 것을 막습니다. */
     if (!looksLikeOurHwId(row.hw_id)) row.hw_id = null;
     if (finalPn) {
-      const found = await sb('pcs', { query: `?select=pn&pn=eq.${encodeURIComponent(finalPn)}&limit=1` });
+      const found = await sb('pcs', { query: `?select=pn,status&pn=eq.${encodeURIComponent(finalPn)}&limit=1` });
       exists = !!(found && found[0]);
+      /* ★ 2026-11 보안 점검 — 임대 중인 PC 는 현장 등록 암호만으로 다시 등록할 수 없습니다.
+         다시 등록하면 그 PC 의 전용 열쇠와 애니데스크 정보가 바뀌기 때문입니다.
+         정말 다시 세팅해야 하면 관리자 화면에서 상태를 먼저 바꾼 뒤 등록합니다. */
+      if (exists && found[0].status === 'rent') {
+        return res.status(409).json({
+          error: `${finalPn} 은 고객이 쓰고 있는 PC 라서 다시 등록할 수 없습니다.
+관리자 화면에서 상태를 먼저 바꿔 주세요.`,
+        });
+      }
     }
 
     /* 그 자리에 이미 다른 PC 가 있으면 미리 알려줍니다.

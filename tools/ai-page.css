@@ -1,0 +1,87 @@
+/* AI 작업용 PC 페이지 전용 모양. 색은 index.html 의 --blue · --red 를 그대로 씁니다. */
+.ai .r{color:var(--red)}
+.ai-hero{background:linear-gradient(180deg,#fff 0%,var(--bg2) 100%);padding:72px 0 64px;border-bottom:1px solid var(--line)}
+.ai-hero-in{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.ai-tag{display:inline-block;background:var(--red-l);color:var(--red);font-weight:800;font-size:14px;padding:7px 14px;border-radius:99px;margin-bottom:18px}
+.ai-hero h1{font-size:clamp(34px,5.2vw,60px);line-height:1.18;letter-spacing:-.03em;font-weight:900;color:var(--ink);margin:0 0 20px}
+.ai-lead{font-size:clamp(16px,1.6vw,19px);line-height:1.75;color:var(--ink2);margin:0 0 28px}
+.ai-lead b{color:var(--ink)}
+.ai-cta{display:flex;gap:10px;flex-wrap:wrap}
+.ai-cta.c{justify-content:center}
+.ai-facts{list-style:none;padding:0;margin:34px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ai-facts li{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 12px}
+.ai-facts b{display:block;font-size:clamp(19px,2.2vw,26px);font-weight:900;color:var(--blue);letter-spacing:-.02em}
+.ai-facts span{font-size:13px;color:var(--ink3)}
+.ai-hero-ph img,.ai-split-ph img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:22px;box-shadow:var(--sh);display:block}
+.ai-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.ai-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px 22px}
+.ai-card .n{font-weight:900;color:var(--red);font-size:15px}
+.ai-card h3{font-size:20px;margin:8px 0 10px;color:var(--ink)}
+.ai-card p{color:var(--ink2);line-height:1.7;margin:0;font-size:15.5px}
+.ai-src{font-size:13.5px;color:var(--ink3);line-height:1.7;margin-top:18px}
+.ai-split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.sh.sh-l{text-align:left}
+.ai-steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.ai-steps li{counter-increment:s;position:relative;padding:0 0 22px 52px}
+.ai-steps li::before{content:counter(s);position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;background:var(--blue);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center}
+.ai-steps b,.ai-no b{display:block;font-size:18px;color:var(--ink);margin-bottom:4px}
+.ai-steps span,.ai-no span{color:var(--ink2);line-height:1.65;font-size:15.5px}
+.ai-mem{max-width:820px;margin:0 auto;display:grid;gap:14px}
+.ai-mem-row{display:grid;grid-template-columns:190px 1fr 64px;align-items:center;gap:14px;font-size:15.5px;color:var(--ink2)}
+.ai-mem-row i{height:16px;border-radius:99px;background:var(--line2);position:relative;overflow:hidden}
+.ai-mem-row i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--ink4);border-radius:99px}
+.ai-mem-row b{font-weight:900;color:var(--ink);text-align:right}
+.ai-mem-row.hl{color:var(--ink);font-weight:700}
+.ai-mem-row.hl i::after{background:var(--blue)}
+.ai-mem-row.hl b{color:var(--blue);font-size:20px}
+.ai-mem + .ai-src{text-align:center}
+.ai-cmp{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:14px;align-items:stretch}
+.ai-cmp-c{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px 20px;text-align:center}
+.ai-cmp-c.on{border:2px solid var(--blue)}
+.ai-cmp-c.big{background:var(--navy);color:#fff;border:0;display:flex;flex-direction:column;justify-content:center}
+.ai-cmp-c h3{font-size:16px;margin:0 0 8px;color:var(--ink2)}
+.ai-cmp-c .pr{font-size:clamp(24px,2.6vw,32px);font-weight:900;margin:0 0 8px;letter-spacing:-.02em}
+.ai-cmp-c .pr small{font-size:15px;font-weight:700}
+.ai-cmp-c.big .pr{font-size:clamp(34px,4vw,48px);color:var(--gold)}
+.ai-cmp-c .sp{font-size:13.5px;color:var(--ink3);line-height:1.6;margin:0}
+.ai-cmp-c.big .sp{color:#C9D0E4}
+.ai-cmp-x{display:flex;align-items:center;font-size:30px;font-weight:900;color:var(--ink4)}
+.ai-tbl{max-width:620px;margin:22px auto 0;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.ai-tbl div{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line2);font-size:15.5px}
+.ai-tbl div:last-child{border:0}
+.ai-tbl b{font-weight:900}
+#ai-price .ai-src{text-align:center;max-width:760px;margin:18px auto 0}
+.ai-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ai-box{border-radius:18px;padding:26px 24px;border:1px solid var(--line)}
+.ai-box.ok{background:var(--blue-l);border-color:#D3DBFD}
+.ai-box.try{background:#FFF8E6;border-color:#FBE3A6}
+.ai-box h3{margin:0 0 12px;font-size:19px}
+.ai-box ul{margin:0;padding-left:20px;line-height:1.9;color:var(--ink2);font-size:15.5px}
+.ai-box p{margin:12px 0 0;font-size:14px;color:#8A6400;font-weight:700}
+.ai-no{list-style:none;padding:0;margin:0}
+.ai-no li{padding:0 0 18px 30px;position:relative}
+.ai-no li::before{content:"✕";position:absolute;left:0;top:0;color:var(--red);font-weight:900}
+.ai-faq{max-width:860px;margin:0 auto}
+.ai-faq details{border-bottom:1px solid var(--line);padding:18px 4px}
+.ai-faq summary{font-weight:800;font-size:17px;cursor:pointer;color:var(--ink)}
+.ai-faq p{color:var(--ink2);line-height:1.75;margin:12px 0 0;font-size:15.5px}
+.ai-end{background:var(--blue);color:#fff;text-align:center;padding:64px 0}
+.ai-end h2{font-size:clamp(24px,3.2vw,36px);margin:0 0 10px}
+.ai-end p{margin:0 0 24px;opacity:.9}
+.btn-w{background:#fff;color:var(--blue)!important}
+.btn-wo{border:1.5px solid rgba(255,255,255,.7);color:#fff!important;background:transparent}
+.gnb a.on{color:var(--blue);font-weight:800}
+@media (max-width:900px){
+  .ai-hero{padding:40px 0 44px}
+  .ai-hero-in,.ai-split,.ai-two{grid-template-columns:1fr;gap:28px}
+  .ai-split.rev .ai-split-ph{order:-1}
+  .ai-grid3{grid-template-columns:1fr}
+  .ai-cmp{grid-template-columns:1fr}
+  .ai-cmp-x{justify-content:center;font-size:24px}
+  .ai-mem-row{grid-template-columns:1fr 54px;row-gap:6px}
+  .ai-mem-row span{grid-column:1/-1}
+}
+/* 메인 화면의 h2 em 은 작은 영문 꼬리표용이라, 이 페이지에서는 제목 크기 그대로 색만 바꿉니다. */
+.ai .sh h2 em{font-size:1em;font-weight:800;letter-spacing:-.05em;color:var(--blue)}
+.ai .sh h2 em.r{color:var(--red)}
+.ai .sh h2 br + em{display:inline}
