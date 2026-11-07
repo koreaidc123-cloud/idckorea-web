@@ -38,7 +38,8 @@ async function checkKakao(token) {
   if (phone) phone = phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
   return {
     via: 'kakao', socialId: String(d.id),
-    name: (acc.profile && acc.profile.nickname) || '회원',
+    /* 별명은 고객이 마음대로 정하므로 30자로 자릅니다 (관리자 화면이 넘치지 않게) */
+    name: String((acc.profile && acc.profile.nickname) || '회원').slice(0, 30),
     phone, email: acc.email || null,
   };
 }
@@ -50,7 +51,8 @@ async function checkGoogle(token) {
   const want = process.env.GOOGLE_CLIENT_ID || '';
   if (!want || d.aud !== want) return null;
   if (d.exp && Number(d.exp) * 1000 < Date.now()) return null;
-  return { via: 'google', socialId: d.sub, name: d.name || '회원', phone: '', email: d.email || null };
+  return { via: 'google', socialId: d.sub, name: String(d.name || '회원').slice(0, 30), phone: '',
+           email: d.email ? String(d.email).slice(0, 120) : null };
 }
 
 module.exports = async (req, res) => {

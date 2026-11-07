@@ -184,6 +184,12 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 <script>
 const $=i=>document.getElementById(i);
 const w=n=>Number(n).toLocaleString('ko-KR');
+/* 화면에 글자를 끼울 때 < > & " ' 를 글자 그대로 보이게 바꿉니다 (관리자 화면과 같은 방식) */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+/* 재부팅·비번 재발급·연장은 아직 고객 화면에서 바로 처리되지 않습니다.
+   카카오톡 상담으로 요청받아 관리자가 처리합니다 (관리자 확인이 필요한 일들이라서). */
+const KAKAO_CHAT='https://pf.kakao.com/_GxcgFxj/chat';
 const fmt=d=>{const x=new Date(d);return x.getFullYear()+'.'+String(x.getMonth()+1).padStart(2,'0')+'.'+String(x.getDate()).padStart(2,'0')};
 
 /* 애니데스크 번호 표기 — 실제 애니데스크는 **뒤에서부터** 세 자리씩 끊습니다.
@@ -206,6 +212,9 @@ const adFmt=s=>{
    서버 함수가 없는 환경에서는 예전처럼 저장소를 씁니다. */
 let U=null, SERVER=false;
 try{U=JSON.parse(localStorage.getItem('kvc-user')||'null')}catch(e){}
+/* ★ 예전 [체험용으로 계속] 이 남긴 가짜 회원(Y-042 · 가짜 접속 정보)은 버립니다.
+   고객이 그 번호·비밀번호를 진짜로 알고 접속을 시도하면 안 됩니다 (2026-11-07). */
+if(U&&U.demo){ try{localStorage.removeItem('kvc-user')}catch(e){} U=null; }
 
 function paintUser(){
   $('gate').classList.add('off');
@@ -251,16 +260,23 @@ function render(){
   $('warnbox').innerHTML=soon.length
     ? `<div class="expsoon"><b>⏰ ${soon.length}대가 곧 만료됩니다.</b>
        만료되면 PC가 초기화되고 <b>자료는 복구되지 않습니다.</b> 미리 연장해 주세요.<br>
-       ${soon.map(p=>p.pn+' (D-'+p.left+')').join(' · ')}</div>` : '';
+       ${esc(soon.map(p=>p.pn+' (D-'+p.left+')').join(' · '))}<br>
+       연장은 <a href="${KAKAO_CHAT}" target="_blank" rel="noopener" style="text-decoration:underline;font-weight:800">카카오톡으로 요청</a>해 주세요 — 같은 PC 그대로 기간만 늘려 드립니다.</div>` : '';
 
   $('cards').innerHTML = list.length ? list.map((p,i)=>{
     const pct=Math.round(p.left/p.days*100);
     const cls=p.left<=2?'crit':p.left<=5?'warn':'';
+    /* ★ 예전엔 무조건 "가동 중" 이었습니다. 이제 서버가 알려준 실제 상태(live)를 씁니다.
+       live = 그 PC 가 최근 5분 안에 신호를 보냈는가 (api/customer.js) */
+    const on = p.live!==false;
     return `<div class="pc">
-      <div class="pc-h"><b>${p.pn}</b>
-        <span class="st"><span class="dot"></span>가동 중</span></div>
+      <div class="pc-h"><b>${esc(p.pn)}</b>
+        ${on? `<span class="st"><span class="dot"></span>가동 중</span>`
+            : `<span class="st" style="color:#E08B00"><span class="dot" style="background:#E08B00;animation:none"></span>점검 중</span>`}</div>
       <div class="pc-b">
-        <div class="row"><span class="k">사양</span><span class="v">${p.spec}</span></div>
+        ${on?'':`<div class="row" style="color:#8A5A00;font-size:13px">지금 이 PC 의 신호가 잠시 끊겼습니다. 곧 복구되며, 급하시면
+          <a href="${KAKAO_CHAT}" target="_blank" rel="noopener" style="text-decoration:underline">카카오톡 상담</a>으로 알려 주세요.</div>`}
+        <div class="row"><span class="k">사양</span><span class="v">${esc(p.spec)}</span></div>
         <div class="row"><span class="k">접속 주소</span><span class="v"><span class="num">${adFmt(p.ad)}</span>
           <button class="cp" data-c="${String(p.ad||'').replace(/[^0-9]/g,'')}">복사</button></span></div>
         <div class="row"><span class="k">비밀번호</span><span class="v">
@@ -269,11 +285,17 @@ function render(){
         <div class="row"><span class="k">이용 기간</span><span class="v num">${fmt(p.start)} ~ ${fmt(p.end)}</span></div>
         <div class="bar ${cls}"><i style="width:${pct}%"></i></div>
         <div class="left"><span>남은 기간</span><b>D-${p.left}</b></div>
+        ${/* ★ 2026-11-07 — 예전 [재부팅]·[비번 재발급] 은 "접수되었습니다" 창만 띄우고
+              실제로는 아무 요청도 가지 않았습니다. [연장] 은 결제 화면에서 같은 PC 를
+              연장하는 기능이 없어, 다른 PC 를 새로 사는 주문이 돼 버렸습니다 (자료 유실 위험).
+              그래서 셋 다 카카오톡 상담으로 이어 드립니다 — 관리자가 확인하고 처리합니다. */''}
         <div class="acts">
-          <button class="btn btn-o" data-reboot="${p.pn}">재부팅</button>
-          <button class="btn btn-o" data-newpw="${p.pn}">비번 재발급</button>
-          <button class="btn btn-r" data-ext="${p.pn}">연장</button>
+          <a class="btn btn-o" href="${KAKAO_CHAT}" target="_blank" rel="noopener">재부팅 요청</a>
+          <a class="btn btn-o" href="${KAKAO_CHAT}" target="_blank" rel="noopener">비번 재발급 요청</a>
+          <a class="btn btn-r" href="${KAKAO_CHAT}" target="_blank" rel="noopener">연장 요청</a>
         </div>
+        <div style="font-size:12px;color:var(--ink4);margin-top:6px">세 버튼 모두 <b>카카오톡 상담</b>으로 연결됩니다.
+          문의번호 <b>${esc(p.pn)}</b> 를 알려 주시면 관리자가 확인 후 처리해 드립니다.</div>
       </div></div>`}).join('')
     : `<div class="empty"><b>아직 이용 중인 PC가 없습니다</b>
        원하시는 사양을 고르고 결제하시면 바로 이용하실 수 있습니다.
@@ -281,8 +303,8 @@ function render(){
 
   const H=U.orders||[];
   $('hist').innerHTML=`<div class="tr h"><div>주문번호</div><div>상품</div><div>기간</div><div>결제수단</div><div style="text-align:right">금액</div></div>`
-    + (H.length? H.map(o=>`<div class="tr"><div class="pn num">${o.no}</div>
-        <div>${o.name}</div><div class="num">${o.days}일</div><div>${o.pm}</div>
+    + (H.length? H.map(o=>`<div class="tr"><div class="pn num">${esc(o.no)}</div>
+        <div>${esc(o.name||'—')}</div><div class="num">${esc(o.days)}일</div><div>${esc(o.pm)}</div>
         <div class="num" style="text-align:right;font-weight:800">${w(o.amt)}원</div></div>`).join('')
       : `<div class="tr"><div style="grid-column:1/-1;color:var(--ink4);padding:20px 0;text-align:center">결제 내역이 없습니다</div></div>`);
 }
@@ -312,14 +334,7 @@ document.addEventListener('click',async e=>{
     }
     el.classList.remove('mask'); pw.remove(); return;
   }
-  const rb=e.target.closest('[data-reboot]');
-  if(rb){if(confirm(rb.dataset.reboot+' 을 재부팅할까요?\n작업 중인 내용은 저장 후 진행해 주세요.'))
-    alert('재부팅 요청이 접수되었습니다.\n1~2분 뒤 다시 접속해 주세요.');return}
-  const np=e.target.closest('[data-newpw]');
-  if(np){if(confirm('비밀번호를 새로 발급할까요?\n기존 비밀번호는 즉시 사용할 수 없습니다.'))
-    alert('새 비밀번호가 문자로 발송됩니다.');return}
-  const ex=e.target.closest('[data-ext]');
-  if(ex){location.href='product.html?ext='+ex.dataset.ext;return}
+  /* 재부팅·비번 재발급·연장 — 위 카드의 카카오톡 링크로 바로 이어집니다 (가짜 "접수" 창은 없앴습니다) */
 });
 </script>
 <!-- ★ 사업자 정보 — 토스 가맹 심사에서 결제 관련 모든 화면에 요구합니다 (index.html 맨 아래 ft-b 와 같은 내용).

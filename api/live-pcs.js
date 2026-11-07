@@ -45,13 +45,17 @@ module.exports = async (req, res) => {
   try {
     const [rows, setRows] = await Promise.all([
       sb('pcs', {
+        /* ★ 미등록(new)·미검증(unv) PC 는 고객 목록에서 아예 뺍니다 (2026-11-07).
+           예전엔 미검증 PC 가 "점검중" 으로 고객에게 보였습니다. 설명서대로
+           "접속 확인 전에는 고객에게 보이지 않게" 맞췄습니다. */
         query: '?select=pn,room,spec_id,cpu,core,ram_gb,ssd_gb,gpu,ip,status,online,last_beat' +
-               '&status=neq.new&order=pn.asc&limit=5000',
+               '&status=not.in.(new,unv)&order=pn.asc&limit=5000',
       }),
       sb('settings', { query: '?select=k,v&k=eq.down_sec' }),
     ]);
 
-    const downSec = Number((setRows && setRows[0] && setRows[0].v) || 180);
+    /* 관리자 화면과 같은 기준 — 300초보다 짧으면 300 으로 (_admin-pcs.js 와 같음) */
+    const downSec = Math.max(300, Number(setRows && setRows[0] && setRows[0].v) || 300);
     const now = Date.now();
 
     const pcs = (rows || []).map(p => {
