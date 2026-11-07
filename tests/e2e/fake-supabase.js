@@ -30,6 +30,12 @@ const COLS = {
   view_log: ['id', 'pn', 'act', 'who', 'at'],
   settings: ['k', 'v'],
 };
+/* db/08-반납초기화.sql 을 돌리면 생기는 칸 — v08 이 false 면 "아직 안 돌린 Supabase" 처럼
+   이 칸들이 없고, 만료 정리도 예전(07) 방식으로 돕니다. 대표님이 SQL 을 돌리기 전에도
+   코드가 멈추지 않는지 시험하려고 둘 다 흉내 냅니다. */
+const V08 = { pcs: ['wipe_at', 'hold_until'], orders: ['refund_state', 'refund_done_at'] };
+let v08 = true;
+const colsOf = t => (v08 && V08[t] ? COLS[t].concat(V08[t]) : COLS[t]);
 const PK = { pcs: 'pn', pcs_unregistered: 'hw_id', members: 'id', orders: 'order_id', view_log: 'id', settings: 'k' };
 
 /* 다른 표를 붙여 읽기 (select=*,pcs(pn,anydesk) 같은 것) — 외래키 방향 */
@@ -87,9 +93,9 @@ function parseSelect(s) {
 function project(table, row, sel) {
   const out = {};
   for (const it of sel) {
-    if (it.col === '*') { for (const c of COLS[table]) out[c] = row[c] === undefined ? null : row[c]; continue; }
+    if (it.col === '*') { for (const c of colsOf(table)) out[c] = row[c] === undefined ? null : row[c]; continue; }
     if (it.col) {
-      if (!COLS[table].includes(it.col)) throw new PgErr(400, '42703', `column ${table}.${it.col} does not exist`);
+      if (!colsOf(table).includes(it.col)) throw new PgErr(400, '42703', `column ${table}.${it.col} does not exist`);
       out[it.col] = row[it.col] === undefined ? null : row[it.col];
       continue;
     }
@@ -122,7 +128,7 @@ function parseList(v) {
   return m[1] === '' ? [] : m[1].split(',').map(s => s.replace(/^"|"$/g, ''));
 }
 function makeFilter(table, col, expr) {
-  if (!COLS[table].includes(col)) throw new PgErr(400, '42703', `column ${table}.${col} does not exist`);
+  if (!colsOf(table).includes(col)) throw new PgErr(400, '42703', `column ${table}.${col} does not exist`);
   let neg = false;
   if (expr.startsWith('not.')) { neg = true; expr = expr.slice(4); }
   const dot = expr.indexOf('.');
@@ -157,7 +163,7 @@ function parseQuery(table, qs) {
     else if (k === 'order') {
       out.order = v.split(',').map(s => {
         const [c, ...mods] = s.split('.');
-        if (!COLS[table].includes(c)) throw new PgErr(400, '42703', `column ${table}.${c} does not exist`);
+        if (!colsOf(table).includes(c)) throw new PgErr(400, '42703', `column ${table}.${c} does not exist`);
         const desc = mods.includes('desc');
         const nullsFirst = mods.includes('nullsfirst') ? true : mods.includes('nullslast') ? false : desc;
         return { c, desc, nullsFirst };
@@ -217,7 +223,7 @@ function checkRow(table, row, self) {
 }
 function checkCols(table, obj) {
   for (const k of Object.keys(obj)) {
-    if (!COLS[table].includes(k)) {
+    if (!colsOf(table).includes(k)) {
       throw new PgErr(400, 'PGRST204', `Could not find the '${k}' column of '${table}' in the schema cache`);
     }
   }
@@ -228,12 +234,27 @@ function rpc(name, body) {
   if (name === 'sweep_expired') {
     const now = Date.now();
     const expired = DB.orders.filter(o => o.status === 'assigned' && o.ends_at && Date.parse(o.ends_at) < now);
+    /* db/08 방식: 만료 → 반납 유예(hold, hold_days 일) → 초기화 대기(wipe)
+       07 방식(v08=false): 만료 → 바로 임대 가능(ok) */
+    const hs = DB.settings.find(s => s.k === 'hold_days');
+    const holdDays = hs && /^\d{1,3}$/.test(hs.v) ? Number(hs.v) : 3;
+    const stamp = new Date(now).toISOString();
     for (const o of expired) {
       const busy = DB.orders.some(x => x !== o && x.pn === o.pn && ['assigned', 'paid'].includes(x.status) &&
         !(x.status === 'assigned' && x.ends_at && Date.parse(x.ends_at) < now));
       const pc = DB.pcs.find(p => p.pn === o.pn);
-      if (pc && pc.status === 'rent' && !busy) { pc.status = 'ok'; pc.updated_at = new Date().toISOString(); }
+      if (pc && pc.status === 'rent' && !busy) {
+        if (v08) Object.assign(pc, { status: 'hold', hold_until: new Date(now + holdDays * 86400000).toISOString(), updated_at: stamp });
+        else Object.assign(pc, { status: 'ok', updated_at: stamp });
+      }
       o.status = 'expired';
+    }
+    if (v08) {
+      for (const pc of DB.pcs) {
+        if (pc.status === 'hold' && pc.hold_until && Date.parse(pc.hold_until) < now) {
+          Object.assign(pc, { status: 'wipe', wipe_at: stamp, updated_at: stamp });
+        }
+      }
     }
     return expired.length;
   }
@@ -284,7 +305,7 @@ function handle(method, path, qs, headers, body) {
         done.push(exist);
       } else {
         const row = Object.assign(defaults(table), raw);
-        for (const c of COLS[table]) if (row[c] === undefined) row[c] = null;
+        for (const c of colsOf(table)) if (row[c] === undefined) row[c] = null;
         checkRow(table, row, null);
         DB[table].push(row);
         done.push(row);
@@ -350,6 +371,9 @@ function start(port) {
 module.exports = {
   start,
   get db() { return DB; },
-  reset() { DB = makeDb(); calls.length = 0; },
+  reset() { DB = makeDb(); calls.length = 0; v08 = true; },
+  /* false = db/08 SQL 을 아직 안 돌린 Supabase 흉내 (새 칸 없음 · 옛 만료 정리) */
+  setV08(on) { v08 = !!on; },
+  get v08() { return v08; },
   calls,
 };

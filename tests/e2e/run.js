@@ -53,9 +53,12 @@ async function scenario(id, name, fn) {
     results.push({ id, name, ok: true, ms: Date.now() - t0 });
     console.log(`  ✔ ${id} ${name}`);
   } catch (e) {
-    const msg = String(e && e.message || e).split('\n').slice(0, 4).join(' / ');
+    /* 실패 이유를 넉넉히 남깁니다 (playwright 는 왜 못 눌렀는지를 5줄째 이후에 적습니다) */
+    const msg = String(e && e.message || e).split('\n').slice(0, 10).join(' / ');
     results.push({ id, name, ok: false, err: msg });
     console.log(`  ✘ ${id} ${name}\n      → ${msg}`);
+    /* E2E_DEBUG=1 이면 잘리지 않은 전체 오류를 보여줍니다 */
+    if (process.env.E2E_DEBUG) console.log(String(e && e.stack || e));
   }
 }
 
@@ -111,7 +114,7 @@ async function openPage(ctx, url, { answers = [] } = {}) {
   page.on('pageerror', e => page.errors.push('pageerror: ' + e.message));
   page.on('dialog', async d => {
     const msg = d.message();
-    page.dialogs.push({ type: d.type(), msg });
+    page.dialogs.push({ type: d.type(), msg, def: d.defaultValue() });   // def = 입력창에 미리 채워진 값
     if (d.type() === 'alert' && msg === '1') page.xss.push(page.url());     // <img onerror=alert(1)> 이 실행됨
     const a = page.answers.length ? page.answers.shift() : undefined;
     if (d.type() === 'prompt') return d.accept(a === undefined ? (d.defaultValue() || '') : String(a));
@@ -411,7 +414,12 @@ async function main() {
     srv.toss.payments[o.pay_key].status = 'CANCELED';
     r = await post('/api/toss-webhook', { eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: id, status: 'CANCELED' } });
     ok(orderOf(id).status === 'refunded', '진짜 취소가 반영 안 됨: ' + JSON.stringify(r.d));
-    ok(pcOf(S.vaPn).status === 'ok', '취소 후 PC 가 판매 재고로 안 돌아옴');
+    /* 2026-11-07 — 취소된 PC 는 바로 판매가 아니라 초기화 대기(wipe) 로 갑니다 (앞 손님 자료 보호) */
+    ok(pcOf(S.vaPn).status === 'wipe', '취소 후 PC 가 초기화 대기로 안 감: ' + pcOf(S.vaPn).status);
+    ok(orderOf(id).refund_state === 'toss_done', '토스 취소인데 송금 상태가 ' + orderOf(id).refund_state);
+    /* 뒤 관리자 시험(A3~A7)이 이 PC(보통 Y-002)를 "임대 가능" 으로 쓰므로,
+       관리자가 초기화를 마친 것처럼 되돌려 둡니다 (C10 이 D-001 을 되돌리는 것과 같음) */
+    pcOf(S.vaPn).status = 'ok';
   });
 
   await scenario('C9', '재고 0 상품은 결제창 전에 막힘', async () => {
@@ -576,7 +584,11 @@ async function main() {
     await ensureAdmin();
     await ap.evaluate(no => openOrd(no), S.manualOrder);
     ap.answers.push('Y-007', 'PC 고장', false);
-    await ap.click(`[data-movepc="${S.manualOrder}"]`);
+    /* 못 누르면 그때 떠 있던 안내창과 남은 답을 같이 남깁니다 (가끔 30초 멈추던 원인 추적용) */
+    await ap.click(`[data-movepc="${S.manualOrder}"]`, { timeout: 10000 }).catch(e => {
+      throw new Error('안내창 ' + JSON.stringify(ap.dialogs.slice(-4)) + ' · 남은 답 ' + JSON.stringify(ap.answers)
+        + ' · ' + e.message.replace(/\n/g, ' ').slice(0, 1200));
+    });
     await until(() => orderOf(S.manualOrder).pn === 'Y-007', 6000, '이전이 안 됨: ' + lastDialog(ap));
     ok(pcOf('Y-007').status === 'rent', 'Y-007 이 임대중 아님');
     ok(pcOf('Y-002').status === 'fix', 'Y-002 가 점검으로 안 감: ' + pcOf('Y-002').status);
@@ -594,7 +606,7 @@ async function main() {
     ok(pcOf('D-001').status === 'rent', 'D-001 임대중 아님');
   });
 
-  await scenario('A9', '관리자 — 해지·환불 (가짜 토스 취소) → PC 판매 재고로', async () => {
+  await scenario('A9', '관리자 — 해지·환불 (가짜 토스 취소) → PC 초기화 대기로', async () => {
     ok(S.cardOrder, 'C4 가 먼저 성공해야 합니다');
     await ensureAdmin();
     await ap.reload(); await adminReady(ap);
@@ -605,13 +617,15 @@ async function main() {
     await until(() => ['refunded', 'canceled'].includes(orderOf(S.cardOrder).status), 6000, '해지 안 됨: ' + lastDialog(ap));
     ok(srv.toss.cancels.length === cancels + 1, '토스 취소 요청이 안 감');
     ok(orderOf(S.cardOrder).refund_amt > 0, '환불액 ' + orderOf(S.cardOrder).refund_amt);
-    ok(pcOf('Y-001').status === 'ok', 'Y-001 이 판매 재고로 안 돌아옴');
+    ok(pcOf('Y-001').status === 'wipe', 'Y-001 이 초기화 대기로 안 감: ' + pcOf('Y-001').status);
+    ok(orderOf(S.cardOrder).refund_state === 'toss_done', '송금 상태 ' + orderOf(S.cardOrder).refund_state);
     await until(() => /환불되었습니다/.test(ap.dialogs.map(d => d.msg).join('\n')), 3000, '완료 안내 없음');
+    ok(/초기화 대기/.test(lastDialog(ap)), '완료 안내에 초기화 대기 설명 없음: ' + lastDialog(ap));
     /* 해지 뒤 고객 웹훅(토스가 뒤이어 보내는 CANCELED)이 와도 두 번 처리 안 함 */
     const r = await post('/api/toss-webhook', { eventType: 'PAYMENT_STATUS_CHANGED', data: { orderId: S.cardOrder, status: 'CANCELED' } });
     /* 부분 환불이면 토스가 PARTIAL_CANCELED 로 답합니다 — 어느 쪽이든 다시 처리하면 안 됩니다 */
     ok(r.d && /이미 처리됨|부분취소/.test(r.d.skip || ''), '해지 뒤 웹훅 ' + JSON.stringify(r.d));
-    ok(orderOf(S.cardOrder).status === 'refunded' && pcOf('Y-001').status === 'ok', '웹훅이 상태를 또 바꿈');
+    ok(orderOf(S.cardOrder).status === 'refunded' && pcOf('Y-001').status === 'wipe', '웹훅이 상태를 또 바꿈');
   });
 
   await scenario('A10', '관리자 — 설정 저장 (셋팅비 0 가능 · 다운 판정 300 미만 거부)', async () => {
@@ -689,6 +703,257 @@ async function main() {
     /* 고객 목록에는 여전히 안 보임 (미검증) */
     const live = await (await fetch(BASE + '/api/live-pcs')).json();
     ok(!live.pcs.some(p => p.id === 'D-002' || p.id === 'Y-005'), '미검증 PC 가 고객에게 보임');
+  });
+
+  /* ══════════ 2026-11-07 — 반납 초기화 · 오늘 할 일 · 환불 송금 · 주문 잘림 ══════════ */
+  const kv = require('../../api/_crypto');
+  const live = async () => (await (await fetch(BASE + '/api/live-pcs')).json()).pcs;
+  const liveSt = (L, pn) => (L.find(p => p.id === pn) || {}).st;
+
+  await scenario('H1', '만료 정리 — 끝난 주문의 PC 는 반납 유예 → 유예가 지나면 초기화 대기', async () => {
+    await ensureAdmin();
+    /* 관리자 화면을 열 때 만료 정리가 돌았습니다 → Y-012 는 반납 유예 */
+    ok(orderOf('KVC260101-SEEDH1').status === 'expired', 'SEEDH1 이 만료 안 됨: ' + orderOf('KVC260101-SEEDH1').status);
+    const pc = pcOf('Y-012');
+    ok(pc.status === 'hold', 'Y-012 가 반납 유예가 아님: ' + pc.status);
+    const days = (Date.parse(pc.hold_until) - Date.now()) / 86400000;
+    ok(days > 2.9 && days < 3.1, '유예 끝나는 날이 3일 뒤가 아님: ' + days.toFixed(2));
+    let L = await live();
+    ok(liveSt(L, 'Y-012') === 'busy' && liveSt(L, 'Y-011') === 'busy' && liveSt(L, 'Y-010') === 'busy',
+      '유예·초기화 대기 PC 가 고객 화면에 임대중이 아님: ' + ['Y-010', 'Y-011', 'Y-012'].map(p => p + '=' + liveSt(L, p)).join(','));
+    /* 유예가 끝나면 다음 정리 때 초기화 대기로 */
+    pc.hold_until = new Date(Date.now() - 60000).toISOString();
+    const r = await apiIn(ap, '/api/admin?do=pcs');
+    ok(r.status === 200, 'PC 목록 ' + r.status);
+    ok(pcOf('Y-012').status === 'wipe' && pcOf('Y-012').wipe_at, 'Y-012 가 초기화 대기로 안 감: ' + pcOf('Y-012').status);
+    const row = r.d.pcs.find(p => p.pn === 'Y-012');
+    ok(row && row.rawStatus === 'wipe', '관리자 목록 rawStatus ' + (row && row.rawStatus));
+    /* 자동 배정은 ok 만 잡습니다 — 3700X 재고에 유예·초기화 PC 가 섞여 있어도 안 잡힘 */
+    L = await live();
+    ok(liveSt(L, 'Y-012') === 'busy', 'Y-012 고객 화면 ' + liveSt(L, 'Y-012'));
+  });
+
+  await scenario('E1', '만료된 주문 연장 — 유예 중 PC 는 그대로 임대중 · 초기화 대기 PC 는 거절 · 기본 금액은 30일 가격', async () => {
+    await ensureAdmin();
+    await ap.reload(); await adminReady(ap);
+    await ap.evaluate(no => openOrd(no), 'KVC260101-SEEDC1');
+    ok(/30일 연장/.test(await drawerText(ap)), '만료된 주문 상세에 연장 버튼 없음');
+    ap.answers.length = 0;               // 비워 두면 입력창의 기본값 그대로 확인
+    const n = ap.dialogs.length;
+    await ap.click('[data-extend="KVC260101-SEEDC1"]');
+    await until(() => orderOf('KVC260101-SEEDC1').status === 'assigned', 6000, '연장 안 됨: ' + lastDialog(ap));
+    const pr = ap.dialogs.slice(n).find(d => d.type === 'prompt');
+    ok(pr && pr.def === '65000', '연장 금액 기본값이 30일 가격(65000)이 아님: ' + (pr && pr.def));
+    ok(pcOf('Y-011').status === 'rent', '유예 중이던 Y-011 이 임대중으로 안 돌아옴: ' + pcOf('Y-011').status);
+    const left = (Date.parse(orderOf('KVC260101-SEEDC1').ends_at) - Date.now()) / 86400000;
+    ok(left > 29.9 && left < 30.1, '오늘부터 30일이 아님: ' + left.toFixed(2));
+    ok(orderOf('KVC260101-SEEDC1').amount === 123500 + 65000, '금액 ' + orderOf('KVC260101-SEEDC1').amount);
+    /* 초기화 대기로 넘어간 PC 의 옛 주문은 연장하지 않음 */
+    const r = await apiIn(ap, '/api/admin?do=order-action', { no: 'KVC260101-SEEDW1', act: 'extend', days: 30, amount: 65000 });
+    ok(r.status === 409 && /초기화 대기/.test(r.d.error), '초기화 대기 PC 연장 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(orderOf('KVC260101-SEEDW1').status === 'expired' && pcOf('Y-010').status === 'wipe', '거절했는데 상태가 바뀜');
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+  });
+
+  await scenario('W1', '반납 초기화 — 비밀번호 없이 판매로 거절 · 체크 3개 + 새 비밀번호 → 판매 가능', async () => {
+    await ensureAdmin();
+    let r = await apiIn(ap, '/api/admin?do=pc-update', { key: 'Y-010', status: 'ok' });
+    ok(r.status === 409 && /비밀번호/.test(r.d.error), '비밀번호 없이 판매로 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(pcOf('Y-010').status === 'wipe', '거절했는데 상태가 바뀜');
+    await ap.reload(); await adminReady(ap);
+    await ap.evaluate(() => openPc('Y-010'));
+    ok(/초기화 대기/.test(await drawerText(ap)), 'PC 상세에 초기화 대기 표시 없음');
+    await ap.click('#drawer [data-wipeopen="Y-010"]');
+    await ap.waitForSelector('[data-wipedone="Y-010"]');
+    const dis = () => ap.$eval('[data-wipedone="Y-010"]', b => b.disabled);
+    ok(await dis(), '아무것도 안 했는데 버튼이 켜져 있음');
+    const cks = await ap.$$('[data-wck]');
+    ok(cks.length === 3, '체크 칸이 3개가 아님: ' + cks.length);
+    await cks[0].check(); await cks[1].check();
+    await ap.fill('#w-pw', 'new-pw-0110');
+    ok(await dis(), '체크 2개만 했는데 버튼이 켜짐');
+    await cks[2].check();
+    ok(!(await dis()), '다 했는데 버튼이 안 켜짐');
+    await ap.click('[data-wipedone="Y-010"]');
+    await until(() => pcOf('Y-010').status === 'ok', 5000, '판매로 안 바뀜: ' + lastDialog(ap));
+    ok(kv.open(pcOf('Y-010').pw_enc) === 'new-pw-0110', '새 비밀번호가 저장 안 됨');
+    await until(() => db().view_log.some(v => v.pn === 'Y-010' && /반납 초기화 완료/.test(v.act)), 3000, '반납 초기화 완료 기록 없음');
+    const L = await live();
+    ok(liveSt(L, 'Y-010') === 'free', '초기화 뒤 고객 화면에 임대 가능이 아님: ' + liveSt(L, 'Y-010'));
+  });
+
+  await scenario('X1', '계좌이체 주문 해지 → 직접 송금 대기 · PC 초기화 대기 · 이전 때 옛 PC 도 초기화 대기', async () => {
+    ok(S.manualOrder, 'A6 이 먼저 성공해야 합니다');
+    await ensureAdmin();
+    const pn = orderOf(S.manualOrder).pn;
+    const r = await apiIn(ap, '/api/admin?do=order-action', { no: S.manualOrder, act: 'cancel', why: '시험 해지' });
+    ok(r.status === 200 && r.d.manualRefund && r.d.refundTracked && r.d.refundState === 'manual_pending',
+      '해지 응답 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(orderOf(S.manualOrder).refund_state === 'manual_pending', 'DB 송금 상태 ' + orderOf(S.manualOrder).refund_state);
+    ok(pcOf(pn).status === 'wipe', pn + ' 이 초기화 대기가 아님: ' + pcOf(pn).status);
+    /* PC 이전 — 옛 화면처럼 oldStatus:'ok' 를 보내도 바로 판매로 가지 않음 */
+    const m = await apiIn(ap, '/api/admin?do=order-action', { no: 'KVC260101-SEEDE1', act: 'move', toPn: 'Y-008', why: '시험', oldStatus: 'ok' });
+    ok(m.status === 200, '이전 응답 ' + m.status + ' ' + JSON.stringify(m.d));
+    ok(pcOf('Y-013').status === 'wipe' && pcOf('Y-008').status === 'rent', '이전 뒤 Y-013=' + pcOf('Y-013').status + ' Y-008=' + pcOf('Y-008').status);
+    S.manualPn = pn;
+  });
+
+  await scenario('T1', '오늘 할 일 — 송금 대기 · 초기화 대기(위치순) · D-3 · 최근 만료 · 가상계좌 · 배지', async () => {
+    await ensureAdmin();
+    await ap.reload(); await adminReady(ap);
+    await view(ap, 'today');
+    const t = await mainText(ap);
+    for (const w of ['직접 송금해야 할 환불', '고객D', '30,000원', '반납 초기화 대기', '3일 안에 만료', '최근 7일 만료',
+      '가상계좌 입금 대기', '구매자B']) ok(t.includes(w), '오늘 할 일에 「' + w + '」 없음');
+    ok(!(await ap.$('#sql08')), 'db/08 을 돌린 상태인데 SQL 실행 안내가 뜸');
+    /* 3일 안에 만료 — 고객E 는 이전(X1) 뒤에도 이용중 */
+    ok(/고객E/.test(await ap.$eval('#today-d3', e => e.innerText)), 'D-3 에 고객E 없음');
+    /* 최근 7일 만료 — 연장 안 한 SEEDH1(고객A) · SEEDW1(구매자B) 은 있고, E1 에서 연장한 고객C 는 없음 */
+    const e7 = await ap.$eval('#today-exp7', e => e.innerText);
+    ok(/고객A/.test(e7) && /구매자B/.test(e7) && !/고객C/.test(e7), '최근 만료 목록: ' + e7.slice(0, 200));
+    /* 초기화 대기는 위치 순서 (서버실 → 랙 → 층 → 자리) */
+    const rows = await ap.$$eval('#today-wipe tr[data-pc]', es => es.map(e => e.dataset.pc));
+    const want = db().pcs.filter(p => p.status === 'wipe').map(p => p.pn);
+    ok(rows.length === want.length && want.every(p => rows.includes(p)), `초기화 대기 목록 ${rows} ≠ DB ${want}`);
+    const order = ['K', 'Y', 'D'];
+    const key = pn => { const p = pcOf(pn); return order.indexOf(p.room) * 1e6 + p.rack * 1e4 + p.fl * 100 + p.slot; };
+    ok(rows.every((p, i) => i === 0 || key(rows[i - 1]) <= key(p)), '위치 순서가 아님: ' + rows.join(','));
+    const bd = await ap.$eval('#bd-today', e => ({ n: +e.textContent, hidden: e.hidden }));
+    ok(bd.n > 0 && !bd.hidden, '오늘 할 일 배지 ' + JSON.stringify(bd));
+    ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+  });
+
+  await scenario('T2', '직접 송금 환불 [송금 완료] → 목록에서 빠지고 기록 · 두 번은 안 됨', async () => {
+    await ensureAdmin();
+    await view(ap, 'today');
+    ap.answers.push('신한 11/7');
+    await ap.click('[data-refunddone="MAN260101-SEEDR1"]');
+    await until(() => orderOf('MAN260101-SEEDR1').refund_state === 'manual_done', 5000, '송금 완료 안 됨: ' + lastDialog(ap));
+    ok(orderOf('MAN260101-SEEDR1').refund_done_at, '송금 완료 시각 없음');
+    /* 기록은 상태를 바꾼 다음에 남기므로 조금 기다립니다 */
+    await until(() => db().view_log.some(v => /환불 직접 송금 완료/.test(v.act) && /신한 11\/7/.test(v.act)), 3000,
+      '송금 완료 기록 없음: ' + JSON.stringify(db().view_log.filter(v => /송금/.test(v.act)).map(v => v.act)));
+    await ap.waitForFunction(() => !/고객D/.test((document.querySelector('#today-refund') || {}).innerText || ''), null, { timeout: 5000 })
+      .catch(() => { throw new Fail('송금 완료 뒤에도 목록에 남음'); });
+    const r = await apiIn(ap, '/api/admin?do=order-action', { no: 'MAN260101-SEEDR1', act: 'refund-done' });
+    ok(r.status === 409, '두 번째 송금 완료 응답 ' + r.status);
+    /* X1 에서 해지한 수동 주문은 아직 목록에 남아 있어야 함 */
+    ok(await ap.$(`#today-refund [data-refunddone="${S.manualOrder}"]`), 'X1 해지 건이 송금 대기 목록에 없음');
+  });
+
+  await scenario('Q1', '주문 상세 환불 미리보기 = 서버 계산 (화면 공식 아님)', async () => {
+    ok(S.waitOrder, 'C10·A8 이 먼저 성공해야 합니다');
+    await ensureAdmin();
+    await ap.evaluate(no => openOrd(no), S.waitOrder);
+    await ap.waitForSelector('#ord-refund', { timeout: 5000 });
+    const shown = await ap.textContent('#ord-refund');
+    const q = await apiIn(ap, '/api/admin?do=order-action', { no: S.waitOrder, act: 'quote' });
+    ok(q.status === 200 && shown.replace(/[^\d]/g, '') === String(q.d.quote.refund), `화면 ${shown} ≠ 서버 ${q.d && q.d.quote.refund}`);
+    ok(q.d.price30 === 60000, '30일 가격(1700) ' + q.d.price30);
+    ok(!/mypage/.test(await ap.content()), 'admin 에 mypage 연장 안내가 남아 있음');
+  });
+
+  await scenario('HC1', '지난 주문이 3,000건 넘어도 이용중 주문은 안 잘림 · "오래된 기록은 생략됨"', async () => {
+    await ensureAdmin();
+    const base = Date.now() - 86400000 * 400;
+    const extra = [];
+    for (let i = 0; i < 3100; i++) {
+      extra.push({ order_id: 'OLD' + String(i).padStart(5, '0'), member_id: null, pn: 'Y-008', spec_id: 5, days: 30,
+        amount: 65000, setup_fee: 5000, status: 'expired', pay_key: null, pay_method: '카드',
+        paid_at: new Date(base + i * 60000).toISOString(), va_secret: null, tax_invoice: false, biz_no: null,
+        starts_at: new Date(base + i * 60000).toISOString(), ends_at: new Date(base + i * 60000 + 86400000 * 30).toISOString(),
+        payer_name: '옛손님' + i, user_name: '옛손님' + i, user_phone: null, canceled_at: null, refund_amt: null,
+        refund_why: null, created_at: new Date(base).toISOString(), refund_state: null, refund_done_at: null });
+    }
+    db().orders.push(...extra);
+    try {
+      const r = await apiIn(ap, '/api/admin?do=orders&all=1');
+      ok(r.status === 200, '주문 목록 ' + r.status);
+      const activeDb = db().orders.filter(o => ['paid', 'assigned', 'ready'].includes(o.status)).map(o => o.order_id).sort();
+      const activeApi = r.d.orders.filter(o => ['paid', 'assigned', 'ready'].includes(o.st)).map(o => o.no).sort();
+      ok(JSON.stringify(activeDb) === JSON.stringify(activeApi), `이용중 주문이 잘림: DB ${activeDb.length} · 화면 ${activeApi.length}`);
+      ok(r.d.historyCut === true, 'historyCut 이 ' + r.d.historyCut);
+      const hist = r.d.orders.filter(o => !['paid', 'assigned', 'ready'].includes(o.st));
+      ok(hist.length === 2000, '지난 주문 ' + hist.length + '건');
+      ok(hist.some(o => o.no === 'OLD03099') && !hist.some(o => o.no === 'OLD00000'), '최근 것부터 받지 않음');
+      await ap.reload(); await adminReady(ap);
+      await ap.evaluate(() => openPc('Y-008'));
+      ok(/오래된 기록은 생략됨/.test(await drawerText(ap)), 'PC 상세에 "오래된 기록은 생략됨" 없음');
+    } finally {
+      const ids = new Set(extra.map(o => o.order_id));
+      const keep = db().orders.filter(o => !ids.has(o.order_id));
+      db().orders.length = 0; db().orders.push(...keep);
+    }
+  });
+
+  await scenario('D1', 'db/08 SQL 을 아직 안 돌린 Supabase — 안내 한 줄 · 해지·목록은 그대로 동작', async () => {
+    await ensureAdmin();
+    srv.fakeDb.setV08(false);
+    const hs = db().settings.findIndex(s => s.k === 'hold_days');
+    const saved = db().settings.splice(hs, 1)[0];
+    /* 옛 정리 확인용 — 1시간 전에 끝난 주문 하나, 해지 시험용 수동 주문 하나 */
+    const now = Date.now();
+    const iso = ms => new Date(ms).toISOString();
+    const pcRow = (pn, slot) => Object.assign({}, pcOf('Y-008'), { pn, slot, fl: 3, rack: 1, status: 'rent', hw_id: 'HW-' + pn,
+      beat_token: 'tok-' + pn + '-0123456789abcdef', anydesk: '10428877' + slot });
+    db().pcs.push(pcRow('Y-014', 1), pcRow('Y-015', 2));
+    const o = (id, pn, ends, pm) => ({ order_id: id, member_id: null, pn, spec_id: 5, days: 30, amount: 65000, setup_fee: 5000,
+      status: 'assigned', pay_key: null, pay_method: pm, paid_at: iso(now - 86400000), va_secret: null, tax_invoice: false,
+      biz_no: null, starts_at: iso(now - 86400000), ends_at: iso(ends), payer_name: '옛방식', user_name: '옛방식',
+      user_phone: '010-9999-0000', canceled_at: null, refund_amt: null, refund_why: null, created_at: iso(now - 86400000) });
+    db().orders.push(o('KVC260101-OLDSW1', 'Y-014', now - 3600000, '카드'), o('MAN260101-OLDC1', 'Y-015', now + 86400000 * 20, '스마트스토어'));
+    try {
+      await ap.reload(); await adminReady(ap);
+      ok(pcOf('Y-014').status === 'ok', '옛 정리인데 Y-014 가 ' + pcOf('Y-014').status);
+      await view(ap, 'today');
+      ok(await ap.$('#sql08'), '"db/08 SQL 실행 필요" 안내가 안 뜸');
+      ok(/db\/08 SQL 실행 필요/.test(await mainText(ap)), '안내 문구 다름');
+      const r = await apiIn(ap, '/api/admin?do=orders&all=1');
+      ok(r.status === 200 && r.d.refundCols === false, '주문 목록 ' + r.status + ' refundCols=' + (r.d && r.d.refundCols));
+      const c = await apiIn(ap, '/api/admin?do=order-action', { no: 'MAN260101-OLDC1', act: 'cancel', why: '옛 방식 해지' });
+      ok(c.status === 200 && c.d.manualRefund && c.d.refundTracked === false, '해지 응답 ' + c.status + ' ' + JSON.stringify(c.d));
+      ok(orderOf('MAN260101-OLDC1').status === 'refunded', '해지 안 됨');
+      const d = await apiIn(ap, '/api/admin?do=order-action', { no: 'MAN260101-OLDC1', act: 'refund-done' });
+      ok(d.status === 409 && /db\/08/.test(d.d.error), '송금 완료 응답 ' + d.status + ' ' + JSON.stringify(d.d));
+      const p = await apiIn(ap, '/api/admin?do=pcs');
+      ok(p.status === 200, 'PC 목록 ' + p.status);
+      ok(!ap.errors.length, '콘솔 오류 ' + ap.errors.join('|'));
+    } finally {
+      srv.fakeDb.setV08(true);
+      if (saved) db().settings.push(saved);
+    }
+  });
+
+  await scenario('M1', '휴대폰 폭 390 관리자 — 아래 탭 · 배지 · 표가 카드로 · 가로 넘침 없음', async () => {
+    const ctx = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const p = await openPage(ctx, '/admin');
+    await adminLogin(p); await adminReady(p);
+    const bad = [];
+    for (const v of ['today', 'orders', 'dash', 'rack', 'find']) {
+      await view(p, v);
+      await sleep(150);
+      const w = await p.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth));
+      if (w > 391) bad.push(v + ' 폭 ' + w);
+    }
+    ok(!bad.length, '가로 넘침: ' + bad.join(', '));
+    const tab = await p.$eval('#tabbar', e => ({ d: getComputedStyle(e).display, n: e.querySelectorAll('a').length, txt: e.innerText }));
+    ok(tab.d === 'flex' && tab.n === 4 && /오늘 할 일/.test(tab.txt) && /검색/.test(tab.txt) && /랙맵/.test(tab.txt) && /주문/.test(tab.txt),
+      '아래 탭 ' + JSON.stringify(tab));
+    const bd = await p.$eval('#bd-today', e => ({ vis: !!e.offsetParent, n: e.textContent }));
+    ok(bd.vis && +bd.n > 0, '휴대폰에서 오늘 할 일 배지가 안 보임 ' + JSON.stringify(bd));
+    await p.click('#tabbar a[data-v="orders"]');
+    await p.waitForFunction(() => location.hash === '#orders');
+    const card = await p.evaluate(() => {
+      const th = document.querySelector('#main .tbl.mc thead');
+      const td = document.querySelector('#main .tbl.mc td[data-label]');
+      return { thead: th ? getComputedStyle(th).display : 'none', label: td ? getComputedStyle(td, '::before').content : '' };
+    });
+    ok(card.thead === 'none' && /주문|품번|회원|고객/.test(card.label), '주문 표가 카드로 안 바뀜 ' + JSON.stringify(card));
+    await view(p, 'today');
+    const tl = await p.evaluate(() => { const td = document.querySelector('#main .tbl.mc td[data-label]'); return td ? getComputedStyle(td, '::before').content : ''; });
+    ok(tl && tl !== 'none', '오늘 할 일 표가 카드로 안 바뀜');
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
+    await ctx.close();
   });
 
   await scenario('A13', '관리자 — 로그아웃 → 다시 잠김', async () => {
