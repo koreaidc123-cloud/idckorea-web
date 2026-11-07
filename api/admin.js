@@ -15,7 +15,7 @@
      POST /api/admin?do=pc-update           PC 정보 수정
      POST /api/admin?do=pc-delete           PC 대장에서 빼기 (잘못 등록한 것)
      POST /api/admin?do=order-manual        수동 주문 등록
-     POST /api/admin?do=order-action        연장 · 해지환불 · 이전 · 세금계산서
+     POST /api/admin?do=order-action        연장 · 해지환불 · 이전 · 세금계산서 · 직접 송금 완료(refund-done)
 
    ※ 각 기능 파일이 스스로 관리자 출입증을 확인합니다.
       여기서는 넘기기만 합니다.

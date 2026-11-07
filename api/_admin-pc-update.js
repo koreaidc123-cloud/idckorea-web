@@ -22,7 +22,10 @@ const { checkLoc } = require('./_rooms');
 const { guessSpec } = require('./_spec');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
-const ST = ['new', 'unv', 'ok', 'rent', 'fix', 'down'];
+/* hold = 반납 유예 (기간이 끝났지만 며칠은 손님 자료를 남겨 둠 · 연장하면 그대로 돌아감)
+   wipe = 초기화 대기 (앞 손님 자료를 지우고 애니데스크 비밀번호를 바꿔야 함)
+   둘 다 고객에게는 "임대중" 으로 보이고, 자동 배정도 되지 않습니다 (2026-11-07) */
+const ST = ['new', 'unv', 'ok', 'rent', 'fix', 'down', 'hold', 'wipe'];
 const num = (v, lo, hi) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n) : null;
@@ -201,7 +204,50 @@ module.exports = async (req, res) => {
   if (b.status !== undefined && b.status !== null && String(b.status).trim() !== '') {
     const st = String(b.status);
     if (!ST.includes(st)) return res.status(400).json({ error: '알 수 없는 상태입니다' });
-    if (st !== cur.status) { patch.status = st; logs.push(`상태 ${cur.status} → ${st}`); }
+    /* ★ 반납된 PC(유예·초기화 대기)를 판매로 돌릴 때는 새 애니데스크 비밀번호가 꼭 있어야 합니다.
+       앞 손님이 알던 비밀번호 그대로 팔면, 그분이 다음 손님 PC 에 그대로 들어올 수 있습니다.
+       화면의 체크리스트(윈도우 초기화 · 계정·파일 정리 · 비밀번호 교체)를 건너뛰고
+       버튼만 눌러도 여기서 막힙니다. */
+    const fromReturn = cur.status === 'wipe' || cur.status === 'hold';
+    /* ★ 반납 PC 는 다른 상태(점검·미검증 등)를 거쳐 판매로 가는 길을 막습니다.
+       예전 검토(Codex T-0179)에서 wipe → fix → [점검 완료 → 판매] 로 비밀번호 교체를
+       건너뛸 수 있다고 나왔습니다. 반납 PC 는 유예 → 초기화 대기 → (비밀번호) 판매 만 됩니다. */
+    if (fromReturn && st !== cur.status && !['wipe', 'ok'].includes(st)) {
+      return res.status(409).json({
+        error: '반납된 PC(유예·초기화 대기)는 다른 상태로 바꿀 수 없습니다.\n'
+             + '[초기화 완료 → 판매로] 로 초기화와 비밀번호 교체를 먼저 해 주세요.',
+      });
+    }
+    if (st === 'ok' && fromReturn) {
+      if (!(b.pw !== undefined && String(b.pw).trim().length >= 4)) {
+        return res.status(409).json({
+          error: '반납된 PC 는 초기화 후 애니데스크 비밀번호를 새로 바꿔야 판매로 돌릴 수 있습니다.\n'
+               + '[초기화 완료 → 판매로] 에서 새 비밀번호(4자 이상)를 적어 주세요.',
+        });
+      }
+      /* 그 PC 를 아직 쓰는(기간이 남은) 주문이 있으면 판매로 돌리지 않습니다 — 한 PC 를 두 분이 쓰게 됩니다 */
+      /* 조건을 DB 에 맡겨 한 건이라도 있으면 막습니다 (앞 5건만 보고 판단하면 놓칠 수 있음 — Codex T-0179)
+         결제완료(paid) · 기간이 남은 이용중 · 끝나는 날이 비어 있는 이용중 */
+      try {
+        const pnQ = `pn=eq.${encodeURIComponent(key)}`;
+        const nowIso = new Date().toISOString();
+        const hits = await Promise.all([
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.paid&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.assigned&ends_at=gte.${nowIso}&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&status=eq.assigned&ends_at=is.null&limit=1` }),
+        ]);
+        const live = hits.map(h => h && h[0]).find(Boolean);
+        if (live) {
+          return res.status(409).json({ error: `${key} 은 아직 주문(${live.order_id})이 쓰고 있어 판매로 돌릴 수 없습니다` });
+        }
+      } catch (e) {
+        return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+      }
+    }
+    if (st !== cur.status) {
+      patch.status = st;
+      logs.push(st === 'ok' && fromReturn ? '반납 초기화 완료 → 판매 가능' : `상태 ${cur.status} → ${st}`);
+    }
   }
 
   /* ── 메모 ──

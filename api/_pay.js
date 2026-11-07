@@ -51,6 +51,8 @@ const freshIso = now =>
      이미 남이 가져간 PC 는 한 줄도 안 바뀌므로 다음 후보로 넘어갑니다.
    · wantPn — 고객이 목록에서 고른 PC. 같은 상품일 때만 맨 앞에 둡니다
      (주소를 조작해 비싼 PC 를 싼 값에 가져가는 것을 막습니다).
+   · ★ 반납 유예(hold)·초기화 대기(wipe) PC 는 앞 손님 자료가 남아 있어
+     절대 잡지 않습니다. 후보도, 잡는 PATCH 도 status=eq.ok 만 봅니다 (2026-11-07 확인).
    못 잡으면 null 을 돌려줍니다. */
 async function grabPc({ specId, wantPn, now }) {
   now = now || new Date();
@@ -95,10 +97,15 @@ async function lockPc(pn, now) {
   return !!(got && got[0]);
 }
 
-/* ── PC 를 판매 재고로 되돌립니다 (해지·환불·취소 때) ──────────
+/* ── 해지·환불·취소된 PC 를 놓아줍니다 ──────────────────────────
    ★ 그 PC 를 지금 다른 주문이 쓰고 있으면 건드리지 않습니다.
      만료된 옛 주문을 뒤늦게 해지하면, 그 사이 같은 PC 를 받은
      새 고객의 PC 가 "임대 가능" 으로 풀려 또 팔릴 수 있었습니다.
+   ★ 2026-11-07 — 바로 [임대 가능(ok)] 이 아니라 [초기화 대기(wipe)] 로 보냅니다.
+     예전엔 해지하자마자 앞 손님의 파일과 같은 애니데스크 비밀번호가 남은 채
+     다음 손님에게 팔릴 수 있었습니다 (개인정보 사고).
+     관리자가 윈도우 초기화 + 비밀번호 교체를 하고 [초기화 완료 → 판매로] 를
+     눌러야 다시 팔립니다 (_admin-pc-update.js 가 새 비밀번호 없이는 거절합니다).
    돌려주는 값: 'released' 풀었음 · 'busy' 다른 주문이 씀 · 'none' 품번 없음 */
 async function releasePc(pn, orderId, now) {
   if (!pn) return 'none';
@@ -109,8 +116,8 @@ async function releasePc(pn, orderId, now) {
   if (other && other[0]) return 'busy';
   await sb('pcs', {
     method: 'PATCH',
-    query: `?pn=eq.${encodeURIComponent(pn)}&status=eq.rent`,
-    body: { status: 'ok', updated_at: (now || new Date()).toISOString() },
+    query: `?pn=eq.${encodeURIComponent(pn)}&status=in.(rent,hold)`,
+    body: { status: 'wipe', updated_at: (now || new Date()).toISOString() },
     prefer: 'return=minimal',
   });
   return 'released';

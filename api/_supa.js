@@ -77,4 +77,13 @@ function authed(req, envName) {
    각자 process.env.SUPABASE_URL 을 직접 쓰면 /rest/v1 이 두 번 붙습니다. */
 const baseUrl = () => URL;
 
-module.exports = { ready, sb, upsert, authed, baseUrl };
+/* ★ "그 칸이 아직 없다" 는 오류인지 알아봅니다 (2026-11-07)
+   db/08-반납초기화.sql 처럼 칸을 새로 만드는 SQL 은 대표님이 Supabase 에서 직접
+   돌리셔야 생깁니다. 돌리기 전에 새 칸을 읽거나 쓰면 Supabase 가 거절해서
+   화면 전체가 멈출 수 있습니다. 이 오류일 때만 새 칸을 빼고 다시 하도록 씁니다. */
+const missingCol = (e, col) => {
+  const m = String((e && e.message) || e || '');
+  return /42703|PGRST204|does not exist|Could not find/.test(m) && (!col || m.includes(col));
+};
+
+module.exports = { ready, sb, upsert, authed, baseUrl, missingCol };

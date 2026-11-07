@@ -9,6 +9,8 @@
    act = move    PC 이전        { toPn:"Y-055", why:"그래픽카드 고장" }
    act = assign  배정 대기 주문에 PC 붙이기 { toPn:"Y-055" 또는 "" (자동 선택) }
    act = tax     세금계산서 요청 { bizNo:"123-45-67890" }
+   act = quote   환불 예상액 + 30일 연장 가격 미리 보기 (아무것도 안 바꿈)
+   act = refund-done  직접 송금해야 하는 환불을 "보냈음" 으로 표시 { memo:"신한 11/7 송금" }
 
    ★ 환불 규정 (대표님이 정하신 것)
        7일 이내 — 초기 셋팅비 5,000원 + 쓰신 기간을 뺀 나머지 환불
@@ -16,7 +18,8 @@
      서버가 이 규칙대로 금액을 계산해 알려줍니다.
      관리자가 다른 금액을 넣으면 그 사실이 기록에 남습니다.
    ═══════════════════════════════════════════════════════════════ */
-const { ready, sb } = require('./_supa');
+const { ready, sb, missingCol } = require('./_supa');
+const { quote: priceQuote } = require('./_price');
 const { verify } = require('./admin-login');
 const { tossSecret, grabPc, lockPc, releasePc, pcBusyByOther, period } = require('./_pay');
 
@@ -107,7 +110,7 @@ module.exports = async (req, res) => {
   const no = str(b.no, 64);
   const act = str(b.act, 12);
   if (!no) return res.status(400).json({ error: '주문번호가 필요합니다' });
-  if (!['extend', 'cancel', 'move', 'assign', 'tax', 'quote', 'cust'].includes(act)) {
+  if (!['extend', 'cancel', 'move', 'assign', 'tax', 'quote', 'cust', 'refund-done'].includes(act)) {
     return res.status(400).json({ error: '알 수 없는 처리입니다' });
   }
 
@@ -137,7 +140,13 @@ module.exports = async (req, res) => {
   try {
     /* ── 환불 금액만 미리 계산해 보기 (화면에 보여주는 용도) ── */
     if (act === 'quote') {
-      return res.status(200).json({ ok: true, quote: refundQuote(order, setupFee, now.getTime()) });
+      /* ★ 2026-11-07 — 연장 금액 기본값도 같이 알려 줍니다.
+         예전 화면은 지금까지 낸 돈 전체(o.amt)를 기본값으로 띄워서, 한 번 연장한
+         주문을 또 연장하면 130,000원이 기본으로 들어갔습니다.
+         30일 가격은 결제와 같은 가격표(_price.js)에서만 가져옵니다. */
+      const p30 = priceQuote(order.spec_id, 30);
+      return res.status(200).json({ ok: true, quote: refundQuote(order, setupFee, now.getTime()),
+        price30: p30 ? p30.amount : null });
     }
 
     /* ── 기간 연장 ── */
@@ -166,27 +175,70 @@ module.exports = async (req, res) => {
         }
       }
 
+      /* ★ 2026-11-07 — 만료된 PC 는 이제 바로 팔리지 않고 [반납 유예(hold)] 로 갑니다.
+           유예 중이면 앞 손님 자료가 그대로 있으므로 연장하면 그 PC 를 다시 씁니다.
+           [초기화 대기(wipe)] 로 넘어갔으면 자료를 지우는 중이거나 지울 PC 라서
+           연장으로 되살리지 않습니다. 그대로 연장하면 주문은 이용중인데 PC 는
+           초기화 대기로 남아, 초기화 뒤 다른 손님에게 또 팔릴 수 있습니다. */
+      /* ★ PC 부터 잡고 나서 주문을 고칩니다 (Codex T-0179 — 경쟁 상태).
+           예전 순서(상태 확인 → 주문 연장 → PC 바꾸기)는 그 사이 만료 정리가 유예(hold)를
+           초기화 대기(wipe)로 바꾸면, 주문은 이용중인데 PC 는 초기화 대기로 남았습니다.
+           이제 ok·hold 일 때만 바뀌는 조건부 PATCH 로 먼저 rent 로 잡고, 바뀐 줄을 받아 확인합니다.
+           못 잡았으면 지금 상태를 다시 보고, 초기화 대기면 주문은 건드리지 않고 돌려보냅니다.
+           (ok 는 db/08 을 돌리기 전 옛 정리 방식으로 바로 풀린 PC 입니다) */
+      const wipeErr = () => res.status(409).json({
+        error: `${order.pn} 은 반납 유예가 끝나 [초기화 대기] 로 넘어간 PC 입니다.\n`
+             + `자료가 지워졌을 수 있어 그대로 연장하지 않습니다.\n`
+             + `빈 PC 로 [수동 주문 등록] 을 해 주세요.`,
+      });
+      let grabbedFrom = null;          // 잡기 전 상태 (주문 저장이 실패하면 되돌릴 때 씀)
+      if (order.pn) {
+        const pq = `?pn=eq.${encodeURIComponent(order.pn)}`;
+        const pr = await sb('pcs', { query: `${pq}&select=status&limit=1` });
+        const before = pr && pr[0] ? pr[0].status : null;
+        if (before === 'wipe') return wipeErr();
+        if (before === 'ok' || before === 'hold') {
+          const got = await sb('pcs', { method: 'PATCH', prefer: 'return=representation',
+            query: `${pq}&status=eq.${before}&select=pn`,
+            body: { status: 'rent', updated_at: now.toISOString() } });
+          if (got && got[0]) grabbedFrom = before;
+          else {
+            /* 그 사이 상태가 바뀌었습니다 — 다시 보고 판단합니다 */
+            const pr2 = await sb('pcs', { query: `${pq}&select=status&limit=1` });
+            const st2 = pr2 && pr2[0] ? pr2[0].status : null;
+            if (st2 === 'wipe') return wipeErr();
+            if (st2 !== 'rent') {
+              return res.status(409).json({ error: `${order.pn} 의 상태가 방금 바뀌었습니다 (${st2}). 새로고침 후 다시 해 주세요` });
+            }
+          }
+        }
+      }
+
       /* 남은 기간이 있으면 그 뒤에 붙이고, 이미 끝났으면 오늘부터 시작합니다 */
       const curEnd = order.ends_at ? Date.parse(order.ends_at) : now.getTime();
       const base = Math.max(curEnd, now.getTime());
       const newEnd = new Date(base + days * DAY);
       const addAmt = Math.round(Number(b.amount) || 0);
 
-      await sb('orders', {
-        method: 'PATCH', prefer: 'return=minimal',
-        query: `?order_id=eq.${encodeURIComponent(no)}`,
-        body: {
-          days: Number(order.days) + days,
-          amount: Number(order.amount) + addAmt,
-          ends_at: newEnd.toISOString(),
-          status: 'assigned',
-        },
-      });
-      /* 만료돼서 반납했던 PC 라면 다시 임대중으로 */
-      if (order.pn) {
-        await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
-          query: `?pn=eq.${encodeURIComponent(order.pn)}&status=eq.ok`,
-          body: { status: 'rent', updated_at: now.toISOString() } });
+      try {
+        await sb('orders', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?order_id=eq.${encodeURIComponent(no)}`,
+          body: {
+            days: Number(order.days) + days,
+            amount: Number(order.amount) + addAmt,
+            ends_at: newEnd.toISOString(),
+            status: 'assigned',
+          },
+        });
+      } catch (e) {
+        /* 주문을 못 고쳤으면 잡아 둔 PC 를 원래 상태로 되돌립니다 */
+        if (grabbedFrom) {
+          try { await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
+            query: `?pn=eq.${encodeURIComponent(order.pn)}&status=eq.rent`,
+            body: { status: grabbedFrom, updated_at: new Date().toISOString() } }); } catch (e2) {}
+        }
+        throw e;
       }
       await log(order.pn, `연장 ${days}일 · ${addAmt.toLocaleString('ko-KR')}원 · ${str(b.payMethod, 30) || '수동'}`);
       return res.status(200).json({ ok: true, endsAt: newEnd.toISOString(), days: Number(order.days) + days });
@@ -230,18 +282,37 @@ module.exports = async (req, res) => {
         });
       }
 
-      await sb('orders', {
-        method: 'PATCH', prefer: 'return=minimal',
-        query: `?order_id=eq.${encodeURIComponent(no)}`,
-        body: {
-          status: asked > 0 ? 'refunded' : 'canceled',
-          canceled_at: now.toISOString(),
-          refund_amt: asked,
-          refund_why: str(b.why, 200) || '고객 요청',
-          ends_at: now.toISOString(),
-        },
-      });
-      /* 쓰던 PC 를 판매 재고로 되돌립니다.
+      /* ★ 2026-11-07 — 돈이 어떻게 돌아가는지(refund_state)를 주문에 같이 적습니다.
+           toss_done      토스가 고객 카드·계좌로 돌려줌 (끝)
+           manual_pending 토스 결제가 아니라 관리자가 직접 보내야 함
+                          → [오늘 할 일] 에 "직접 송금해야 할 환불" 로 계속 뜹니다
+           db/08 SQL 을 아직 안 돌려 칸이 없으면, 그 칸만 빼고 저장합니다
+           (해지 자체가 막히면 안 되므로). 그때는 기록(view_log)에만 남습니다. */
+      const refundState = tc.done ? 'toss_done' : asked > 0 ? 'manual_pending' : null;
+      const cancelBody = {
+        status: asked > 0 ? 'refunded' : 'canceled',
+        canceled_at: now.toISOString(),
+        refund_amt: asked,
+        refund_why: str(b.why, 200) || '고객 요청',
+        ends_at: now.toISOString(),
+      };
+      let stateSaved = false;
+      try {
+        await sb('orders', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?order_id=eq.${encodeURIComponent(no)}`,
+          body: Object.assign({ refund_state: refundState }, cancelBody),
+        });
+        stateSaved = true;
+      } catch (e) {
+        if (!missingCol(e, 'refund_state')) throw e;
+        await sb('orders', {
+          method: 'PATCH', prefer: 'return=minimal',
+          query: `?order_id=eq.${encodeURIComponent(no)}`,
+          body: cancelBody,
+        });
+      }
+      /* 쓰던 PC 를 놓아줍니다 — 바로 판매가 아니라 [초기화 대기] 로 갑니다 (_pay.js releasePc).
          ★ 그 PC 를 지금 다른 주문이 쓰고 있으면 건드리지 않습니다 (2026-11-07).
            만료된 옛 주문을 뒤늦게 해지하면, 그 사이 같은 PC 를 받은 새 고객의
            PC 가 "임대 가능" 으로 풀려 또 팔릴 수 있었습니다. */
@@ -256,6 +327,8 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         ok: true, refund: asked, quote: q, pcReturned: pcRes === 'released',
         pcBusy: pcRes === 'busy',                             // 다른 주문이 쓰고 있어 PC 는 그대로 둠
+        pcWipe: pcRes === 'released',                         // PC 는 초기화 대기로 갔음
+        refundState, refundTracked: stateSaved,               // 송금 추적 칸에 적었는가 (db/08 전이면 false)
         moneyBack: tc.done,                                   // 토스가 실제로 돌려줬는가
         manualRefund: !tc.done && asked > 0,                  // 관리자가 직접 보내야 하는가
       });
@@ -356,10 +429,16 @@ module.exports = async (req, res) => {
       }
       /* ★ 원래 PC 를 지금 다른 주문이 쓰고 있으면(만료된 옛 주문을 옮긴 경우) 건드리지 않습니다 */
       if (from && !(await pcBusyByOther(from, no))) {
-        /* 원래 쓰던 PC 는 점검으로 보냅니다 — 고장이라 옮기는 경우가 대부분입니다 */
+        /* 원래 쓰던 PC 는 고장이면 점검(fix), 아니면 초기화 대기(wipe) 로 보냅니다.
+           ★ 2026-11-07 — 예전엔 "판매 가능(ok)" 을 고르면 바로 팔렸습니다.
+             앞 손님의 파일과 애니데스크 비밀번호가 남은 채라 개인정보 사고가 됩니다.
+             옛 화면이 oldStatus:'ok' 를 보내도 초기화 대기로 받습니다.
+             고른 값이 없으면 예전처럼 점검으로 보냅니다 (고장이라 옮기는 경우가 대부분). */
+        const want = str(b.oldStatus, 4);
+        const oldSt = (want === 'wipe' || want === 'ok') ? 'wipe' : 'fix';
         await sb('pcs', { method: 'PATCH', prefer: 'return=minimal',
           query: `?pn=eq.${encodeURIComponent(from)}`,
-          body: { status: str(b.oldStatus, 4) === 'ok' ? 'ok' : 'fix', updated_at: now.toISOString() } });
+          body: { status: oldSt, updated_at: now.toISOString() } });
       }
       await log(toPn, `PC 이전 ${from || '없음'} → ${toPn} · ${str(b.why, 100) || '사유 없음'}`);
       return res.status(200).json({ ok: true, from, to: toPn, anydesk: to.anydesk || null });
@@ -374,6 +453,32 @@ module.exports = async (req, res) => {
         body: { tax_invoice: true, biz_no: bizNo || null } });
       await log(order.pn, `세금계산서 요청${bizNo ? ' · ' + bizNo : ''}`);
       return res.status(200).json({ ok: true });
+    }
+
+    /* ── 직접 송금 환불 → 송금 완료 표시 ─────────────────────────────
+       계좌이체·스마트스토어로 받은 주문은 토스가 돌려줄 수 없어 관리자가
+       직접 보냅니다. 보낸 뒤 여기서 [송금 완료] 를 눌러야 [오늘 할 일] 에서 빠집니다.
+       ★ refund_state=eq.manual_pending 조건으로 바꿔서, 두 번 눌러도 한 번만 기록됩니다.
+       ★ db/08 SQL 을 안 돌려 칸이 없으면 무엇을 해야 하는지 알려 드립니다. */
+    if (act === 'refund-done') {
+      const memo = str(b.memo, 100);
+      let got;
+      try {
+        got = await sb('orders', { method: 'PATCH', prefer: 'return=representation',
+          query: `?order_id=eq.${encodeURIComponent(no)}&refund_state=eq.manual_pending&select=order_id`,
+          body: { refund_state: 'manual_done', refund_done_at: now.toISOString() } });
+      } catch (e) {
+        if (missingCol(e, 'refund_')) {
+          return res.status(409).json({ error: '송금 추적 칸이 아직 없습니다.\nSupabase 에서 db/08-반납초기화.sql 을 먼저 실행해 주세요.' });
+        }
+        throw e;
+      }
+      if (!(got && got[0])) {
+        return res.status(409).json({ error: '직접 송금 대기 중인 환불이 아닙니다 (이미 처리됐거나 토스가 돌려준 환불입니다)' });
+      }
+      await log(order.pn, `환불 직접 송금 완료 ${Number(order.refund_amt || 0).toLocaleString('ko-KR')}원`
+        + ` · ${order.user_name || order.payer_name || ''}${memo ? ' · ' + memo : ''}`);
+      return res.status(200).json({ ok: true, refundState: 'manual_done' });
     }
 
     /* ── 고객 정보 수정 ────────────────────────────────────────────
