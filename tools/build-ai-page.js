@@ -36,7 +36,7 @@ const html = [
   `<link rel="canonical" href="${url}">`,
   '<meta property="og:type" content="website">',
   '<meta property="og:site_name" content="한국 가상컴">',
-  '<meta property="og:title" content="PC를 사지 마세요. 서버실에서 빌리세요 | 한국 가상컴">',
+  '<meta property="og:title" content="월 65,000원, AI가 밤새 일할 서버실 PC | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
   '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/hero1.jpg">',

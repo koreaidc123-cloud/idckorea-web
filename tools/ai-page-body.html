@@ -6,14 +6,14 @@
 
 <section class="ai-hero dk" style="--bg:url(img/hero1.jpg)">
   <div class="shell">
-    <span class="ai-tag">한국 가상컴 · 자체 서버실 원격PC</span>
-    <h1>PC를 사지 마세요.<br><span class="hl">서버실에서 빌리세요.</span></h1>
+    <span class="ai-tag">원격PC 임대 · 한국 가상컴</span>
+    <h1>월 65,000원,<br><span class="hl">AI가 밤새 일할 서버실 PC</span></h1>
     <p class="ai-lead">한국 가상컴은 자체 서버실의 실물 PC를 한 대씩 빌려드립니다.<br>
-      결제하면 바로 켜지고, 노트북을 덮어도 서버실 PC는 그대로 켜져 있습니다.<br>
-      클로드 코드 · 코덱스용 윈도우 원격PC, 메모리 32GB.</p>
+      결제하면 바로 켜지고, 노트북을 덮어도 서버실 PC는 그대로 켜져 있습니다.</p>
+    <p class="ai-live" id="aiLive" hidden><span class="dot"></span> 지금 바로 쓸 수 있는 3700X 32GB <b id="aiLiveN">—</b>대</p>
     <div class="ai-cta">
-      <a class="btn btn-b" href="https://pf.kakao.com/_GxcgFxj/chat" target="_blank" rel="noopener">시범 사용 문의하기</a>
-      <a class="btn btn-wo" href="#ai-price">요금 먼저 보기</a>
+      <a class="btn btn-b" href="product.html?g=5">3700X 32GB 바로 임대하기</a>
+      <a class="btn btn-wo" href="https://pf.kakao.com/_GxcgFxj/chat" target="_blank" rel="noopener">AI 세팅 시범 문의</a>
     </div>
   </div>
   <div class="ai-stats"><div class="shell">
@@ -196,4 +196,15 @@
   </div>
 </section>
 
+<script>
+/* 첫 화면 재고 숫자 — 실제 임대 가능 대수만 보여줍니다. 못 받아오면 줄 자체를 숨깁니다. */
+fetch('/api/live-pcs').then(r=>r.json()).then(d=>{
+  if(!d||!d.ready) return;
+  const s=(d.specs||[]).find(x=>x.specId===5); const n=s?s.available:0;
+  const box=document.getElementById('aiLive');
+  if(n>0){ document.getElementById('aiLiveN').textContent=n.toLocaleString('ko-KR'); }
+  else { box.innerHTML='<span class="dot"></span> 3700X 32GB는 지금 모두 임대중입니다 · 카톡으로 입고 알림을 받아 보세요'; }
+  box.hidden=false;
+}).catch(()=>{});
+</script>
 </main>

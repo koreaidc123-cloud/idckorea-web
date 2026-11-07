@@ -151,3 +151,7 @@
 .ai-hero>.shell{width:100%;box-sizing:border-box}
 .ai-hero h1 .hl{color:var(--sky)}
 .ai-lead,.ai-h p,.ai-card p{word-break:keep-all}
+.ai-live{display:inline-flex;align-items:center;gap:8px;margin:-14px 0 26px;font-size:15px;color:#C9D0E4}
+.ai-live b{color:#fff;font-size:18px}
+.ai-live .dot{width:8px;height:8px;border-radius:50%;background:#12D06E;box-shadow:0 0 0 4px rgba(18,208,110,.18)}
+.ai-live[hidden]{display:none}
