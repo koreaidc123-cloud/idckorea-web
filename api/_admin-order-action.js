@@ -119,7 +119,11 @@ module.exports = async (req, res) => {
       sb('settings', { query: '?select=v&k=eq.setup_fee' }),
     ]);
     order = rows && rows[0];
-    if (setRows && setRows[0]) setupFee = Number(setRows[0].v) || 5000;
+    /* ★ 2026-11-07 E2E — 예전엔 Number(v) || 5000 이라 셋팅비를 0원으로 저장해도
+       환불 계산은 5,000원을 뺐습니다. 숫자로 읽히면 0 도 그대로 씁니다. */
+    if (setRows && setRows[0] && setRows[0].v !== '' && Number.isFinite(Number(setRows[0].v))) {
+      setupFee = Number(setRows[0].v);
+    }
   } catch (e) {
     return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
   }
