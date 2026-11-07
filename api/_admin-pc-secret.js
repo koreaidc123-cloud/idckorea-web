@@ -12,7 +12,7 @@
       서버실 이름·랙 번호가 고객에게 새는 것을 막기 위해서입니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 const kv = require('./_crypto');
 
 module.exports = async (req, res) => {
@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
     try {
       await sb('view_log', {
         method: 'POST',
-        body: [{ pn, act: '비밀번호 열람', who: '관리자' }],
+        body: [{ pn, act: '비밀번호 열람', who: who(req) }],
         prefer: 'return=minimal',
       });
     } catch (e) { logged = false; }

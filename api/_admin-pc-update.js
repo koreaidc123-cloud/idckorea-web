@@ -16,7 +16,7 @@
    고친 내용은 view_log 에 남습니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 const kv = require('./_crypto');
 const { checkLoc } = require('./_rooms');
 const { guessSpec } = require('./_spec');
@@ -41,7 +41,7 @@ const num = (v, lo, hi) => {
      그 PC 에서 PC등록을 한 번 더 실행해야 신호가 붙습니다 — 응답 note 로 알려 드립니다.
    ※ "대장에서 사라진 PC"(claimed_pn 있음)는 여기서 품번을 붙이지 않습니다.
      원래 품번이 따로 있어 겹치므로 그 PC 에서 다시 등록하는 것이 맞습니다. */
-async function fromUnregistered(b, res) {
+async function fromUnregistered(b, res, req) {
   const hwId = String(b.hwId || '').trim();
   if (hwId.length < 4 || hwId.length > 128) return res.status(400).json({ error: '어느 PC 인지 알 수 없습니다' });
   const pn = String(b.pn || '').toUpperCase().trim();
@@ -107,7 +107,7 @@ async function fromUnregistered(b, res) {
   } catch (e) {}
   try {
     await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-      body: [{ pn, act: `미등록 PC 품번 부여 (${hwId})`.slice(0, 120), who: '관리자' }] });
+      body: [{ pn, act: `미등록 PC 품번 부여 (${hwId})`.slice(0, 120), who: who(req) }] });
   } catch (e) {}
   return res.status(200).json({
     ok: true, pn, changed: 1,
@@ -127,7 +127,7 @@ module.exports = async (req, res) => {
      "품번 없이 신호만 오는 PC") 에 [저장 · 품번 부여] 를 누르면 key 가 비어
      늘 400 "어느 PC 를 고칠지 알 수 없습니다" 가 났습니다.
      이제 hwId 로 그 줄을 찾아 대장(pcs)에 새로 올립니다. */
-  if (!isPn(key) && b.hwId) return fromUnregistered(b, res);
+  if (!isPn(key) && b.hwId) return fromUnregistered(b, res, req);
   if (!isPn(key)) return res.status(400).json({ error: '어느 PC 를 고칠지 알 수 없습니다' });
 
   const patch = {};
@@ -244,9 +244,40 @@ module.exports = async (req, res) => {
         return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
       }
     }
+    /* ★ 2026-11-08 점검(fix) → 판매(ok) 우회 막기
+       PC 이전(고장)·해지 때 옛 PC 는 점검(fix)으로 갈 수 있는데, 예전엔 fix → ok 가
+       비밀번호 없이 됐습니다. 그러면 최근 손님이 알던 애니데스크 비밀번호 그대로
+       다음 손님에게 팔릴 수 있습니다 (Codex T-0179 때 "범위 밖" 으로 남겨 둔 것).
+       최근 90일 안에 이 PC 에 주문(어떤 상태든)이 있었으면, 반납 PC 와 똑같이
+       새 비밀번호(4자 이상)가 있어야 판매로 돌립니다. 손님이 없던 PC 는 예전처럼 바로 됩니다. */
+    let fixHadCustomer = false;
+    if (st === 'ok' && cur.status === 'fix') {
+      try {
+        const pnQ = `pn=eq.${encodeURIComponent(key)}`;
+        const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
+        /* 90일 안에 만들어진 주문 · 또는 끝나는 날이 90일 안(이후 포함)인 주문 · 끝나는 날이 없는 주문 */
+        const hits = await Promise.all([
+          sb('orders', { query: `?select=order_id&${pnQ}&created_at=gte.${cutoff}&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&ends_at=gte.${cutoff}&limit=1` }),
+          sb('orders', { query: `?select=order_id&${pnQ}&ends_at=is.null&status=in.(paid,assigned)&limit=1` }),
+        ]);
+        fixHadCustomer = hits.some(h => h && h[0]);
+      } catch (e) {
+        return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+      }
+      if (fixHadCustomer && !(b.pw !== undefined && String(b.pw).trim().length >= 4)) {
+        return res.status(409).json({
+          needPw: true,
+          error: '최근 90일 안에 손님이 쓰던 PC 입니다.\n'
+               + '초기화하고 애니데스크 비밀번호를 새로 바꾼 뒤, 새 비밀번호(4자 이상)를 적어야 판매로 돌릴 수 있습니다.',
+        });
+      }
+    }
     if (st !== cur.status) {
       patch.status = st;
-      logs.push(st === 'ok' && fromReturn ? '반납 초기화 완료 → 판매 가능' : `상태 ${cur.status} → ${st}`);
+      logs.push(st === 'ok' && fromReturn ? '반납 초기화 완료 → 판매 가능'
+              : st === 'ok' && fixHadCustomer ? '점검 완료 → 판매 가능 (최근 손님 있음 · 초기화 · 비밀번호 교체)'
+              : `상태 ${cur.status} → ${st}`);
     }
   }
 
@@ -286,7 +317,7 @@ module.exports = async (req, res) => {
     if (logs.length) {
       await sb('view_log', {
         method: 'POST', prefer: 'return=minimal',
-        body: logs.map(act => ({ pn: patch.pn || key, act, who: '관리자' })),
+        body: logs.map(act => ({ pn: patch.pn || key, act, who: who(req) })),
       });
     }
   } catch (e) {}

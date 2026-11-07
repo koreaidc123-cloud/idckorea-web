@@ -22,7 +22,7 @@
      다를 수 있습니다. 다만 정가와 다르면 기록에 남깁니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 const { quote } = require('./_price');
 
 const phoneOk = s => /^01[016789]-?\d{3,4}-?\d{4}$/.test(String(s || '').trim());
@@ -156,7 +156,7 @@ module.exports = async (req, res) => {
       : `수동 주문 ${orderId} · ${name}`;
     try {
       await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-        body: [{ pn: pc.pn, act: note, who: '관리자' }] });
+        body: [{ pn: pc.pn, act: note, who: who(req) }] });
     } catch (e) {}
 
     res.status(200).json({

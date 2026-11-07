@@ -11,7 +11,7 @@
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
 const { sweepExpired } = require('./_sweep');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 const { guessSpec } = require('./_spec');
 
 module.exports = async (req, res) => {
@@ -133,6 +133,8 @@ module.exports = async (req, res) => {
     res.status(200).json({
       ok: true,
       at: new Date().toISOString(),
+      /* 지금 로그인한 관리자 이름 — 왼쪽 메뉴 아래에 보여 드립니다 (2026-11-08) */
+      me: who(req),
       settings: set,
       counts: pcs.reduce((o, p) => (o[p.status] = (o[p.status] || 0) + 1, o), {}),
       unregistered: unregShown,

@@ -10,6 +10,8 @@
      앞 글자나 길이도 보여주지 않습니다. (2026-11 보안 점검 반영)
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
+/* 관리자가 몇 명 등록됐는지만 셉니다 (비밀번호는 읽어 오지 않습니다) — 2026-11-08 관리자별 비밀번호 */
+const { adminCount } = require('./admin-login');
 
 const mask = v => (v ? '등록됨' : null);
 
@@ -49,8 +51,8 @@ module.exports = async (req, res) => {
           : '⚠️ publishable 키가 아닙니다 — sb_publishable_ 로 시작해야 합니다')
       : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
     '현장 등록 암호': env.KVC_SETUP_KEY ? '✅ ' + mask(env.KVC_SETUP_KEY) : '❌ 없음 — 랙PC 를 등록할 수 없습니다',
-    '관리자 비밀번호': env.KVC_ADMIN_PW
-      ? '✅ 등록됨'
+    '관리자 비밀번호': adminCount()
+      ? '✅ 등록됨 (' + adminCount() + '명)'
       : '❌ 없음 — 관리자 화면이 인터넷에 열려 있습니다',
     '비밀번호 잠금키': env.KVC_SECRET
       ? '✅ 등록됨 (애니데스크 비밀번호 암호화용)'
@@ -124,7 +126,7 @@ module.exports = async (req, res) => {
   if (ready() && 데이터베이스.상태 && 데이터베이스.상태.startsWith('⚠️')) 다음할일.push('Supabase SQL Editor 에서 db/schema.sql 실행');
   if (!env.SUPABASE_PUBLISHABLE_KEY) 다음할일.push('SUPABASE_PUBLISHABLE_KEY 등록 (Supabase → API Keys → Publishable key)');
   if (!env.KVC_SETUP_KEY) 다음할일.push('KVC_SETUP_KEY 등록 (현장에서 랙PC 설치할 때 입력할 암호)');
-  if (!env.KVC_ADMIN_PW) 다음할일.push('KVC_ADMIN_PW 등록 (관리자 화면 자물쇠 — 없으면 누구나 고객 접속정보를 봅니다)');
+  if (!adminCount()) 다음할일.push('KVC_ADMINS (또는 KVC_ADMIN_PW) 등록 (관리자 화면 자물쇠 — 없으면 누구나 고객 접속정보를 봅니다)');
   if (!env.KVC_SECRET) 다음할일.push('KVC_SECRET 등록 (애니데스크 비밀번호 암호화용)');
   if (!다음할일.length) 다음할일.push('모두 정상입니다. 현장에서 중계기·에이전트를 설치하시면 됩니다.');
 

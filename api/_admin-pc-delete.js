@@ -20,7 +20,7 @@
      잘못 등록한 PC 가 정확히 여기에 해당합니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 
 const isPn = s => /^[KYD]-\d{3}$/.test(s || '');
 
@@ -96,7 +96,7 @@ module.exports = async (req, res) => {
     try {
       await sb('view_log', {
         method: 'POST', prefer: 'return=minimal',
-        body: [{ pn: null, act: `미등록 PC 삭제 (${hwId})`, who: '관리자' }],
+        body: [{ pn: null, act: `미등록 PC 삭제 (${hwId})`, who: who(req) }],
       });
     } catch (e) {}
     return res.status(200).json({ ok: true, hwId, hiddenCount: hidden.length });
@@ -161,7 +161,7 @@ module.exports = async (req, res) => {
         pn,
         act: `PC 대장에서 삭제 (${cur.room}${cur.rack}-${cur.fl}-${cur.slot}` +
              (cur.anydesk ? ` · 애니데스크 ${cur.anydesk}` : '') + ')',
-        who: '관리자',
+        who: who(req),
       }],
     });
   } catch (e) {}

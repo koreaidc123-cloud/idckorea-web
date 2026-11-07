@@ -15,7 +15,7 @@
      바로 쓰입니다. 너무 짧게 잡으면 멀쩡한 PC 가 다운으로 보입니다.
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 
 /* 화면에서 쓰는 이름 ↔ 표에 저장하는 이름, 그리고 허용 범위 */
 const FIELDS = {
@@ -74,7 +74,7 @@ module.exports = async (req, res) => {
     });
     try {
       await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-        body: [{ pn: null, act: '설정 변경 · ' + rows.map(r => `${r.k}=${r.v}`).join(', '), who: '관리자' }] });
+        body: [{ pn: null, act: '설정 변경 · ' + rows.map(r => `${r.k}=${r.v}`).join(', '), who: who(req) }] });
     } catch (e) {}
     res.status(200).json({ ok: true, saved: rows.length });
   } catch (e) {

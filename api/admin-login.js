@@ -9,8 +9,18 @@
    POST /api/admin-login?do=logout             로그아웃 (출입증 쿠키 지움)
 
    그래서 진짜 열쇠는 서버에만 둡니다.
-     Vercel 환경변수  KVC_ADMIN_PW      관리자 비밀번호 (길게)
-     Vercel 환경변수  KVC_ADMIN_SECRET  서명용 문자열 (아무거나 길게)
+     Vercel 환경변수  KVC_ADMINS        관리자별 비밀번호   예) 대표:긴비번;현장:다른긴비번
+     Vercel 환경변수  KVC_ADMIN_PW      (예전 방식) 비밀번호 하나 — KVC_ADMINS 가 없을 때만 '대표' 로 씁니다
+     Vercel 환경변수  KVC_SECRET        서명용 문자열 (아무거나 길게)
+
+   ★ 2026-11-08 관리자별 비밀번호 (B1)
+     예전엔 모두가 같은 비밀번호를 써서, 기록에 늘 "관리자" 라고만 남았습니다.
+     누가 고객 비밀번호를 열어봤는지·누가 환불했는지 알 수 없었습니다.
+     이제 비밀번호마다 이름이 붙고, 출입증(쿠키)에 그 이름이 서명되어 들어갑니다.
+     모든 기록(view_log.who)에 그 이름이 남습니다.
+     · 이름 칸에는 : 과 ; 를 쓸 수 없습니다 (구분 기호라서). 비밀번호에는 ; 를 쓸 수 없습니다.
+     · 한 사람을 빼려면 KVC_ADMINS 에서 그 사람 몫을 지우고 Redeploy 하면 됩니다.
+       그 사람이 가진 출입증도 바로 무효가 됩니다 (이름이 목록에 없으면 거절).
 
    비밀번호가 맞으면 서버가 8시간짜리 출입증(쿠키)을 발급합니다.
    이 쿠키는 httpOnly 라 자바스크립트로 훔칠 수 없습니다.
@@ -22,25 +32,69 @@ const supa = require('./_supa');
 
 const HOURS = 8;
 
-/* 출입증 만들기: "만료시각.서명" */
-function sign(expMs) {
-  const h = crypto.createHmac('sha256', kv.signKey()).update(String(expMs)).digest('hex');
-  return expMs + '.' + h;
+/* ── 관리자 목록 읽기 ──────────────────────────────────────────
+   환경변수는 부를 때마다 다시 읽습니다 (시험에서 바꿔 끼울 수 있게 · 값은 어디에도 출력하지 않습니다).
+   이름은 1~20자, : ; 와 줄바꿈 없이. 이름이 겹치면 앞의 것만 씁니다. */
+const NAME_OK = /^[^:;\r\n]{1,20}$/;
+function accounts() {
+  const raw = String(process.env.KVC_ADMINS || '').trim();
+  const out = [];
+  if (raw) {
+    for (const part of raw.split(';')) {
+      const i = part.indexOf(':');
+      if (i < 1) continue;
+      const name = part.slice(0, i).trim();
+      const pw = part.slice(i + 1).trim();
+      if (!NAME_OK.test(name) || !pw) continue;
+      if (out.some(a => a.name === name)) continue;
+      out.push({ name, pw });
+    }
+  }
+  /* KVC_ADMINS 가 없거나 형식이 다 틀렸으면 예전 비밀번호 하나를 '대표' 로 씁니다 */
+  if (!out.length && process.env.KVC_ADMIN_PW) out.push({ name: '대표', pw: String(process.env.KVC_ADMIN_PW) });
+  return out;
 }
-/* 출입증 확인 — 서버 어디서든 이 함수로 검사합니다 */
+
+const b64 = s => Buffer.from(String(s), 'utf8').toString('base64url');
+const unb64 = s => { try { return Buffer.from(String(s), 'base64url').toString('utf8'); } catch (e) { return ''; } };
+const mac = (exp, name) => crypto.createHmac('sha256', kv.signKey()).update(String(exp) + '.' + name).digest('hex');
+
+/* 출입증 만들기: "만료시각.이름(base64url).서명"  — 서명은 만료시각+'.'+이름 에 겁니다 */
+function sign(expMs, name) {
+  return expMs + '.' + b64(name) + '.' + mac(expMs, name);
+}
+
+/* 출입증 확인 — 서버 어디서든 이 함수로 검사합니다.
+   맞으면 { name } , 아니면 false.
+   (예전처럼 if (!verify(req)) 로만 쓰는 곳도 그대로 동작합니다)
+   ★ 예전 모양(만료.서명 두 칸) 출입증은 그냥 "로그인 안 됨" 으로 봅니다 → 다시 로그인하면 됩니다. */
 function verify(req) {
   if (!kv.ready()) return false;
   const raw = (req.headers.cookie || '').split(';').map(s => s.trim())
     .find(s => s.startsWith('kvc_adm='));
   if (!raw) return false;
-  const [exp, sig] = decodeURIComponent(raw.slice(8)).split('.');
-  if (!exp || !sig) return false;
+  let val;
+  try { val = decodeURIComponent(raw.slice(8)); } catch (e) { return false; }
+  const parts = val.split('.');
+  if (parts.length !== 3) return false;
+  const [exp, nm, sig] = parts;
   if (!/^\d{10,16}$/.test(String(exp)) || Number(exp) < Date.now()) return false;  // 만료값은 숫자만
-  const want = crypto.createHmac('sha256', kv.signKey()).update(exp).digest('hex');
-  /* 글자 수가 같아도 한글 같은 글자가 섞이면 바이트 수가 달라 timingSafeEqual 이
-     오류를 냅니다. 바이트로 바꾼 뒤 길이를 비교합니다. */
+  if (!/^[A-Za-z0-9_-]{1,120}$/.test(nm) || !/^[0-9a-f]{64}$/.test(sig)) return false;
+  const name = unb64(nm);
+  if (!NAME_OK.test(name)) return false;
+  const want = mac(exp, name);
+  /* 바이트로 바꾼 뒤 길이를 비교합니다 (서명은 늘 64글자 16진수라 길이가 같습니다) */
   const a = Buffer.from(want), b = Buffer.from(sig);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!(a.length === b.length && crypto.timingSafeEqual(a, b))) return false;
+  /* 목록에서 빠진 사람의 출입증은 서명이 맞아도 받지 않습니다 */
+  if (!accounts().some(x => x.name === name)) return false;
+  return { name };
+}
+
+/* 기록(view_log.who)에 남길 이름 — 로그인한 관리자 이름 */
+function who(req) {
+  const v = verify(req);
+  return (v && v.name) || '관리자';
 }
 
 /* 비밀번호 비교 — 두 값을 각각 sha256 으로 바꿔(항상 32바이트) 비교합니다.
@@ -51,6 +105,18 @@ function verify(req) {
 function samePw(got, want) {
   const h = s => crypto.createHash('sha256').update(String(s), 'utf8').digest();
   return crypto.timingSafeEqual(h(got), h(want));
+}
+
+/* 모든 관리자와 비교합니다.
+   ★ 맞는 사람을 찾아도 멈추지 않고 끝까지 다 비교합니다 — 몇 번째에서 멈췄는지로
+     걸린 시간이 달라지면, 시간을 재서 비밀번호를 짐작하는 공격의 실마리가 됩니다. */
+function findAccount(got) {
+  let hit = null;
+  for (const a of accounts()) {
+    const same = samePw(got, a.pw);
+    if (same && !hit) hit = a;
+  }
+  return hit;
 }
 
 /* ── 자동 대입 막기 ────────────────────────────────────────────
@@ -81,12 +147,11 @@ module.exports = async (req, res) => {
     return res.status(200).json({ ok: true });
   }
 
-  const pw = process.env.KVC_ADMIN_PW || '';
-  if (!pw || !kv.ready()) {
-    return res.status(503).json({ error: '미설정', hint: 'KVC_ADMIN_PW / KVC_SECRET 을 Vercel 환경변수에 넣어 주세요' });
+  if (!accounts().length || !kv.ready()) {
+    return res.status(503).json({ error: '미설정', hint: 'KVC_ADMINS(또는 KVC_ADMIN_PW) / KVC_SECRET 을 Vercel 환경변수에 넣어 주세요' });
   }
 
-  const who = whoHash(req);
+  const ipWho = whoHash(req);
   const since = new Date(Date.now() - WINDOW_MIN * 60 * 1000).toISOString();
 
   /* 이미 너무 많이 틀렸으면 비밀번호를 확인하지도 않고 돌려보냅니다 */
@@ -94,7 +159,7 @@ module.exports = async (req, res) => {
     try {
       const rows = await supa.sb('view_log', {
         query: `?select=at&act=eq.${encodeURIComponent('관리자 로그인 실패')}` +
-               `&who=eq.${encodeURIComponent(who)}&at=gte.${since}&order=at.asc&limit=${MAX_FAIL}`,
+               `&who=eq.${encodeURIComponent(ipWho)}&at=gte.${since}&order=at.asc&limit=${MAX_FAIL}`,
       });
       if (rows && rows.length >= MAX_FAIL) {
         const wait = Math.ceil((Date.parse(rows[0].at) + WINDOW_MIN * 60 * 1000 - Date.now()) / 60000);
@@ -106,15 +171,15 @@ module.exports = async (req, res) => {
   }
 
   const got = String((req.body || {}).pw || '');
-  const ok = samePw(got, pw);
+  const acc = findAccount(got);
 
   /* 비밀번호가 틀리면 왜 틀렸는지 알려주지 않습니다 (자동 대입 공격 대비) */
-  if (!ok) {
+  if (!acc) {
     if (supa.ready()) {
       try {
         await supa.sb('view_log', {
           method: 'POST', prefer: 'return=minimal',
-          body: [{ pn: null, act: '관리자 로그인 실패', who }],
+          body: [{ pn: null, act: '관리자 로그인 실패', who: ipWho }],
         });
       } catch (e) {}
     }
@@ -122,10 +187,23 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: '비밀번호가 맞지 않습니다' });
   }
 
+  /* 누가 언제 들어왔는지 남깁니다 — [설정 → 관리자 기록] 의 "로그인 기록" 에서 봅니다 */
+  if (supa.ready()) {
+    try {
+      await supa.sb('view_log', {
+        method: 'POST', prefer: 'return=minimal',
+        body: [{ pn: null, act: '관리자 로그인', who: acc.name }],
+      });
+    } catch (e) {}
+  }
+
   const exp = Date.now() + HOURS * 3600 * 1000;
   res.setHeader('Set-Cookie',
-    `kvc_adm=${encodeURIComponent(sign(exp))}; Path=/; Max-Age=${HOURS * 3600}; HttpOnly; Secure; SameSite=Strict`);
-  res.status(200).json({ ok: true, until: new Date(exp).toISOString() });
+    `kvc_adm=${encodeURIComponent(sign(exp, acc.name))}; Path=/; Max-Age=${HOURS * 3600}; HttpOnly; Secure; SameSite=Strict`);
+  res.status(200).json({ ok: true, name: acc.name, until: new Date(exp).toISOString() });
 };
 
 module.exports.verify = verify;
+module.exports.who = who;
+/* 진단 화면(/api/health)이 "관리자 몇 명 등록됨" 을 보여줄 때 씁니다 — 비밀번호는 내보내지 않습니다 */
+module.exports.adminCount = () => accounts().length;

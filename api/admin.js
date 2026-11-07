@@ -16,6 +16,8 @@
      POST /api/admin?do=pc-delete           PC 대장에서 빼기 (잘못 등록한 것)
      POST /api/admin?do=order-manual        수동 주문 등록
      POST /api/admin?do=order-action        연장 · 해지환불 · 이전 · 세금계산서 · 직접 송금 완료(refund-done)
+     GET  /api/admin?do=log&pn=&q=&days=    변경 · 열람 · 로그인 기록 (읽기만)
+     GET  /api/admin?do=recon&from=&to=     토스 거래내역 ↔ 주문 대조 (읽기만 · 최대 31일)
 
    ※ 각 기능 파일이 스스로 관리자 출입증을 확인합니다.
       여기서는 넘기기만 합니다.
@@ -30,6 +32,8 @@ const HANDLERS = {
   'order-manual': require('./_admin-order-manual'),
   'order-action': require('./_admin-order-action'),
   'settings':     require('./_admin-settings'),
+  'log':          require('./_admin-log'),          // 관리자 기록 보기 (2026-11-08)
+  'recon':        require('./_admin-recon'),        // 토스 ↔ 주문 대사 · 읽기 전용 (2026-11-08)
 };
 
 module.exports = async (req, res) => {

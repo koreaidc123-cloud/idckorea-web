@@ -20,7 +20,7 @@
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb, missingCol } = require('./_supa');
 const { quote: priceQuote } = require('./_price');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 const { tossSecret, grabPc, lockPc, releasePc, pcBusyByOther, period } = require('./_pay');
 
 const DAY = 86400000;
@@ -134,7 +134,7 @@ module.exports = async (req, res) => {
 
   const log = async (pn, act2) => {
     try { await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-      body: [{ pn, act: act2, who: '관리자' }] }); } catch (e) {}
+      body: [{ pn, act: act2, who: who(req) }] }); } catch (e) {}
   };
 
   try {

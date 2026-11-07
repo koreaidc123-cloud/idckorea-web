@@ -16,7 +16,7 @@
      · 누가 언제 걸었는지 기록을 남깁니다
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { verify } = require('./admin-login');
+const { verify, who } = require('./admin-login');
 
 const ALLOWED = {
   reboot: '재부팅',
@@ -86,7 +86,7 @@ module.exports = async (req, res) => {
       }
       try {
         await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-          body: [{ pn, act: `${ALLOWED[p.cmd] || p.cmd} 요청 취소`, who: '관리자' }] });
+          body: [{ pn, act: `${ALLOWED[p.cmd] || p.cmd} 요청 취소`, who: who(req) }] });
       } catch (e) {}
       return res.status(200).json({ ok: true, pn, cmd: null, label: ALLOWED.cancel });
     }
@@ -95,13 +95,13 @@ module.exports = async (req, res) => {
     await sb('pcs', {
       method: 'PATCH', prefer: 'return=minimal',
       query: `?pn=eq.${encodeURIComponent(pn)}`,
-      body: { cmd, cmd_at: now, cmd_by: '관리자' },
+      body: { cmd, cmd_at: now, cmd_by: who(req) },
     });
 
     try {
       await sb('view_log', {
         method: 'POST', prefer: 'return=minimal',
-        body: [{ pn, act: ALLOWED[cmd] + ' 요청', who: '관리자' }],
+        body: [{ pn, act: ALLOWED[cmd] + ' 요청', who: who(req) }],
       });
     } catch (e) {}
 
