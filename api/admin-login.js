@@ -50,8 +50,10 @@ function accounts() {
       out.push({ name, pw });
     }
   }
-  /* KVC_ADMINS 가 없거나 형식이 다 틀렸으면 예전 비밀번호 하나를 '대표' 로 씁니다 */
-  if (!out.length && process.env.KVC_ADMIN_PW) out.push({ name: '대표', pw: String(process.env.KVC_ADMIN_PW) });
+  /* KVC_ADMINS 가 아예 없을 때만 예전 비밀번호 하나를 '대표' 로 씁니다.
+     ★ (Codex T-0185) KVC_ADMINS 를 적었는데 형식이 다 틀렸으면 예전 비밀번호로 열지 않고 잠급니다 —
+       오타 하나로 예전(공용) 비밀번호가 다시 살아나면 안 되기 때문입니다. 그때는 503 "미설정" 이 납니다. */
+  if (!raw && process.env.KVC_ADMIN_PW) out.push({ name: '대표', pw: String(process.env.KVC_ADMIN_PW) });
   return out;
 }
 

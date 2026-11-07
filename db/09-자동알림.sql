@@ -68,22 +68,26 @@ create extension if not exists pg_net  with schema extensions;
 
 
 -- ── 2. 같은 알림을 두 번 보내지 않게 기억하는 표 ───────────────────
---   k = 무엇에 대한 알림인지 (down:Y-001 · paidwait:주문번호 · floor:Y1-4 · daily)
---   v = 그때의 값 (마지막 신호 시각 · 끊긴 PC 목록 · 날짜) — 값이 바뀌면 새 일로 보고 다시 알립니다
+--   k      = 무엇에 대한 알림인지 (down:Y-001 · paidwait:주문번호 · floor:Y1-4 · daily)
+--   v      = 그때의 값 (마지막 신호 시각 · 끊긴 PC 목록 · 날짜) — 값이 바뀌면 새 일로 보고 다시 알립니다
+--   req_id = 그 알림을 보낸 pg_net 요청 번호. 텔레그램이 실패로 답하면 그 기억을 지워 다음 회차에 다시 보냅니다
 create table if not exists public.alert_state (
   k  text primary key,
   v  text,
   at timestamptz not null default now()
 );
+alter table public.alert_state add column if not exists req_id bigint;
 -- 고객 브라우저(공개키)로는 읽지도 쓰지도 못하게 잠급니다 (허용 규칙을 하나도 안 만듦)
 alter table public.alert_state enable row level security;
 
 
 -- ── 3. 텔레그램으로 한 줄 보내기 ───────────────────────────────────
--- 금고에서 토큰·대화방을 꺼내 보냅니다. 없으면 false (아무것도 안 보냄).
+-- 금고에서 토큰·대화방을 꺼내 보냅니다. 없으면 null (아무것도 안 보냄), 보냈으면 pg_net 요청 번호.
 -- 보내는 일은 pg_net 이 뒤에서 따로 하므로, 텔레그램이 느려도 이 함수는 바로 끝납니다.
-create or replace function public.kvc_tg_send(p_text text)
-returns boolean
+-- (돌려주는 모양을 바꿨을 때를 대비해 먼저 지우고 다시 만듭니다 — 여러 번 돌려도 안전)
+drop function if exists public.kvc_tg_send(text);
+create function public.kvc_tg_send(p_text text)
+returns bigint
 language plpgsql
 security definer
 set search_path = public
@@ -96,24 +100,23 @@ begin
     select decrypted_secret into v_token from vault.decrypted_secrets where name = 'kvc_tg_token' limit 1;
     select decrypted_secret into v_chat  from vault.decrypted_secrets where name = 'kvc_tg_chat'  limit 1;
   exception when others then
-    return false;            -- 금고(Vault)를 못 읽으면 조용히 끝냅니다
+    return null;             -- 금고(Vault)를 못 읽으면 조용히 끝냅니다
   end;
   if coalesce(v_token, '') = '' or coalesce(v_chat, '') = '' then
-    return false;
+    return null;
   end if;
-  perform net.http_post(
+  return net.http_post(
     url     := 'https://api.telegram.org/bot' || v_token || '/sendMessage',
     body    := jsonb_build_object('chat_id', v_chat, 'text', left(p_text, 3500),
                                   'disable_web_page_preview', true),
     headers := jsonb_build_object('Content-Type', 'application/json')
   );
-  return true;
 end;
 $$;
 
 
 -- ── 4. 5분마다 살펴보는 함수 ───────────────────────────────────────
--- 돌려주는 값 = 이번에 보낸 알림 개수 (금고에 열쇠가 없으면 0)
+-- 돌려주는 값 = 이번에 보낸 알림 개수 (금고에 열쇠가 없거나 다른 회차가 돌고 있으면 0)
 create or replace function public.kvc_alerts()
 returns int
 language plpgsql
@@ -123,6 +126,7 @@ as $$
 declare
   v_ready    boolean := false;
   v_sent     int := 0;
+  v_req      bigint;
   v_n        int;
   v_list     text;
   v_down_sec int;
@@ -137,6 +141,11 @@ declare
   v_wait     int;
   v_rentdown int;
 begin
+  -- 두 회차가 겹쳐 돌면 같은 알림이 두 번 갈 수 있어, 한 번에 하나만 돌게 잠급니다
+  if not pg_try_advisory_xact_lock(hashtext('kvc_alerts')) then
+    return 0;
+  end if;
+
   -- 금고에 열쇠 두 개가 다 있어야 시작합니다
   begin
     select count(*) = 2 into v_ready
@@ -149,6 +158,18 @@ begin
     return 0;
   end if;
 
+  -- ⓪ 지난 회차에 보낸 알림 중 텔레그램이 실패로 답한 것(2xx 가 아님 · 시간 초과 · 연결 오류)은
+  --    기억을 지웁니다 → 아래에서 다시 보냅니다. (pg_net 은 응답을 몇 시간 동안 net._http_response 에 남깁니다)
+  begin
+    delete from alert_state a
+     using net._http_response h
+     where a.req_id = h.id
+       and (h.timed_out is true or h.error_msg is not null
+            or h.status_code is null or h.status_code not between 200 and 299);
+  exception when others then
+    null;                    -- pg_net 표 모양이 다르면 이 단계만 건너뜁니다
+  end;
+
   -- ① 임대중 PC 가 10분 넘게 신호 없음 — 같은 끊김(같은 마지막 신호 시각)은 한 번만
   select count(*), string_agg(p.pn, ', ' order by p.pn)
     into v_n, v_list
@@ -158,16 +179,19 @@ begin
      and not exists (select 1 from alert_state a
                       where a.k = 'down:' || p.pn and a.v = coalesce(p.last_beat::text, 'none'));
   if v_n > 0 then
-    if public.kvc_tg_send('🔴 임대중 PC 신호 끊김 (10분 넘음) ' || v_n || '대' || chr(10) || v_list
-                          || chr(10) || '관리자 [오늘 할 일] 에서 확인해 주세요') then
+    v_req := public.kvc_tg_send('🔴 임대중 PC 신호 끊김 (10분 넘음) ' || v_n || '대' || chr(10) || v_list
+                                || chr(10) || '관리자 [오늘 할 일] 에서 확인해 주세요');
+    if v_req is not null then
       v_sent := v_sent + 1;
+      insert into alert_state (k, v, at, req_id)
+        select 'down:' || p.pn, coalesce(p.last_beat::text, 'none'), now(), v_req
+          from pcs p
+         where p.status = 'rent'
+           and (p.last_beat is null or p.last_beat < now() - interval '10 minutes')
+           and not exists (select 1 from alert_state a
+                            where a.k = 'down:' || p.pn and a.v = coalesce(p.last_beat::text, 'none'))
+      on conflict (k) do update set v = excluded.v, at = excluded.at, req_id = excluded.req_id;
     end if;
-    insert into alert_state (k, v, at)
-      select 'down:' || p.pn, coalesce(p.last_beat::text, 'none'), now()
-        from pcs p
-       where p.status = 'rent'
-         and (p.last_beat is null or p.last_beat < now() - interval '10 minutes')
-    on conflict (k) do update set v = excluded.v, at = excluded.at;
   end if;
 
   -- ② 결제 완료인데 PC 배정이 10분 넘게 안 된 주문 — 주문마다 한 번만 (알림에는 건수만)
@@ -177,20 +201,22 @@ begin
      and coalesce(o.paid_at, o.created_at) < now() - interval '10 minutes'
      and not exists (select 1 from alert_state a where a.k = 'paidwait:' || o.order_id);
   if v_n > 0 then
-    if public.kvc_tg_send('💳 결제 완료 · PC 배정 대기 10분 넘음 — 새로 ' || v_n || '건'
-                          || chr(10) || '관리자 [오늘 할 일] 맨 위에서 [PC 배정] 해 주세요') then
+    v_req := public.kvc_tg_send('💳 결제 완료 · PC 배정 대기 10분 넘음 — 새로 ' || v_n || '건'
+                                || chr(10) || '관리자 [오늘 할 일] 맨 위에서 [PC 배정] 해 주세요');
+    if v_req is not null then
       v_sent := v_sent + 1;
+      insert into alert_state (k, v, at, req_id)
+        select 'paidwait:' || o.order_id, 'sent', now(), v_req
+          from orders o
+         where o.status = 'paid' and o.pn is null
+           and coalesce(o.paid_at, o.created_at) < now() - interval '10 minutes'
+      on conflict (k) do nothing;
     end if;
-    insert into alert_state (k, v, at)
-      select 'paidwait:' || o.order_id, 'sent', now()
-        from orders o
-       where o.status = 'paid' and o.pn is null
-         and coalesce(o.paid_at, o.created_at) < now() - interval '10 minutes'
-    on conflict (k) do nothing;
   end if;
 
   -- ③ 같은 랙 같은 층에서 2대 이상 동시에 신호 끊김 (전원 멀티탭 · 공유기 의심)
   --    점검중(fix)·미등록(new)·자리 미지정(0) PC 는 셈에서 뺍니다. 다운 판정 시간은 관리자 설정값(최소 300초).
+  --    pcs.room 은 schema.sql 의 check 제약으로 K·Y·D 한 글자만 들어갑니다 (실제 서버실 이름이 아님).
   select case when v ~ '^\d{1,6}$' then v::int end into v_down_sec from settings where k = 'down_sec';
   v_down_sec := greatest(300, coalesce(v_down_sec, 300));
   for r in
@@ -205,13 +231,13 @@ begin
     v_key := 'floor:' || r.room || r.rack || '-' || r.fl;
     v_keys := v_keys || v_key;
     if not exists (select 1 from alert_state a where a.k = v_key and a.v = r.pns) then
-      -- 서버실은 알파벳(K·Y·D)만 씁니다 — 실제 이름은 넣지 않습니다
-      if public.kvc_tg_send('⚡ 같은 층 여러 대 신호 끊김 — ' || r.room || ' ' || r.rack || '번 랙 ' || r.fl || '층 '
-                            || r.n || '대' || chr(10) || r.pns || chr(10) || '전원 멀티탭 · 공유기를 확인해 주세요') then
+      v_req := public.kvc_tg_send('⚡ 같은 층 여러 대 신호 끊김 — ' || r.room || ' ' || r.rack || '번 랙 ' || r.fl || '층 '
+                                  || r.n || '대' || chr(10) || r.pns || chr(10) || '전원 멀티탭 · 공유기를 확인해 주세요');
+      if v_req is not null then
         v_sent := v_sent + 1;
+        insert into alert_state (k, v, at, req_id) values (v_key, r.pns, now(), v_req)
+        on conflict (k) do update set v = excluded.v, at = excluded.at, req_id = excluded.req_id;
       end if;
-      insert into alert_state (k, v, at) values (v_key, r.pns, now())
-      on conflict (k) do update set v = excluded.v, at = excluded.at;
     end if;
   end loop;
   -- 다 살아난 층은 기억에서 지웁니다 — 다음에 또 끊기면 다시 알립니다
@@ -231,16 +257,17 @@ begin
     exception when undefined_column then
       v_refund := null;
     end;
-    if public.kvc_tg_send('☀️ 한국 가상컴 아침 요약 (' || to_char(now() at time zone 'Asia/Seoul', 'MM-DD') || ')' || chr(10)
+    v_req := public.kvc_tg_send('☀️ 한국 가상컴 아침 요약 (' || to_char(now() at time zone 'Asia/Seoul', 'MM-DD') || ')' || chr(10)
          || '· 3일 안에 만료: ' || v_d3 || '건' || chr(10)
          || '· 반납 초기화 대기: ' || v_wipe || '대' || chr(10)
          || '· 직접 송금할 환불: ' || coalesce(v_refund::text || '건', '확인 필요 (db/08 실행 전)') || chr(10)
          || '· PC 배정 대기: ' || v_wait || '건' || chr(10)
-         || '· 신호 끊긴 임대중 PC: ' || v_rentdown || '대') then
+         || '· 신호 끊긴 임대중 PC: ' || v_rentdown || '대');
+    if v_req is not null then
       v_sent := v_sent + 1;
+      insert into alert_state (k, v, at, req_id) values ('daily', v_today, now(), v_req)
+      on conflict (k) do update set v = excluded.v, at = excluded.at, req_id = excluded.req_id;
     end if;
-    insert into alert_state (k, v, at) values ('daily', v_today, now())
-    on conflict (k) do update set v = excluded.v, at = excluded.at;
   end if;
 
   -- 오래된 기억은 정리합니다 (30일)
@@ -271,8 +298,10 @@ select cron.schedule('kvc-alerts', '*/5 * * * *', $$select public.kvc_alerts()$$
 select jobname, schedule, active from cron.job where jobname in ('kvc-sweep', 'kvc-alerts') order by jobname;
 -- ② 금고에 열쇠 두 개가 있는지 (값은 안 보여 주고 이름만)
 select name from vault.secrets where name in ('kvc_tg_token', 'kvc_tg_chat') order by name;
--- ③ 시험 알림 한 번 — true 가 나오고 몇 초 안에 텔레그램에 오면 끝입니다 (false = 금고에 열쇠 없음)
-select public.kvc_tg_send('✅ 한국 가상컴 알림 연결 시험입니다') as "시험 알림 보냄";
+-- ③ 시험 알림 한 번 — 숫자(요청 번호)가 나오고 몇 초 안에 텔레그램에 오면 끝입니다 (빈칸 null = 금고에 열쇠 없음)
+select public.kvc_tg_send('✅ 한국 가상컴 알림 연결 시험입니다') as "시험 알림 요청 번호";
+-- ③-1 (몇 초 뒤) 텔레그램 답 — status_code 200 이면 성공. 401 = 토큰 틀림, 400 = chat id 틀림
+-- select id, status_code, timed_out, error_msg from net._http_response order by id desc limit 3;
 -- ④ (몇 분 뒤) 예약이 실제로 돌았는지 — status 가 succeeded 면 정상
 -- select j.jobname, d.status, d.start_time, d.return_message
 --   from cron.job_run_details d join cron.job j on j.jobid = d.jobid

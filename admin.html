@@ -1370,7 +1370,8 @@ function vRecon(){
     : !d ? '<div class="card"><div class="empty2">기간을 고르고 [대조] 를 눌러 주세요 (한 번에 31일까지)</div></div>'
     : `<div class="card" style="margin-bottom:14px;padding:14px 18px;font-size:13px" id="recon-sum">
         ${esc(d.from)} ~ ${esc(d.to)} · 토스 거래 ${w(d.tossCount)}줄 (주문 ${w(d.tossOrders)}건) · 우리 주문 ${w(d.dbOrders)}건 대조
-        ${RECON_GROUPS.every(([k])=>!(d.groups[k]||[]).length)?' · <b style="color:var(--gr)">어긋난 것 없음</b>':''}</div>`
+        ${RECON_GROUPS.every(([k])=>!(d.groups[k]||[]).length)&&!d.checkCut?' · <b style="color:var(--gr)">어긋난 것 없음</b>':''}
+        ${d.checkCut?'<br><b style="color:var(--red)">어긋나 보이는 주문이 많아 일부는 토스에 다시 확인하지 못했습니다 — 기간을 줄여 다시 대조해 주세요</b>':''}</div>`
       + RECON_GROUPS.map(([k,title,sub])=>{
         const rows=d.groups[k]||[];
         return `<div class="card" style="margin-bottom:14px${rows.length&&k==='doneButNotPaid'?';border-color:#F7CDD3':''}" id="recon-${k}">
@@ -2667,7 +2668,7 @@ async function tryGate(){
   /* 401 = 틀림 · 429 = 너무 여러 번 틀림 (자동 대입 방지) · 503 = 서버 설정 안 됨.
      서버가 알려주는 문구를 그대로 보여줍니다. 어떤 경우에도 화면을 열지 않습니다. */
   let m = r.status===401 ? '비밀번호가 맞지 않습니다'
-        : r.status===503 ? '관리자 비밀번호가 서버에 아직 설정되지 않았습니다 (KVC_ADMIN_PW · KVC_SECRET)'
+        : r.status===503 ? '관리자 비밀번호가 서버에 없거나 형식이 틀렸습니다 (KVC_ADMINS = 이름:비번;이름:비번 · KVC_SECRET)'
         : '로그인 서버 오류입니다 (오류 '+r.status+'). 잠시 뒤 다시 시도해 주세요.';
   try{ const d=await r.json(); if(d&&d.error&&r.status!==503) m=d.error; }catch(e){}
   $('gate-err').textContent=m; $('gate-pw').value='';

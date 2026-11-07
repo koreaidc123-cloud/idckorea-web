@@ -75,7 +75,7 @@ async function fakeToss(url, opt) {
     if (ex && ex.reject) return tossJson(400, { code: ex.reject, message: '시험용 거절' });
     const va = /^tva_/.test(body.paymentKey);
     const pay = Object.assign({
-      paymentKey: body.paymentKey, orderId: body.orderId, totalAmount: Number(body.amount),
+      paymentKey: body.paymentKey, orderId: body.orderId, totalAmount: Number(body.amount), balanceAmount: Number(body.amount),
       method: va ? '가상계좌' : '카드',
       status: va ? 'WAITING_FOR_DEPOSIT' : 'DONE',
       secret: va ? 'vsec_' + Math.random().toString(36).slice(2, 14) : null,
@@ -101,6 +101,7 @@ async function fakeToss(url, opt) {
     if (!p || !p.confirmed) return tossJson(404, { code: 'NOT_FOUND_PAYMENT', message: '없는 결제' });
     if (p.cancelReject) return tossJson(400, { code: p.cancelReject, message: '시험용 취소 거절' });
     p.status = body.cancelAmount && body.cancelAmount < p.totalAmount ? 'PARTIAL_CANCELED' : 'CANCELED';
+    p.balanceAmount = Math.max(0, (p.balanceAmount == null ? p.totalAmount : p.balanceAmount) - Number(body.cancelAmount || p.totalAmount));
     addTx({ paymentKey: key, orderId: p.orderId, status: p.status, amount: Number(body.cancelAmount || p.totalAmount), method: p.method });
     return tossJson(200, p);
   }

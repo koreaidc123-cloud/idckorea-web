@@ -1027,6 +1027,14 @@ async function main() {
         ok((await loginCookie(srv.TEST.FIELD_PW)).status === 401, 'KVC_ADMINS 없는데 현장 비밀번호가 통과');
         ok(await withCookie('/api/admin?do=pcs', f.cookie) === 401, '목록에서 빠진 현장의 출입증이 아직 통과');
         ok(await withCookie('/api/admin?do=pcs', a.cookie) === 200, '대체 대표 출입증이 안 통함');
+        /* KVC_ADMINS 를 적었는데 형식이 다 틀림 → 예전 비밀번호로 열리면 안 됨 (Codex T-0185) */
+        process.env.KVC_ADMINS = '형식이틀린값;또틀림';
+        const bad = await loginCookie(srv.TEST.ADMIN_PW);
+        ok(bad.status === 503, '틀린 KVC_ADMINS 인데 예전 비밀번호 로그인 ' + bad.status);
+        /* 일부러 낸 503(미설정) 은 Z1 의 "서버 오류 없음" 에서 뺍니다 */
+        const i503 = srv.apiLog.findIndex(x => x.st === 503 && /^\/api\/admin-login/.test(x.url) && !x.err);
+        if (i503 >= 0) srv.apiLog.splice(i503, 1);
+        ok(await withCookie('/api/admin?do=pcs', a.cookie) === 401, '틀린 KVC_ADMINS 인데 대표 출입증이 통과');
       } finally { process.env.KVC_ADMINS = saved; }
       ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
     } finally { await ctx.close(); }
@@ -1122,7 +1130,15 @@ async function main() {
       o('KVC260101-RCREF1', { status: 'refunded', refund_amt: 30000, refund_state: 'toss_done' }),
       o('KVC260101-RCMAN1', { status: 'refunded', refund_amt: 20000, refund_state: 'manual_done', pay_method: '계좌이체' }),
       o('KVC260101-RCOK01', {}),
+      /* 기간 경계 (Codex T-0185) — 40일 전 결제, 이번 기간에는 취소 줄만 있음 */
+      o('KVC260101-RCXP01', { status: 'assigned', created_at: iso(now - 86400000 * 40) }),
+      o('KVC260101-RCXP02', { status: 'refunded', refund_amt: 30000, refund_state: 'toss_done', created_at: iso(now - 86400000 * 40) }),
     ];
+    /* 토스가 지금 기억하는 그 결제의 누적 상태 (GET /v1/payments/{key}) */
+    srv.toss.payments['pk_KVC260101-RCXP01'] = { paymentKey: 'pk_KVC260101-RCXP01', orderId: 'KVC260101-RCXP01', confirmed: true,
+      method: '카드', totalAmount: 65000, balanceAmount: 0, status: 'CANCELED' };
+    srv.toss.payments['pk_KVC260101-RCXP02'] = { paymentKey: 'pk_KVC260101-RCXP02', orderId: 'KVC260101-RCXP02', confirmed: true,
+      method: '카드', totalAmount: 65000, balanceAmount: 35000, status: 'PARTIAL_CANCELED' };
     db().orders.push(...added);
     let k = 900000;
     const tx = (orderId, status, amount, n = 1) => {
@@ -1138,6 +1154,8 @@ async function main() {
     tx('KVC260101-RCMAN1', 'DONE', 65000);
     tx('KVC260101-RCOK01', 'DONE', 65000);
     tx('KVC260101-RCBULK', 'DONE', 1, 5001);          // 5000건 넘음 → 쪽 넘김
+    tx('KVC260101-RCXP01', 'CANCELED', 65000);        // 승인은 40일 전(기간 밖) → 토스에 다시 물어 "취소인데 이용중"
+    tx('KVC260101-RCXP02', 'PARTIAL_CANCELED', 20000); // 앞서 10,000 + 이번 20,000 = 30,000 → DB 와 같음 (오탐 아님)
     const snap = JSON.stringify(db().orders) + JSON.stringify(db().pcs);
     const cancels = srv.toss.cancels.length, confirms = srv.toss.confirms.length, calls0 = srv.toss.txCalls;
     try {
@@ -1148,7 +1166,9 @@ async function main() {
       const eq = (g, want) => ok(JSON.stringify(ids(g)) === JSON.stringify(want.slice().sort()), `${g}: ${ids(g)} ≠ ${want}`);
       eq('tossOnly', ['KVC260101-RCGHOST', 'KVC260101-RCBULK']);
       eq('doneButNotPaid', ['KVC260101-SEEDVA']);
-      eq('canceledButActive', ['KVC260101-RCCAN1']);
+      eq('canceledButActive', ['KVC260101-RCCAN1', 'KVC260101-RCXP01']);
+      ok(r.d.checked >= 2 && (r.d.groups.canceledButActive.find(x => x.orderId === 'KVC260101-RCXP01') || {}).verified,
+        '기간 밖 결제를 토스에 다시 확인하지 않음 checked=' + r.d.checked);
       eq('amountDiff', ['KVC260101-RCAMT1']);
       eq('refundDiff', ['KVC260101-RCREF1']);
       ok((r.d.groups.tossOnly.find(x => x.orderId === 'KVC260101-RCBULK') || {}).tossPaid === 5001, '쪽 넘김으로 받은 합계가 다름');
@@ -1181,6 +1201,7 @@ async function main() {
       const keep = db().orders.filter(x => !ids.has(x.order_id));
       db().orders.length = 0; db().orders.push(...keep);
       srv.toss.transactions.length = txBefore;
+      delete srv.toss.payments['pk_KVC260101-RCXP01']; delete srv.toss.payments['pk_KVC260101-RCXP02'];
     }
   });
 

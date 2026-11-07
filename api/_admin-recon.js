@@ -28,7 +28,7 @@
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
 const { verify } = require('./admin-login');
-const { tossAuth } = require('./_pay');
+const { tossAuth, tossGet } = require('./_pay');
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DAYS = 31;
@@ -66,8 +66,12 @@ async function tossTransactions(from, to) {
     }
     all.push(...data);
     if (data.length < PAGE) return { ok: true, rows: all };
+    /* ★ (Codex T-0185) 꽉 찬 쪽인데 다음 쪽 열쇠가 없거나 같은 열쇠가 또 오면 "다 받았다" 고 하지 않습니다.
+       일부만 받은 채 "어긋난 것 없음" 이라고 보여주면 더 위험하기 때문입니다. */
     const last = data[data.length - 1];
-    if (!last || !last.transactionKey) return { ok: true, rows: all };
+    if (!last || !last.transactionKey || String(last.transactionKey) === after) {
+      return { ok: false, error: '토스 거래내역을 끝까지 받지 못했습니다 (다음 쪽 정보 없음). 기간을 줄여 다시 해 주세요.' };
+    }
     after = String(last.transactionKey);
   }
   return { ok: false, error: '거래가 너무 많습니다. 기간을 줄여서 다시 해 주세요.' };
@@ -144,37 +148,68 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
   }
 
-  const out = { tossOnly: [], doneButNotPaid: [], canceledButActive: [], amountDiff: [], refundDiff: [] };
-  for (const id of Object.keys(toss)) {
-    const t = toss[id];
-    const o = db[id];
+  /* 한 주문을 다섯 묶음 중 어디에 넣을지 정합니다 (paid = 받은 돈, canceled = 돌려준 돈) */
+  const judge = (t, o) => {
+    const hit = [];
+    if (!o) { if (t.paid > 0) hit.push('tossOnly'); return hit; }   // 입금 대기만 있는 것은 아직 돈이 안 들어온 것
     const net = t.paid - t.canceled;
-    const row = {
-      orderId: id, method: t.method, tossStatus: t.last, tossPaid: t.paid, tossCanceled: t.canceled, tossAt: t.lastAt,
-      dbStatus: o ? o.status : null, dbAmount: o ? o.amount : null, dbRefund: o ? o.refund_amt : null, pn: o ? o.pn : null,
-    };
-    if (!o) {
-      if (t.paid > 0) out.tossOnly.push(row);       // 입금 대기만 있는 것은 아직 돈이 안 들어온 것
-      continue;
-    }
     /* 돈은 받았는데(남은 금액 > 0) DB 는 결제 대기·취소 */
-    if (net > 0 && ['ready', 'canceled'].includes(o.status)) out.doneButNotPaid.push(row);
+    if (net > 0 && ['ready', 'canceled'].includes(o.status)) hit.push('doneButNotPaid');
     /* 전액 취소됐는데 DB 는 아직 쓰는 중 */
     const activeButCanceled = t.paid > 0 && net <= 0 && ['paid', 'assigned'].includes(o.status);
-    if (activeButCanceled) out.canceledButActive.push(row);
+    if (activeButCanceled) hit.push('canceledButActive');
     /* 받은 금액이 주문 금액과 다름 */
-    if (t.paid > 0 && Number(o.amount) !== t.paid) out.amountDiff.push(row);
-    /* 돌려준 금액이 DB 환불 금액과 다름 — 직접 송금 환불(manual_*)은 토스와 무관해서 뺍니다 */
+    if (t.paid > 0 && Number(o.amount) !== t.paid) hit.push('amountDiff');
+    /* 돌려준 금액이 DB 환불 금액과 다름 — 직접 송금 환불(manual_*)은 토스와 무관해서 뺍니다.
+       (위 "취소인데 이용중" 에 이미 나온 주문은 같은 일을 두 번 보여주지 않게 뺍니다) */
     const manual = /^manual_/.test(String(o.refund_state || ''));
     const dbRefund = Number(o.refund_amt) || 0;
-    /* (위 "취소인데 이용중" 에 이미 나온 주문은 같은 일을 두 번 보여주지 않게 뺍니다) */
-    if (!activeButCanceled && !manual && (t.canceled > 0 || dbRefund > 0) && dbRefund !== t.canceled) out.refundDiff.push(row);
+    if (!activeButCanceled && !manual && (t.canceled > 0 || dbRefund > 0) && dbRefund !== t.canceled) hit.push('refundDiff');
+    return hit;
+  };
+
+  /* ★ (Codex T-0185) 기간 안의 거래만 보면 틀릴 수 있습니다.
+     예) 지난달에 결제 → 이번 달에 전액 취소 : 이번 달 거래에는 취소 줄만 있어 "받은 돈 0" 으로 보입니다.
+     그래서 어긋나 보이는 주문과 "취소 줄만 있는" 주문은 토스에 그 결제의 지금 상태를 한 번 더 묻고
+     (GET /v1/payments/{paymentKey} — 결제 총액 totalAmount · 남은 금액 balanceAmount) 그 값으로 다시 판정합니다.
+     토스가 모르는 결제(시험 데이터 등)면 거래내역 합계를 그대로 씁니다. 조회는 최대 MAX_CHECK 건. */
+  const MAX_CHECK = 150;
+  let checked = 0, checkCut = false;
+  const out = { tossOnly: [], doneButNotPaid: [], canceledButActive: [], amountDiff: [], refundDiff: [] };
+  for (const id of Object.keys(toss)) {
+    let t = toss[id];
+    const o = db[id];
+    let hit = judge(t, o);
+    const partial = t.paid === 0 && t.canceled > 0;
+    if ((hit.length || partial) && t.paymentKey) {
+      if (checked >= MAX_CHECK) checkCut = true;
+      else {
+        checked++;
+        const g = await tossGet({ paymentKey: t.paymentKey });
+        const total = g.ok ? Number(g.pay.totalAmount) : NaN;
+        if (g.ok && Number.isFinite(total)) {
+          const bal = Number.isFinite(Number(g.pay.balanceAmount)) ? Number(g.pay.balanceAmount)
+                    : (g.pay.status === 'CANCELED' ? 0 : total);
+          const paidNow = ['DONE', 'CANCELED', 'PARTIAL_CANCELED'].includes(g.pay.status) ? total : 0;
+          t = Object.assign({}, t, { paid: paidNow, canceled: paidNow ? Math.max(0, total - bal) : 0, last: g.pay.status, verified: true });
+          hit = judge(t, o);
+        }
+      }
+    }
+    if (!hit.length) continue;
+    const row = {
+      orderId: id, method: t.method, tossStatus: t.last, tossPaid: t.paid, tossCanceled: t.canceled, tossAt: t.lastAt,
+      verified: !!t.verified,
+      dbStatus: o ? o.status : null, dbAmount: o ? o.amount : null, dbRefund: o ? o.refund_amt : null, pn: o ? o.pn : null,
+    };
+    for (const k of hit) out[k].push(row);
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => String(a.tossAt).localeCompare(String(b.tossAt)));
 
   return res.status(200).json({
     ok: true, from, to,
     tossCount: tx.rows.length, tossOrders: Object.keys(toss).length, dbOrders: Object.keys(db).length,
+    checked, checkCut,
     groups: out,
   });
 };
