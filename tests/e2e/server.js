@@ -122,6 +122,8 @@ async function fakeToss(url, opt) {
   m = u.pathname.match(/^\/v1\/payments\/([^/]+)$/);
   if (method === 'GET' && m) {
     const p = toss.payments[decodeURIComponent(m[1])];
+    /* 시험용 — 토스 서버 오류 흉내 (대사의 "다시 묻기 실패" 확인) */
+    if (p && p.getFail) return tossJson(500, { code: 'FAILED_INTERNAL_SYSTEM_PROCESSING', message: '시험용 오류' });
     return p && p.confirmed ? tossJson(200, p) : tossJson(404, { code: 'NOT_FOUND_PAYMENT', message: '없음' });
   }
   return tossJson(404, { code: 'NOT_FOUND', message: '가짜 토스가 모르는 주소' });

@@ -174,7 +174,7 @@ module.exports = async (req, res) => {
      (GET /v1/payments/{paymentKey} — 결제 총액 totalAmount · 남은 금액 balanceAmount) 그 값으로 다시 판정합니다.
      토스가 모르는 결제(시험 데이터 등)면 거래내역 합계를 그대로 씁니다. 조회는 최대 MAX_CHECK 건. */
   const MAX_CHECK = 150;
-  let checked = 0, checkCut = false;
+  let checked = 0, checkCut = false, checkFail = 0;
   const out = { tossOnly: [], doneButNotPaid: [], canceledButActive: [], amountDiff: [], refundDiff: [] };
   for (const id of Object.keys(toss)) {
     let t = toss[id];
@@ -186,6 +186,9 @@ module.exports = async (req, res) => {
       else {
         checked++;
         const g = await tossGet({ paymentKey: t.paymentKey });
+        /* ★ (Codex T-0186) 토스가 "그런 결제 없음" 이라고 한 것만 거래 합계로 대신합니다.
+           연결 실패·토스 오류는 checkFail 로 세어, 화면이 "어긋난 것 없음" 이라고 말하지 못하게 합니다. */
+        if (!g.ok && !g.notFound) checkFail++;
         const total = g.ok ? Number(g.pay.totalAmount) : NaN;
         if (g.ok && Number.isFinite(total)) {
           const bal = Number.isFinite(Number(g.pay.balanceAmount)) ? Number(g.pay.balanceAmount)
@@ -209,7 +212,7 @@ module.exports = async (req, res) => {
   return res.status(200).json({
     ok: true, from, to,
     tossCount: tx.rows.length, tossOrders: Object.keys(toss).length, dbOrders: Object.keys(db).length,
-    checked, checkCut,
+    checked, checkCut, checkFail,
     groups: out,
   });
 };

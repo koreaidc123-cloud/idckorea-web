@@ -1133,12 +1133,16 @@ async function main() {
       /* 기간 경계 (Codex T-0185) — 40일 전 결제, 이번 기간에는 취소 줄만 있음 */
       o('KVC260101-RCXP01', { status: 'assigned', created_at: iso(now - 86400000 * 40) }),
       o('KVC260101-RCXP02', { status: 'refunded', refund_amt: 30000, refund_state: 'toss_done', created_at: iso(now - 86400000 * 40) }),
+      /* 토스에 다시 물었는데 토스가 오류 → 결과가 완전하지 않다고 알려야 함 (Codex T-0186) */
+      o('KVC260101-RCXP03', { status: 'assigned', created_at: iso(now - 86400000 * 40) }),
     ];
     /* 토스가 지금 기억하는 그 결제의 누적 상태 (GET /v1/payments/{key}) */
     srv.toss.payments['pk_KVC260101-RCXP01'] = { paymentKey: 'pk_KVC260101-RCXP01', orderId: 'KVC260101-RCXP01', confirmed: true,
       method: '카드', totalAmount: 65000, balanceAmount: 0, status: 'CANCELED' };
     srv.toss.payments['pk_KVC260101-RCXP02'] = { paymentKey: 'pk_KVC260101-RCXP02', orderId: 'KVC260101-RCXP02', confirmed: true,
       method: '카드', totalAmount: 65000, balanceAmount: 35000, status: 'PARTIAL_CANCELED' };
+    srv.toss.payments['pk_KVC260101-RCXP03'] = { paymentKey: 'pk_KVC260101-RCXP03', orderId: 'KVC260101-RCXP03', confirmed: true,
+      method: '카드', totalAmount: 65000, balanceAmount: 0, status: 'CANCELED', getFail: true };
     db().orders.push(...added);
     let k = 900000;
     const tx = (orderId, status, amount, n = 1) => {
@@ -1155,6 +1159,7 @@ async function main() {
     tx('KVC260101-RCOK01', 'DONE', 65000);
     tx('KVC260101-RCBULK', 'DONE', 1, 5001);          // 5000건 넘음 → 쪽 넘김
     tx('KVC260101-RCXP01', 'CANCELED', 65000);        // 승인은 40일 전(기간 밖) → 토스에 다시 물어 "취소인데 이용중"
+    tx('KVC260101-RCXP03', 'CANCELED', 65000);        // 다시 묻기 실패 → checkFail
     tx('KVC260101-RCXP02', 'PARTIAL_CANCELED', 20000); // 앞서 10,000 + 이번 20,000 = 30,000 → DB 와 같음 (오탐 아님)
     const snap = JSON.stringify(db().orders) + JSON.stringify(db().pcs);
     const cancels = srv.toss.cancels.length, confirms = srv.toss.confirms.length, calls0 = srv.toss.txCalls;
@@ -1169,8 +1174,11 @@ async function main() {
       eq('canceledButActive', ['KVC260101-RCCAN1', 'KVC260101-RCXP01']);
       ok(r.d.checked >= 2 && (r.d.groups.canceledButActive.find(x => x.orderId === 'KVC260101-RCXP01') || {}).verified,
         '기간 밖 결제를 토스에 다시 확인하지 않음 checked=' + r.d.checked);
+      ok(r.d.checkFail === 1, '토스 오류를 세지 않음 checkFail=' + r.d.checkFail);
       eq('amountDiff', ['KVC260101-RCAMT1']);
-      eq('refundDiff', ['KVC260101-RCREF1']);
+      /* RCXP03 은 토스에 다시 묻지 못해 거래 합계(취소 65,000 ≠ DB 환불 0)로 남음 — verified=false 로 표시 */
+      eq('refundDiff', ['KVC260101-RCREF1', 'KVC260101-RCXP03']);
+      ok((r.d.groups.refundDiff.find(x => x.orderId === 'KVC260101-RCXP03') || {}).verified === false, 'RCXP03 verified 표시');
       ok((r.d.groups.tossOnly.find(x => x.orderId === 'KVC260101-RCBULK') || {}).tossPaid === 5001, '쪽 넘김으로 받은 합계가 다름');
       /* 읽기만 — DB · 토스 아무것도 안 바뀜 */
       ok(JSON.stringify(db().orders) + JSON.stringify(db().pcs) === snap, '대조가 DB 를 바꿈');
@@ -1187,6 +1195,8 @@ async function main() {
       await ap.waitForFunction(() => /SEEDVA/.test((document.getElementById('recon-doneButNotPaid') || {}).innerText || ''), null, { timeout: 8000 })
         .catch(() => { throw new Fail('대사 화면에 결과가 안 나옴'); });
       for (const g of ['tossOnly', 'doneButNotPaid', 'canceledButActive', 'amountDiff', 'refundDiff']) ok(await ap.$('#recon-' + g), g + ' 표 없음');
+      const sum = await ap.$eval('#recon-sum', e => e.innerText);
+      ok(/다시 묻지 못했습니다/.test(sum) && !/어긋난 것 없음/.test(sum), '불완전 경고가 없음: ' + sum);
       await ap.click('#recon-amountDiff [data-reconord="KVC260101-RCAMT1"]');
       await ap.waitForSelector('#drawer.on', { timeout: 5000 });
       ok(/RCAMT1/.test(await drawerText(ap)), '줄을 눌러도 주문 상세가 안 열림');
@@ -1201,7 +1211,7 @@ async function main() {
       const keep = db().orders.filter(x => !ids.has(x.order_id));
       db().orders.length = 0; db().orders.push(...keep);
       srv.toss.transactions.length = txBefore;
-      delete srv.toss.payments['pk_KVC260101-RCXP01']; delete srv.toss.payments['pk_KVC260101-RCXP02'];
+      delete srv.toss.payments['pk_KVC260101-RCXP01']; delete srv.toss.payments['pk_KVC260101-RCXP02']; delete srv.toss.payments['pk_KVC260101-RCXP03'];
     }
   });
 

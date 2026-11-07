@@ -1370,7 +1370,8 @@ function vRecon(){
     : !d ? '<div class="card"><div class="empty2">기간을 고르고 [대조] 를 눌러 주세요 (한 번에 31일까지)</div></div>'
     : `<div class="card" style="margin-bottom:14px;padding:14px 18px;font-size:13px" id="recon-sum">
         ${esc(d.from)} ~ ${esc(d.to)} · 토스 거래 ${w(d.tossCount)}줄 (주문 ${w(d.tossOrders)}건) · 우리 주문 ${w(d.dbOrders)}건 대조
-        ${RECON_GROUPS.every(([k])=>!(d.groups[k]||[]).length)&&!d.checkCut?' · <b style="color:var(--gr)">어긋난 것 없음</b>':''}
+        ${RECON_GROUPS.every(([k])=>!(d.groups[k]||[]).length)&&!d.checkCut&&!d.checkFail?' · <b style="color:var(--gr)">어긋난 것 없음</b>':''}
+        ${d.checkFail?'<br><b style="color:var(--red)">토스에 결제 '+w(d.checkFail)+'건을 다시 묻지 못했습니다 (연결·토스 오류) — 결과가 완전하지 않습니다. 잠시 뒤 [대조] 를 다시 눌러 주세요</b>':''}
         ${d.checkCut?'<br><b style="color:var(--red)">어긋나 보이는 주문이 많아 일부는 토스에 다시 확인하지 못했습니다 — 기간을 줄여 다시 대조해 주세요</b>':''}</div>`
       + RECON_GROUPS.map(([k,title,sub])=>{
         const rows=d.groups[k]||[];

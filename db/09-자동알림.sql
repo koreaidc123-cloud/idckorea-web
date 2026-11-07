@@ -128,7 +128,8 @@ declare
   v_sent     int := 0;
   v_req      bigint;
   v_n        int;
-  v_list     text;
+  v_ids      text[];
+  v_vals     text[];
   v_down_sec int;
   v_keys     text[] := '{}';
   v_key      text;
@@ -171,46 +172,44 @@ begin
   end;
 
   -- ① 임대중 PC 가 10분 넘게 신호 없음 — 같은 끊김(같은 마지막 신호 시각)은 한 번만
-  select count(*), string_agg(p.pn, ', ' order by p.pn)
-    into v_n, v_list
+  --    ★ (Codex T-0186) 알릴 대상을 먼저 배열로 확정하고, 보낸 그 대상만 기록합니다
+  --      (보낸 뒤 다시 조회하면 그 사이 새로 끊긴 PC 가 "보냈음" 으로 잘못 남을 수 있음)
+  select array_agg(p.pn order by p.pn), array_agg(coalesce(p.last_beat::text, 'none') order by p.pn)
+    into v_ids, v_vals
     from pcs p
    where p.status = 'rent'
      and (p.last_beat is null or p.last_beat < now() - interval '10 minutes')
      and not exists (select 1 from alert_state a
                       where a.k = 'down:' || p.pn and a.v = coalesce(p.last_beat::text, 'none'));
+  v_n := coalesce(array_length(v_ids, 1), 0);
   if v_n > 0 then
-    v_req := public.kvc_tg_send('🔴 임대중 PC 신호 끊김 (10분 넘음) ' || v_n || '대' || chr(10) || v_list
+    v_req := public.kvc_tg_send('🔴 임대중 PC 신호 끊김 (10분 넘음) ' || v_n || '대' || chr(10) || array_to_string(v_ids, ', ')
                                 || chr(10) || '관리자 [오늘 할 일] 에서 확인해 주세요');
     if v_req is not null then
       v_sent := v_sent + 1;
       insert into alert_state (k, v, at, req_id)
-        select 'down:' || p.pn, coalesce(p.last_beat::text, 'none'), now(), v_req
-          from pcs p
-         where p.status = 'rent'
-           and (p.last_beat is null or p.last_beat < now() - interval '10 minutes')
-           and not exists (select 1 from alert_state a
-                            where a.k = 'down:' || p.pn and a.v = coalesce(p.last_beat::text, 'none'))
+        select 'down:' || x.pn, x.beat, now(), v_req
+          from unnest(v_ids, v_vals) as x(pn, beat)
       on conflict (k) do update set v = excluded.v, at = excluded.at, req_id = excluded.req_id;
     end if;
   end if;
 
   -- ② 결제 완료인데 PC 배정이 10분 넘게 안 된 주문 — 주문마다 한 번만 (알림에는 건수만)
-  select count(*) into v_n
+  --    (①과 같이 대상 주문번호를 먼저 확정하고 그 주문만 기록합니다)
+  select array_agg(o.order_id) into v_ids
     from orders o
    where o.status = 'paid' and o.pn is null
      and coalesce(o.paid_at, o.created_at) < now() - interval '10 minutes'
      and not exists (select 1 from alert_state a where a.k = 'paidwait:' || o.order_id);
+  v_n := coalesce(array_length(v_ids, 1), 0);
   if v_n > 0 then
     v_req := public.kvc_tg_send('💳 결제 완료 · PC 배정 대기 10분 넘음 — 새로 ' || v_n || '건'
                                 || chr(10) || '관리자 [오늘 할 일] 맨 위에서 [PC 배정] 해 주세요');
     if v_req is not null then
       v_sent := v_sent + 1;
       insert into alert_state (k, v, at, req_id)
-        select 'paidwait:' || o.order_id, 'sent', now(), v_req
-          from orders o
-         where o.status = 'paid' and o.pn is null
-           and coalesce(o.paid_at, o.created_at) < now() - interval '10 minutes'
-      on conflict (k) do nothing;
+        select 'paidwait:' || x, 'sent', now(), v_req from unnest(v_ids) as x
+      on conflict (k) do update set v = excluded.v, at = excluded.at, req_id = excluded.req_id;
     end if;
   end if;
 
