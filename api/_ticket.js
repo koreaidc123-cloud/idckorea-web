@@ -34,7 +34,7 @@ function readTicket(req) {
   try { parts = decodeURIComponent(raw.slice(9)).split('.'); } catch (e) { return null; }
   if (parts.length !== 3) return null;
   const [id, exp, sig] = parts;
-  if (Number(exp) < Date.now()) return null;
+  if (!/^\d{10,16}$/.test(String(exp)) || Number(exp) < Date.now()) return null;  // 만료값은 숫자만
   const want = crypto.createHmac('sha256', signKey()).update(`${id}.${exp}`).digest('hex');
   /* 바이트 길이로 비교합니다 — 서명 칸에 한글 같은 글자가 섞여 오면 글자 수는
      같아도 바이트 수가 달라 timingSafeEqual 이 오류(500)를 냈습니다 */

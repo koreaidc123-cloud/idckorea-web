@@ -35,7 +35,7 @@ function verify(req) {
   if (!raw) return false;
   const [exp, sig] = decodeURIComponent(raw.slice(8)).split('.');
   if (!exp || !sig) return false;
-  if (Number(exp) < Date.now()) return false;
+  if (!/^\d{10,16}$/.test(String(exp)) || Number(exp) < Date.now()) return false;  // 만료값은 숫자만
   const want = crypto.createHmac('sha256', kv.signKey()).update(exp).digest('hex');
   /* 글자 수가 같아도 한글 같은 글자가 섞이면 바이트 수가 달라 timingSafeEqual 이
      오류를 냅니다. 바이트로 바꾼 뒤 길이를 비교합니다. */
