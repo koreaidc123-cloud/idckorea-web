@@ -53,7 +53,7 @@ const json = { 'Content-Type': 'application/json' };
   }
 
   /* 2. 화면 — PC·휴대폰 */
-  const pages = ['/', '/ai', '/live', '/product?g=5', '/product?g=2', '/about', '/qa', '/login', '/mypage', '/terms', '/privacy', '/success', '/fail', '/admin'];
+  const pages = ['/', '/ai', '/hub', '/live', '/product?g=5', '/product?g=2', '/about', '/qa', '/login', '/mypage', '/terms', '/privacy', '/success', '/fail', '/admin'];
   for (const [w, hgt, t] of [[1440, 900, 'PC'], [390, 844, '휴대폰']]) {
     const c = await b.newContext({ viewport: { width: w, height: hgt } });
     for (const p of pages) {
