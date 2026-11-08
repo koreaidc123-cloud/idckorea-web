@@ -19,6 +19,8 @@ const { ready, sb } = require('./_supa');
 
 const MAX_BYTES = 2 * 1024 * 1024;   // 피드 하나 최대 크기
 const MAX_PER_FEED = 40;             // 피드 하나에서 쓰는 글 수
+const MAX_ITEM = 200 * 1024;         // 글 하나 최대 크기
+const MAX_PLAIN = 10000;             // 태그를 벗기기 전 최대 글자 수 (요약은 어차피 200자)
 const TIMEOUT_MS = 6000;             // 피드 하나 기다리는 시간 (전부 동시에 받으므로 전체도 약 6초)
 const KEEP_DAYS = 30;                // 이보다 오래된 글은 지웁니다 (고정한 글은 남김)
 const SUMMARY_MAX = 200;
@@ -45,9 +47,9 @@ function decodeEntities(s) {
 /* CDATA 를 풀고 → 엔티티를 풀고 → 태그를 벗기고 → 공백을 한 칸으로.
    엔티티를 먼저 풀어야 &lt;b&gt; 처럼 "글자로 숨긴 태그" 까지 벗겨집니다. */
 function plain(raw, max) {
-  let s = String(raw || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  let s = String(raw || '').slice(0, MAX_PLAIN).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
   s = decodeEntities(s);
-  s = s.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ').replace(/<[^>]*>/g, ' ');
+  s = s.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ').replace(/<[^<>]*>/g, ' ');
   s = decodeEntities(s);                          // &amp;nbsp; 처럼 두 번 감싼 것
   s = s.replace(/[<>]/g, ' ');                    // 남은 꺾쇠는 글자로도 두지 않습니다
   s = s.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u2028\u2029\uFEFF]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -80,13 +82,18 @@ function parseDate(s) {
 /* ── 작은 XML 읽기 ─────────────────────────────────────────── */
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /* <tag ...>값</tag> 의 값 (처음 하나) */
+/* ★ Codex T-0222: 닫는 태그가 없는 글자가 반복되면 정규식이 같은 곳을 몇 번이고 다시 훑어 느려집니다.
+   여는 태그는 [^<>]* (다음 < 에서 멈춤)로 찾고, 닫는 태그는 indexOf 로 한 번만 찾습니다. */
 function tagText(block, tag) {
-  const m = block.match(new RegExp('<' + reEsc(tag) + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + reEsc(tag) + '\\s*>', 'i'));
-  return m ? m[1] : '';
+  const m = new RegExp('<' + reEsc(tag) + '(?:\\s[^<>]*)?>', 'i').exec(block);
+  if (!m) return '';
+  const start = m.index + m[0].length;
+  const end = block.toLowerCase().indexOf('</' + tag.toLowerCase(), start);
+  return end < 0 ? '' : block.slice(start, end);
 }
 /* <tag ... attr="값"> 의 값 (처음 하나 · 조건 attrs 가 맞는 것) */
 function tagAttr(block, tag, attr, need) {
-  const re = new RegExp('<' + reEsc(tag) + '\\b([^>]*)>', 'gi');
+  const re = new RegExp('<' + reEsc(tag) + '\\b([^<>]*)>', 'gi');
   let m;
   while ((m = re.exec(block))) {
     const a = m[1];
@@ -103,11 +110,20 @@ function parseFeed(xml, kind) {
   const text = String(xml || '').slice(0, MAX_BYTES);
   const out = [];
   const seen = new Set();
-  const re = /<(item|entry)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi;
+  /* 글 묶음(<item>…</item> · <entry>…</entry>)을 앞에서부터 한 번만 훑습니다.
+     닫는 태그가 없으면 거기서 멈춥니다 (깨진 피드에서 같은 곳을 다시 훑지 않게 · Codex T-0222) */
+  const low = text.toLowerCase();
+  const open = /<(item|entry)(?=[\s>/])[^<>]*>/g;
   let m;
-  while ((m = re.exec(text)) && out.length < MAX_PER_FEED) {
-    const b = m[2];
-    const atom = m[1].toLowerCase() === 'entry';
+  while (out.length < MAX_PER_FEED && (m = open.exec(low))) {
+    const name = m[1];
+    const from = m.index + m[0].length;
+    const close = low.indexOf('</' + name, from);
+    if (close < 0) break;
+    open.lastIndex = close + name.length + 2;
+    if (close - from > MAX_ITEM) continue;          // 글 하나가 너무 크면 건너뜀
+    const b = text.slice(from, close);
+    const atom = name === 'entry';
     const title = plain(tagText(b, 'title') || tagText(b, 'media:title'), 200);
     let url = '';
     if (atom) url = tagAttr(b, 'link', 'href', { rel: 'alternate' }) || tagAttr(b, 'link', 'href');
@@ -196,7 +212,21 @@ async function fetchFeed(url) {
     if (!r.ok) throw new Error('응답 ' + r.status);
     const len = Number(r.headers.get('content-length') || 0);
     if (len > MAX_BYTES) throw new Error('피드가 너무 큽니다');
-    const text = await r.text();
+    /* ★ Codex T-0222: Content-Length 가 없는 큰 응답도 막도록, 받으면서 세다가 2MB 를 넘으면 끊습니다 */
+    let text;
+    if (r.body && typeof r.body.getReader === 'function') {
+      const reader = r.body.getReader();
+      const parts = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        got += value.length;
+        if (got > MAX_BYTES) { try { await reader.cancel(); } catch (e) {} throw new Error('피드가 너무 큽니다'); }
+        parts.push(Buffer.from(value));
+      }
+      text = Buffer.concat(parts).toString('utf8');
+    } else text = await r.text();
     if (!/<(rss|feed|rdf:RDF)\b/i.test(text.slice(0, 4000))) throw new Error('RSS 가 아닙니다');
     return text;
   } catch (e) {
@@ -278,20 +308,32 @@ async function collect(by) {
     pruned = (a || []).length + (b || []).length;
   } catch (e) { errors.push({ id: null, name: '정리', error: String((e && e.message) || e).slice(0, 120) }); }
 
+  /* ★ Codex T-0222: 예전엔 JSON 글자를 8,000자에서 잘라 저장해, 출처가 많으면 깨진 JSON 이 되어
+     "수집 기록 없음" 으로 보였습니다. 저장 전에 목록 길이·글자 수를 줄여 늘 올바른 JSON 이 되게 합니다. */
   const result = {
     at: new Date(now).toISOString(), by: String(by || '').slice(0, 40),
     sources: (sources || []).length, fetched: rows.length, saved, pruned,
-    perSource, errors,
+    errorCount: errors.length,
+    perSource: perSource.slice(0, 100).map(p => ({ id: p.id, name: String(p.name || '').slice(0, 40), count: p.count })),
+    errors: errors.slice(0, 30).map(e => ({ id: e.id, name: String(e.name || '').slice(0, 40), error: String(e.error || '').slice(0, 100) })),
   };
   try {
     await sb('settings', {
-      method: 'POST', query: '?on_conflict=k', body: [{ k: LAST_KEY, v: JSON.stringify(result).slice(0, 8000) }],
+      method: 'POST', query: '?on_conflict=k', body: [{ k: LAST_KEY, v: JSON.stringify(result) }],
       prefer: 'resolution=merge-duplicates,return=minimal',
     });
   } catch (e) {}
   return Object.assign({ ok: true }, result);
 }
 
+/* 있는 날짜인지 — 2026-02-30 처럼 다음 달로 넘어가는 날짜는 거절 (Codex T-0222) */
+function validDay(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+  if (!m) return false;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  const x = new Date(Date.UTC(y, mo - 1, d));
+  return y >= 2020 && y <= 2100 && x.getUTCFullYear() === y && x.getUTCMonth() === mo - 1 && x.getUTCDate() === d;
+}
 /* 한국 날짜 (YYYY-MM-DD) */
 const kstDay = (ms = Date.now()) => new Date(ms + 9 * 3600000).toISOString().slice(0, 10);
 
@@ -305,5 +347,5 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 
 module.exports = {
   parseFeed, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
-  kstDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
+  kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

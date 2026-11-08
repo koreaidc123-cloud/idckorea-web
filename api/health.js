@@ -168,7 +168,7 @@ module.exports = async (req, res) => {
     AI허브.상태 = 있음 === 3 ? '✅ 표 3개 모두 있음' : '⚠️ 표 ' + 있음 + '/3 — db/11-AI허브.sql 을 실행해 주세요';
     const last = 있음 === 3 ? await lastCollect() : null;
     AI허브['마지막 수집'] = last && last.at
-      ? new Date(last.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' · 저장 ' + (last.saved || 0) + '건 · 출처 오류 ' + ((last.errors || []).length) + '곳'
+      ? new Date(last.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' · 저장 ' + (last.saved || 0) + '건 · 출처 오류 ' + (last.errorCount != null ? last.errorCount : (last.errors || []).length) + '곳'
       : '아직 없음';
   } else AI허브.상태 = '❌ 데이터베이스 연결 전';
 

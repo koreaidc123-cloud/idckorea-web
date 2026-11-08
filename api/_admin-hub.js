@@ -64,7 +64,7 @@ module.exports = async (req, res) => {
     if (act === 'collect') {
       const r = await hub.collect(by);
       if (!r.ok) return res.status(r.status || 500).json({ error: r.error, missing: !!r.missing });
-      await log(`AI 허브 수집 · 저장 ${r.saved} · 오류 ${r.errors.length}`, by);
+      await log(`AI 허브 수집 · 저장 ${r.saved} · 오류 ${r.errorCount}`, by);
       return res.status(200).json(r);
     }
 
@@ -124,11 +124,18 @@ module.exports = async (req, res) => {
         return res.status(200).json({ ok: true, id });
       }
       const day = String(b.day || hub.kstDay()).trim();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day + 'T00:00:00Z'))) return res.status(400).json({ error: '날짜는 YYYY-MM-DD 모양이어야 합니다' });
+      if (!hub.validDay(day)) return res.status(400).json({ error: '날짜는 YYYY-MM-DD 모양이어야 합니다' });
       const ex = await sb('hub_briefs', { query: `?select=id&day=eq.${day}&limit=1` });
       if (ex && ex[0]) return res.status(409).json({ error: '그 날짜 브리핑이 이미 있습니다 — 목록에서 열어 고쳐 주세요', id: ex[0].id });
-      const r = await sb('hub_briefs', { method: 'POST', prefer: 'return=representation',
-        body: [{ day, title, body, status: 'draft', source: 'admin', who: by }] });
+      let r;
+      try {
+        r = await sb('hub_briefs', { method: 'POST', prefer: 'return=representation',
+          body: [{ day, title, body, status: 'draft', source: 'admin', who: by }] });
+      } catch (e) {
+        /* 그 사이 AI 본부가 같은 날짜 초안을 올린 경우 */
+        if (/23505|duplicate/.test(String(e && e.message))) return res.status(409).json({ error: '그 날짜 브리핑이 방금 생겼습니다 — 새로고침 후 목록에서 열어 고쳐 주세요' });
+        throw e;
+      }
       await log(`AI 허브 브리핑 새로 씀 (초안) · ${day}`, by);
       return res.status(200).json({ ok: true, id: r && r[0] && r[0].id });
     }

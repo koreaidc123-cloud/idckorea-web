@@ -121,7 +121,7 @@ async function collect(req, res) {
     if (by !== 'cron') {
       try {
         await sb('view_log', { method: 'POST', prefer: 'return=minimal',
-          body: [{ pn: null, act: `AI 허브 수집 · 저장 ${r.saved} · 오류 ${r.errors.length}`, who: by }] });
+          body: [{ pn: null, act: `AI 허브 수집 · 저장 ${r.saved} · 오류 ${r.errorCount}`, who: by }] });
       } catch (e) {}
     }
     return res.status(200).json(r);
@@ -138,7 +138,7 @@ async function brief(req, res) {
   if (!ready()) return res.status(503).json({ error: 'DB 미연결' });
   const b = (req.body && typeof req.body === 'object') ? req.body : {};
   const day = String(b.day || hub.kstDay()).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day + 'T00:00:00Z'))) {
+  if (!hub.validDay(day)) {
     return res.status(400).json({ error: '날짜는 YYYY-MM-DD 모양이어야 합니다' });
   }
   const title = hub.cleanLine(b.title, 120);
@@ -149,13 +149,22 @@ async function brief(req, res) {
     if (ex && ex[0] && ex[0].status === 'published') {
       return res.status(409).json({ error: '이 날짜 브리핑은 이미 게시되어 있습니다. 관리자 화면에서 [내리기] 한 뒤 다시 올려 주세요.' });
     }
+    /* ★ Codex T-0222: 읽은 뒤 바꾸기 전에 관리자가 [게시] 를 누르면, 조건(status=draft) 때문에 0줄이 바뀝니다.
+       바뀐 줄을 돌려받아 0줄이면 "그 사이 게시됨" 으로 409 를 줍니다. 처음 만들 때 겹치면(23505) 역시 409. */
+    const busy = () => res.status(409).json({ error: '그 사이 이 날짜 브리핑이 게시되었거나 다른 곳에서 만들어졌습니다. 관리자 화면을 확인한 뒤 다시 올려 주세요.' });
     if (ex && ex[0]) {
       /* 아직 초안이면 내용만 바꿉니다 — 상태는 언제나 draft */
-      await sb('hub_briefs', { method: 'PATCH', query: `?id=eq.${Number(ex[0].id)}&status=eq.draft`, prefer: 'return=minimal',
+      const done = await sb('hub_briefs', { method: 'PATCH', query: `?id=eq.${Number(ex[0].id)}&status=eq.draft&select=id`, prefer: 'return=representation',
         body: { title, body, status: 'draft', source: 'ai_hq', who: 'ai_hq', published_at: null } });
+      if (!done || !done.length) return busy();
     } else {
-      await sb('hub_briefs', { method: 'POST', prefer: 'return=minimal',
-        body: [{ day, title, body, status: 'draft', source: 'ai_hq', who: 'ai_hq' }] });
+      try {
+        await sb('hub_briefs', { method: 'POST', prefer: 'return=minimal',
+          body: [{ day, title, body, status: 'draft', source: 'ai_hq', who: 'ai_hq' }] });
+      } catch (e) {
+        if (/23505|duplicate/.test(String(e && e.message))) return busy();
+        throw e;
+      }
     }
     return res.status(200).json({ ok: true, day, status: 'draft', note: '관리자 화면에서 [게시] 를 눌러야 고객 화면에 보입니다' });
   } catch (e) {

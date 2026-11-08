@@ -2041,6 +2041,33 @@ async function main() {
     ok(hubItems().find(x => x.url === bad.url).hidden === true && hubItems().find(x => x.url === fast.url).pinned === true, '숨김/고정이 풀림');
     /* 관리자 쿠키로는 POST 만 (주소만 열어 수집 금지) · 크론 열쇠 아닌 HUB_TOKEN 으로는 안 됨 */
     ok((await hubGet('/api/hub?do=collect', { Authorization: 'Bearer ' + srv.TEST.HUB })).status === 401, 'HUB_TOKEN 으로 수집됨');
+    /* Codex T-0222 — ① 길이 머리글 없는 2MB 넘는 피드는 받다가 끊음 ② 깨진 피드(닫는 태그 없음 반복)도 빨리 끝남
+       ③ 출처가 많아 오류가 많아도 마지막 수집 기록은 올바른 JSON */
+    const hub = require('../../api/_hub');
+    const t0 = Date.now();
+    hub.parseFeed('<rss><channel>' + '<item><title>x<link>'.repeat(90000), 'rss');
+    hub.parseFeed('<feed>' + '<entry><title a="'.repeat(60000), 'youtube');
+    hub.plain('<a'.repeat(200000) + '<script'.repeat(20000));
+    ok(Date.now() - t0 < 1500, '깨진 피드 처리가 느림 ' + (Date.now() - t0) + 'ms');
+    const big = 'https://big.e2e.test/rss.xml';
+    srv.feeds.byUrl[big] = { body: '<rss><channel>' + 'a'.repeat(2.2 * 1024 * 1024) + '</channel></rss>' };
+    for (let i = 0; i < 60; i++) {
+      const u = 'https://down' + i + '.e2e.test/rss.xml';
+      srv.feeds.byUrl[u] = { status: 503, body: '' };
+      db().hub_sources.push({ id: 9200 + i, kind: 'rss', name: '아주 긴 이름의 고장난 출처 번호 ' + i + ' '.repeat(10) + 'ㅁ'.repeat(30), url_or_channel_id: u, topic: null, enabled: true, created_at: iso(Date.now()) });
+    }
+    db().hub_sources.push({ id: 9199, kind: 'rss', name: '큰 피드', url_or_channel_id: big, topic: null, enabled: true, created_at: iso(Date.now()) });
+    try {
+      const r3 = await hubGet('/api/hub?do=collect', cronH);
+      ok(r3.status === 200 && r3.d.errorCount === 62, '오류 개수 ' + (r3.d && r3.d.errorCount));
+      ok(r3.d.errors.some(e => e.name === '큰 피드' && /너무 큽니다/.test(e.error)), '큰 피드를 안 끊음 ' + JSON.stringify(r3.d.errors.find(e => e.name === '큰 피드')));
+      const lv = db().settings.find(s => s.k === 'hub_last_collect').v;
+      let parsed = null; try { parsed = JSON.parse(lv); } catch (e) {}
+      ok(parsed && parsed.errorCount === 62 && parsed.errors.length <= 30, '마지막 수집 기록이 깨짐 (' + lv.length + '자)');
+    } finally {
+      db().hub_sources = db().hub_sources.filter(s => s.id < 9100);
+      delete srv.feeds.byUrl[big];
+    }
   });
 
   await scenario('HUB2', 'AI 허브 공개 목록 — 숨긴 글 빠짐 · 고정 먼저 · 뉴스 최신순 · 유튜브 시간당 조회수순 · 초안 브리핑은 안 보임 · 5분 캐시', async () => {
@@ -2085,6 +2112,9 @@ async function main() {
     ok((await hubGet('/api/hub?do=feed')).d.brief === null, '초안이 공개 목록에 나옴');
     const bad2 = await postH('/api/hub?do=brief', { day: '2026-13-45', title: 'x', body: 'y' }, { Authorization: 'Bearer ' + srv.TEST.HUB });
     ok(bad2.status === 400, '이상한 날짜 ' + bad2.status);
+    /* 없는 날(2월 30일)도 거절 — Codex T-0222 */
+    const bad3 = await postH('/api/hub?do=brief', { day: '2026-02-30', title: 'x', body: 'y' }, { Authorization: 'Bearer ' + srv.TEST.HUB });
+    ok(bad3.status === 400 && !db().hub_briefs.some(x => /^2026-0[23]/.test(x.day)), '2월 30일 ' + bad3.status);
     /* 게시된 날은 덮어쓰지 않음 */
     b = db().hub_briefs.find(x => x.day === day);
     b.status = 'published'; b.published_at = iso(Date.now());

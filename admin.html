@@ -1463,7 +1463,7 @@ function vHub(){
         :'아직 수집한 적이 없습니다 — [지금 수집] 을 눌러 보세요'}
       <br><span class="dim">매일 자동 수집 열쇠(CRON_SECRET) ${d.cronSecret?'<b style="color:var(--gr)">등록됨</b>':'<b style="color:var(--red)">없음 — 매일 자동 수집이 거절됩니다</b>'}
       · AI 본부 브리핑 열쇠(HUB_TOKEN) ${d.hubToken?'<b style="color:var(--gr)">등록됨</b>':'<b style="color:var(--red)">없음</b>'}</span>
-      ${errs.length?`<div id="hub-errs" style="margin-top:8px;padding:10px 12px;border-radius:9px;background:var(--red-l);color:var(--red);font-weight:700">출처 오류 ${errs.length}곳<br>
+      ${errs.length?`<div id="hub-errs" style="margin-top:8px;padding:10px 12px;border-radius:9px;background:var(--red-l);color:var(--red);font-weight:700">출처 오류 ${L.errorCount!=null?L.errorCount:errs.length}곳<br>
         ${errs.map(e=>`· ${esc(e.name||'—')} — ${esc(e.error||'')}`).join('<br>')}</div>`:(L&&L.at?'<div style="margin-top:6px;color:var(--gr);font-weight:700">출처 오류 없음</div>':'')}
     </div></div>`;
   /* ② 브리핑 */
@@ -1578,7 +1578,7 @@ document.addEventListener('click',async e=>{
     HUB.busy=true; HUB.msg=''; route();
     const r=await hubPost({act:'collect'});
     HUB.busy=false;
-    HUB.msg=r.ok? `수집 끝 — 저장 ${w(r.d.saved||0)}건 · 출처 오류 ${(r.d.errors||[]).length}곳` : r.msg;
+    HUB.msg=r.ok? `수집 끝 — 저장 ${w(r.d.saved||0)}건 · 출처 오류 ${r.d.errorCount!=null?r.d.errorCount:(r.d.errors||[]).length}곳` : r.msg;
     await loadHub(); return;
   }
   const pubB=t.closest('[data-hubpub],[data-hubunpub]');

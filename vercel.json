@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/hub.js": { "maxDuration": 30 },
+    "api/admin.js": { "maxDuration": 30 }
+  },
   "crons": [
     { "path": "/api/hub?do=collect", "schedule": "0 21 * * *" }
   ]

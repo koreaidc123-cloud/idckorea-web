@@ -41,7 +41,9 @@ if (-not (Test-Path -LiteralPath $File -PathType Leaf)) { throw "파일이 없�
 $token = $env:HUB_TOKEN
 if (-not $token) {
   if (-not (Test-Path -LiteralPath $TokenFile)) { throw '열쇠가 없습니다. 먼저 -SaveToken 으로 저장하거나 환경변수 HUB_TOKEN 을 넣어 주세요.' }
-  $sec = ConvertTo-SecureString ([IO.File]::ReadAllText($TokenFile).Trim())
+  # 다른 Windows 사용자·다른 PC 에서 만든 파일이면 풀리지 않습니다 — 그때는 -SaveToken 으로 다시 저장
+  try { $sec = ConvertTo-SecureString ([IO.File]::ReadAllText($TokenFile).Trim()) }
+  catch { throw '저장된 열쇠를 풀 수 없습니다 (다른 사용자나 PC 에서 저장한 파일). -SaveToken 으로 다시 저장해 주세요.' }
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
   try { $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
