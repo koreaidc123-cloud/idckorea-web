@@ -179,7 +179,10 @@ module.exports = async (req, res) => {
       if (what === 'kakao-code') {
         /* Redirect URI 는 우리 로그인 화면 주소만 받습니다 (카카오에 등록한 주소와 같아야 함) */
         const redirectUri = String(b.redirectUri || '');
-        if (!mine || redirectUri !== mine) return res.status(400).json({ error: '로그인 주소가 올바르지 않습니다. 다시 시도해 주세요.' });
+        if (!mine || redirectUri !== mine) {
+          res.setHeader('Set-Cookie', clearOs);
+          return res.status(400).json({ error: '로그인 주소가 올바르지 않습니다. 다시 시도해 주세요.' });
+        }
         got = await kakaoFromCode(code, redirectUri);
       } else {
         got = await naverFromCode(code, state);
@@ -216,25 +219,40 @@ module.exports = async (req, res) => {
 
 /* ── 회원 찾기(없으면 만들기) + 출입증 발급 — 카카오·네이버·구글 공통 ── */
 async function finishLogin(res, who, moreCookies = []) {
-    try {
-      /* 회원 찾기 — 없으면 만듭니다 */
+    /* 실패로 끝나도 state 쿠키는 지웁니다 (Codex T-0211) */
+    const fail = (code, msg) => {
+      if (moreCookies.length) res.setHeader('Set-Cookie', moreCookies);
+      return res.status(code).json({ error: msg });
+    };
+    const findMember = async () => {
       const found = await sb('members', {
         query: `?select=id,name,phone,email&via=eq.${who.via}&social_id=eq.${encodeURIComponent(who.socialId)}&limit=1`,
       });
-      let m = found && found[0];
+      return found && found[0];
+    };
+    try {
+      /* 회원 찾기 — 없으면 만듭니다 */
+      let m = await findMember();
       if (!m) {
-        const made = await sb('members', {
-          method: 'POST', prefer: 'return=representation',
-          body: [{ via: who.via, social_id: who.socialId, name: who.name, phone: who.phone || null, email: who.email }],
-        });
-        m = made && made[0];
+        try {
+          const made = await sb('members', {
+            method: 'POST', prefer: 'return=representation',
+            body: [{ via: who.via, social_id: who.socialId, name: who.name, phone: who.phone || null, email: who.email }],
+          });
+          m = made && made[0];
+        } catch (e) {
+          /* 같은 사람이 두 창에서 동시에 처음 로그인하면 한쪽은 "이미 있음(23505)" 이 납니다.
+             그때는 먼저 만들어진 회원을 다시 찾아 그대로 로그인시킵니다 (Codex T-0211) */
+          if (!/23505|duplicate key/.test(String(e.message || e))) throw e;
+          m = await findMember();
+        }
       } else if (who.phone && who.phone !== m.phone) {
         /* 카카오에서 확인된 번호가 바뀌었으면 갱신합니다 */
         await sb('members', { method: 'PATCH', prefer: 'return=minimal',
           query: `?id=eq.${m.id}`, body: { phone: who.phone, name: who.name } });
         m.phone = who.phone;
       }
-      if (!m) return res.status(500).json({ error: '회원 등록에 실패했습니다' });
+      if (!m) return fail(500, '회원 등록에 실패했습니다');
 
       res.setHeader('Set-Cookie', [
         `kvc_cust=${encodeURIComponent(makeTicket(m.id))}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`,
@@ -245,7 +263,7 @@ async function finishLogin(res, who, moreCookies = []) {
         needPhone: !(m.phone || who.phone),
       });
     } catch (e) {
-      return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
+      return fail(500, String(e.message || e).slice(0, 200));
     }
 }
 

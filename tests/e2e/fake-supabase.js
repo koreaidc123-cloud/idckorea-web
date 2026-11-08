@@ -216,7 +216,12 @@ function applyRead(rows, q) {
 }
 
 /* ── 제약 조건 (겹침 · 외래키) ── */
+/* 시험용 한 번짜리 끼어들기 — 새 회원을 넣기 "직전" 에 다른 창이 먼저 넣은 것처럼 만들 때 씁니다 (2026-11-08) */
+const hooks = { beforeMemberInsert: null };
 function checkRow(table, row, self) {
+  if (table === 'members' && !self && hooks.beforeMemberInsert) {
+    const f = hooks.beforeMemberInsert; hooks.beforeMemberInsert = null; f(DB, row);
+  }
   const others = DB[table].filter(r => r !== self);
   const pk = PK[table];
   if (others.some(r => r[pk] === row[pk])) {
@@ -596,5 +601,6 @@ module.exports = {
     }
   },
   get v10() { return v10; },
+  hooks,
   calls,
 };

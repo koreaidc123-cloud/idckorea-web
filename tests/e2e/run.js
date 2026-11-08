@@ -1712,7 +1712,7 @@ async function main() {
   const postH = async (url, body, headers) => {
     const r = await fetch(BASE + url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(body) });
     let d = null; try { d = await r.json(); } catch (e) {}
-    return { status: r.status, d };
+    return { status: r.status, d, setCookie: (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || '']).join(' | ') };
   };
   const custCookie = async ctx => (await ctx.cookies()).find(c => c.name === 'kvc_cust');
   const codeCalls = kind => srv.apiLog.filter(a => a.url.includes('do=' + kind + '-code')).length;
@@ -1805,6 +1805,7 @@ async function main() {
     const ST = 'kk.' + '1'.repeat(32);
     r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: 'https://evil.example/login' }, { Cookie: 'kvc_os=' + ST });
     ok(r.status === 400 && /로그인 주소/.test(r.d.error) && srv.kakao.codes['K-URI'], '다른 Redirect URI ' + r.status);
+    ok(/kvc_os=;/.test(r.setCookie), 'Redirect URI 거절 때 state 쿠키를 안 지움: ' + r.setCookie);
     /* 로그인 CSRF (Codex T-0208) — 다른 사이트가 서버를 직접 부르면: state 쿠키가 없거나, Origin 이 다르면 거절 */
     const goodUri = BASE + '/login';
     r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, {});
@@ -1818,7 +1819,31 @@ async function main() {
     /* 쿠키·state·Origin 이 모두 맞으면 통과 (위 거절들이 다른 이유로 막힌 게 아님을 확인) */
     r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, { Cookie: 'kvc_os=' + ST, Origin: BASE });
     ok(r.status === 200 && r.d.ok && !srv.kakao.codes['K-URI'], '정상 요청이 거절됨 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(/kvc_os=;/.test(r.setCookie) && /kvc_cust=/.test(r.setCookie), '성공 때 쿠키 ' + r.setCookie);
     db().members.splice(db().members.findIndex(x => x.social_id === '7004'), 1);
+    /* 같은 새 회원이 두 창에서 동시에 처음 로그인 → 둘 다 성공 · 회원은 하나 (Codex T-0211) */
+    srv.kakao.codes['K-DUP1'] = { id: 7010, nickname: '동시가입', appId: '424242' };
+    srv.kakao.codes['K-DUP2'] = { id: 7010, nickname: '동시가입', appId: '424242' };
+    const S1 = 'kk.' + '4'.repeat(32), S2 = 'kk.' + '5'.repeat(32);
+    const [d1, d2] = await Promise.all([
+      postH('/api/customer?do=kakao-code', { code: 'K-DUP1', state: S1, redirectUri: goodUri }, { Cookie: 'kvc_os=' + S1 }),
+      postH('/api/customer?do=kakao-code', { code: 'K-DUP2', state: S2, redirectUri: goodUri }, { Cookie: 'kvc_os=' + S2 }),
+    ]);
+    ok(d1.status === 200 && d2.status === 200, '동시 로그인 ' + d1.status + '/' + d2.status + ' ' + JSON.stringify(d2.d));
+    ok(db().members.filter(x => x.via === 'kakao' && x.social_id === '7010').length === 1, '회원이 두 줄 생김');
+    /* 위는 타이밍에 따라 겹치지 않을 수 있어, "찾을 땐 없었는데 넣으려니 이미 있음" 을 확실히 만들어 봅니다 */
+    srv.kakao.codes['K-RACE'] = { id: 7011, nickname: '경합', appId: '424242' };
+    let raced = false;
+    srv.fakeDb.hooks.beforeMemberInsert = (D, row) => {
+      raced = true;
+      D.members.push({ id: '77777777-7777-4777-8777-777777777777', via: row.via, social_id: row.social_id, name: '먼저만든창',
+        phone: null, email: null, marketing: false, created_at: new Date().toISOString() });
+    };
+    const S3 = 'kk.' + '6'.repeat(32);
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-RACE', state: S3, redirectUri: goodUri }, { Cookie: 'kvc_os=' + S3 });
+    ok(raced && r.status === 200 && r.d.user.name === '먼저만든창', '이미 있음(23505) 뒤 다시 찾기 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(db().members.filter(x => x.social_id === '7011').length === 1, '경합 회원 두 줄');
+    srv.fakeDb.hooks.beforeMemberInsert = null;
     ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
     await ctx.close();
   });
