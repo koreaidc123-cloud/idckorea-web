@@ -1677,6 +1677,222 @@ async function main() {
     await actx.close();
   });
 
+  /* ══════════ 카카오 · 네이버 로그인 — 공식 인가 코드 방식 (2026-11-08) ══════════
+     진짜 카카오·네이버는 부르지 않습니다.
+       · 브라우저: 카카오 SDK 자리에 가짜 SDK 를 주고, 네이버 로그인 주소는 가로채서
+                   진짜처럼 /login?code=…&state=… 로 돌려보냅니다.
+       · 서버:     server.js 의 가짜 카카오·네이버가 토큰·사용자 정보를 답합니다.
+     아래 키 값은 전부 시험용 가짜입니다. */
+  const SOCIAL_ENV = { KAKAO_JS_KEY: 'e2e-fake-kakao-js-key', KAKAO_REST_KEY: 'e2e-fake-kakao-rest-key', KAKAO_APP_ID: '424242',
+    NAVER_CLIENT_ID: 'e2e-fake-naver-id', NAVER_CLIENT_SECRET: 'e2e-fake-naver-secret-0000' };
+  Object.assign(process.env, SOCIAL_ENV);
+  /* 가짜 카카오 SDK — authorize 가 받은 값을 남기고, 카카오가 하듯 redirectUri 로 code·state 를 붙여 돌려보냅니다 */
+  const FAKE_KAKAO_SDK = `window.Kakao={_k:null,init:function(k){this._k=k},isInitialized:function(){return !!this._k},
+    Auth:{authorize:function(o){sessionStorage.setItem('__e2eKakaoAuth',JSON.stringify({o:o,k:window.Kakao._k}));
+      var c=localStorage.getItem('__e2eKakaoCode')||'K-NONE';
+      location.href=o.redirectUri+'?code='+encodeURIComponent(c)+'&state='+encodeURIComponent(o.state);}}};`;
+  async function socialContext() {
+    const ctx = await newContext();
+    await ctx.route('https://t1.kakaocdn.net/**', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_KAKAO_SDK }));
+    await ctx.route('https://nid.naver.com/**', r => {
+      const u = new URL(r.request().url());
+      external.push(u.hostname + u.pathname);
+      ctx.__naverAuth = Object.fromEntries(u.searchParams);
+      const back = new URL(u.searchParams.get('redirect_uri') || (BASE + '/login'));
+      if (u.pathname === '/oauth2.0/authorize' && u.searchParams.get('response_type') === 'code' &&
+          u.searchParams.get('client_id') === SOCIAL_ENV.NAVER_CLIENT_ID) {
+        back.searchParams.set('code', ctx.__naverCode || 'N-NONE');
+        back.searchParams.set('state', u.searchParams.get('state') || '');
+      } else back.searchParams.set('error', 'invalid_request');
+      return r.fulfill({ status: 302, headers: { Location: back.toString() } });
+    });
+    return ctx;
+  }
+  const custCookie = async ctx => (await ctx.cookies()).find(c => c.name === 'kvc_cust');
+  const codeCalls = kind => srv.apiLog.filter(a => a.url.includes('do=' + kind + '-code')).length;
+  const errBox = p => p.waitForSelector('#oerr:not([hidden])', { timeout: 8000 }).then(() => p.$eval('#oerr', e => e.textContent));
+
+  await scenario('K1', '카카오 신규 가입 — 버튼 → 카카오 → /login?code → 주소에서 code 지움 → 연락처 → 약관 → 내 가상컴', async () => {
+    const ctx = await socialContext();
+    const p = await openPage(ctx, '/login');
+    ok(await p.isVisible('[data-go="kakao"]'), '카카오 버튼이 안 보임');
+    ok(await p.isVisible('[data-go="naver"]'), '네이버 버튼이 안 보임');
+    srv.kakao.codes['K-NEW'] = { id: 7001, nickname: '카카오신규', email: 'k7001@example.com', appId: '424242' };
+    await p.evaluate(() => localStorage.setItem('__e2eKakaoCode', 'K-NEW'));
+    await p.click('[data-go="kakao"]');
+    await p.waitForSelector('#s-google.on', { timeout: 8000 });
+    const a = await p.evaluate(() => JSON.parse(sessionStorage.getItem('__e2eKakaoAuth') || 'null'));
+    ok(a && a.k === SOCIAL_ENV.KAKAO_JS_KEY, 'Kakao.init 에 JavaScript 키가 안 감');
+    ok(a.o.redirectUri === BASE + '/login' && /^kk\.[0-9a-f]{32}$/.test(a.o.state), 'authorize 값 ' + JSON.stringify(a.o));
+    ok(!/code=|state=/.test(p.url()), '주소에 code 가 남음: ' + p.url());
+    ok(srv.kakao.calls.some(c => /access_token_info/.test(c)), '서버가 앱 확인(access_token_info)을 안 함');
+    const m = db().members.find(x => x.via === 'kakao' && x.social_id === '7001');
+    ok(m && m.name === '카카오신규' && !m.phone, '신규 회원 ' + JSON.stringify(m));
+    ok(await custCookie(ctx), '출입증 쿠키 없음');
+    await p.fill('#ph', '010-7777-0001');
+    await p.click('#send');
+    await p.waitForFunction(() => document.getElementById('cmsg').classList.contains('ok'));
+    await p.check('#all');
+    await Promise.all([p.waitForURL(/\/mypage/), p.click('#join')]);
+    await p.waitForFunction(() => /카카오신규/.test(document.getElementById('uname').textContent), null, { timeout: 8000 });
+    ok(m.phone === '010-7777-0001', 'DB 연락처 ' + m.phone);
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+    await ctx.close();
+  });
+
+  await scenario('K2', '카카오 기존 회원 — 새 회원 안 만듦 · 번호 갱신 · 로그인 뒤 product?g=&pc= 로 그대로 돌아옴', async () => {
+    const ctx = await socialContext();
+    const n0 = db().members.length;
+    srv.kakao.codes['K-OLD'] = { id: 'k-1001', nickname: '고객A', phone: '+82 10-1111-2299', appId: '424242' };
+    const p = await openPage(ctx, '/login?next=' + encodeURIComponent('product.html?g=5&pc=Y-001'));
+    await p.evaluate(() => localStorage.setItem('__e2eKakaoCode', 'K-OLD'));
+    await Promise.all([p.waitForURL(/\/product\?/, { timeout: 8000 }), p.click('[data-go="kakao"]')]);
+    const u = new URL(p.url());
+    ok(u.searchParams.get('g') === '5' && u.searchParams.get('pc') === 'Y-001', '돌아온 주소 ' + p.url());
+    ok(db().members.length === n0, '회원이 새로 생김');
+    const m = db().members.find(x => x.social_id === 'k-1001');
+    ok(m.phone === '010-1111-2299', '카카오 번호(+82 10-…)가 010-… 으로 갱신 안 됨: ' + m.phone);
+    ok(await custCookie(ctx), '출입증 쿠키 없음');
+    const me = await apiIn(p, '/api/customer?do=me');
+    ok(me.status === 200 && me.d.user.name === '고객A', '내 정보 ' + me.status);
+    m.phone = '010-1111-2222';         // 뒤 시험을 위해 원래대로
+    await ctx.close();
+  });
+
+  await scenario('K3', '카카오 — state 가 다르거나 없으면 서버로 보내지 않음 · 쿠키 없음', async () => {
+    const ctx = await socialContext();
+    const p = await openPage(ctx, '/login');
+    srv.kakao.codes['K-STATE'] = { id: 7003, nickname: '남의링크', appId: '424242' };
+    const n0 = codeCalls('kakao');
+    await p.evaluate(s => sessionStorage.setItem('kvc-oauth', JSON.stringify({ state: s, next: 'mypage.html' })), 'kk.' + 'a'.repeat(32));
+    await p.goto(BASE + '/login?code=K-STATE&state=kk.' + 'b'.repeat(32));
+    let t = await errBox(p);
+    ok(/만료되었거나 올바르지 않습니다/.test(t), '안내 문구 ' + t);
+    ok(!/code=/.test(p.url()), '주소에 code 가 남음');
+    /* 저장된 state 가 아예 없는 경우 (남이 보낸 링크를 누른 경우) */
+    await p.goto(BASE + '/login?code=K-STATE&state=kk.' + 'a'.repeat(32));
+    t = await errBox(p);
+    ok(/만료되었거나 올바르지 않습니다/.test(t), '저장 없음 안내 ' + t);
+    ok(codeCalls('kakao') === n0, '서버로 code 를 보냄');
+    ok(srv.kakao.codes['K-STATE'], '코드가 쓰임');
+    ok(!(await custCookie(ctx)), '쿠키가 생김');
+    ok(!db().members.some(x => x.social_id === '7003'), '회원이 생김');
+    delete srv.kakao.codes['K-STATE'];
+    await ctx.close();
+  });
+
+  await scenario('K4', '카카오 — 다른 앱 토큰(app_id 다름) 거절 · 예전 토큰 로그인 길 막힘 · 다른 Redirect URI 거절', async () => {
+    const ctx = await socialContext();
+    srv.kakao.codes['K-OTHER'] = { id: 7002, nickname: '남의앱', appId: '999999' };
+    const p = await openPage(ctx, '/login');
+    await p.evaluate(() => localStorage.setItem('__e2eKakaoCode', 'K-OTHER'));
+    await p.click('[data-go="kakao"]');
+    const t = await errBox(p);
+    ok(/한국 가상컴용 카카오 로그인이 아닙니다/.test(t), '안내 문구 ' + t);
+    ok(!db().members.some(x => x.social_id === '7002'), '남의 앱 토큰으로 회원이 생김');
+    ok(!(await custCookie(ctx)), '쿠키가 생김');
+    /* 예전 방식 — 토큰을 바로 보내던 길은 없어졌습니다 */
+    let r = await post('/api/customer?do=login', { via: 'kakao', token: 'kat_anything' });
+    ok(r.status === 400, '예전 카카오 토큰 길 ' + r.status);
+    /* Redirect URI 조작 */
+    srv.kakao.codes['K-URI'] = { id: 7004, nickname: '조작', appId: '424242' };
+    r = await post('/api/customer?do=kakao-code', { code: 'K-URI', redirectUri: 'https://evil.example/login' });
+    ok(r.status === 400 && srv.kakao.codes['K-URI'], '다른 Redirect URI ' + r.status);
+    delete srv.kakao.codes['K-URI'];
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+    await ctx.close();
+  });
+
+  await scenario('K5', '설정 — REST 키가 없으면 카카오 꺼짐 · 버튼 숨김 · health 는 빠진 이름과 Redirect URI 만 (값 없음)', async () => {
+    delete process.env.KAKAO_REST_KEY; delete process.env.KAKAO_APP_ID;
+    try {
+      const h = await (await fetch(BASE + '/api/health')).json();
+      const e = h.환경변수;
+      ok(/꺼짐/.test(e['카카오 로그인']) && /KAKAO_REST_KEY/.test(e['카카오 로그인']) && !/KAKAO_JS_KEY/.test(e['카카오 로그인']),
+        '카카오 상태 ' + e['카카오 로그인']);
+      ok(/미등록/.test(e['카카오 앱 확인 (KAKAO_APP_ID)']), '앱 ID 경고 없음');
+      ok(e['카카오 Redirect URI (카카오에 등록할 주소)'] === BASE + '/login', 'Redirect URI ' + e['카카오 Redirect URI (카카오에 등록할 주소)']);
+      ok(e['네이버 Callback URL (네이버에 등록할 주소)'] === BASE + '/login', '네이버 Callback');
+      ok(/켜짐/.test(e['네이버 로그인']), '네이버 상태 ' + e['네이버 로그인']);
+      const all = JSON.stringify(h);
+      ok(!Object.values(SOCIAL_ENV).some(v => all.includes(v)), 'health 에 키 값이 보임');
+      const ac = await (await fetch(BASE + '/api/auth-config')).text();
+      ok(/"KAKAO_JS_KEY":""/.test(ac) && ac.includes(SOCIAL_ENV.NAVER_CLIENT_ID), 'auth-config ' + ac);
+      ok(!ac.includes(SOCIAL_ENV.NAVER_CLIENT_SECRET) && !ac.includes(SOCIAL_ENV.KAKAO_REST_KEY), 'auth-config 에 비밀 값');
+      const ctx = await socialContext();
+      const p = await openPage(ctx, '/login');
+      ok(!(await p.isVisible('[data-go="kakao"]')) && !(await p.isVisible('[data-up="kakao"]')), '카카오 버튼이 보임');
+      ok(await p.isVisible('[data-go="naver"]'), '네이버 버튼이 안 보임');
+      await ctx.close();
+      /* 네이버 Secret 이 없으면 네이버도 꺼짐 */
+      delete process.env.NAVER_CLIENT_SECRET;
+      const h2 = await (await fetch(BASE + '/api/health')).json();
+      ok(/NAVER_CLIENT_SECRET/.test(h2.환경변수['네이버 로그인']), '네이버 빠진 이름 ' + h2.환경변수['네이버 로그인']);
+      ok(/"NAVER_CLIENT_ID":""/.test(await (await fetch(BASE + '/api/auth-config')).text()), 'Secret 없는데 네이버 켜짐');
+    } finally { Object.assign(process.env, SOCIAL_ENV); }
+  });
+
+  await scenario('N1', '네이버 신규 가입 — 버튼 → 네이버 → /login?code → 휴대전화 010-… 저장 → 내 가상컴', async () => {
+    const ctx = await socialContext();
+    srv.naver.codes['N-NEW'] = { id: 'nv-abc123', name: '네이버신규', nickname: 'nvnick', email: 'n1@example.com',
+      mobile: '010-8888-0001', mobile_e164: '+821088880001' };
+    ctx.__naverCode = 'N-NEW';
+    const p = await openPage(ctx, '/login');
+    await Promise.all([p.waitForURL(/\/mypage/, { timeout: 8000 }), p.click('[data-go="naver"]')]);
+    const a = ctx.__naverAuth || {};
+    ok(a.redirect_uri === BASE + '/login' && /^nv\.[0-9a-f]{32}$/.test(a.state || ''), '네이버로 보낸 값 ' + JSON.stringify(a));
+    ok(!('client_secret' in a), '브라우저가 Secret 을 보냄');
+    const m = db().members.find(x => x.via === 'naver' && x.social_id === 'nv-abc123');
+    ok(m && m.name === '네이버신규' && m.phone === '010-8888-0001' && m.email === 'n1@example.com', '신규 회원 ' + JSON.stringify(m));
+    await p.waitForFunction(() => /네이버 로그인/.test(document.getElementById('uvia').textContent), null, { timeout: 8000 });
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+    await ctx.close();
+  });
+
+  await scenario('N2', '네이버 기존 회원 — 새 회원 안 만듦 · +82 번호도 010-… · product?g=&pc= 로 돌아옴', async () => {
+    db().members.push({ id: '66666666-6666-4666-8666-666666666666', via: 'naver', social_id: 'nv-old', name: '네이버기존',
+      phone: null, email: null, marketing: false, created_at: new Date().toISOString() });
+    const n0 = db().members.length;
+    const ctx = await socialContext();
+    srv.naver.codes['N-OLD'] = { id: 'nv-old', nickname: '네이버기존', mobile_e164: '+821088880002' };
+    ctx.__naverCode = 'N-OLD';
+    const p = await openPage(ctx, '/login?next=' + encodeURIComponent('product.html?g=2&pc=Y-003'));
+    await Promise.all([p.waitForURL(/\/product\?/, { timeout: 8000 }), p.click('[data-go="naver"]')]);
+    const u = new URL(p.url());
+    ok(u.searchParams.get('g') === '2' && u.searchParams.get('pc') === 'Y-003', '돌아온 주소 ' + p.url());
+    ok(db().members.length === n0, '회원이 새로 생김');
+    ok(db().members.find(x => x.social_id === 'nv-old').phone === '010-8888-0002', '번호 정리 안 됨');
+    ok(await custCookie(ctx), '출입증 쿠키 없음');
+    await ctx.close();
+  });
+
+  await scenario('N3', '네이버 — state 다르면 안 보냄 · 취소하면 안내 · 틀린 코드는 거절 · 쿠키 없음', async () => {
+    const ctx = await socialContext();
+    const p = await openPage(ctx, '/login');
+    const n0 = codeCalls('naver');
+    await p.evaluate(s => sessionStorage.setItem('kvc-oauth', JSON.stringify({ state: s, next: 'mypage.html' })), 'nv.' + 'c'.repeat(32));
+    await p.goto(BASE + '/login?code=N-X&state=nv.' + 'd'.repeat(32));
+    let t = await errBox(p);
+    ok(/만료되었거나 올바르지 않습니다/.test(t), 'state 안내 ' + t);
+    ok(codeCalls('naver') === n0, '서버로 code 를 보냄');
+    await p.goto(BASE + '/login?error=access_denied&error_description=Canceled+By+User&state=nv.' + 'e'.repeat(32));
+    t = await errBox(p);
+    ok(/네이버 로그인을 취소하셨습니다/.test(t), '취소 안내 ' + t);
+    ctx.__naverCode = 'N-NOPE';                    // 가짜 네이버가 모르는 코드
+    await p.goto(BASE + '/login');
+    await p.click('[data-go="naver"]');
+    t = await errBox(p);
+    ok(/네이버 로그인 확인에 실패/.test(t), '틀린 코드 안내 ' + t);
+    ok(codeCalls('naver') === n0 + 1, '서버 확인 횟수');
+    /* state 모양이 이상하면 서버도 거절합니다 */
+    const r = await post('/api/customer?do=naver-code', { code: 'N-NOPE', state: 'kk.1234' });
+    ok(r.status === 400, '이상한 state ' + r.status);
+    ok(!(await custCookie(ctx)), '쿠키가 생김');
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+    await ctx.close();
+  });
+  for (const k of Object.keys(SOCIAL_ENV)) delete process.env[k];   // 뒤 시험은 예전처럼 (키 없음)
+
   /* ══════════ 마무리 확인 ══════════ */
   await scenario('Z1', '시험 중 진짜 외부 서비스 호출 없음 · 서버 오류(500) 없음', async () => {
     ok(!srv.blocked.length, '서버가 바깥 주소를 부르려 함: ' + srv.blocked.join(','));

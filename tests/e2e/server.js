@@ -4,7 +4,8 @@
    ★ 진짜 서비스는 하나도 부르지 않습니다.
      · Supabase → 같은 프로세스 안의 가짜(fake-supabase.js)로 갑니다
      · 토스      → fetch 를 가로채서 가짜 토스가 답합니다
-     · 카카오·구글·알리고·그 밖의 바깥 주소 → 전부 막고 기록만 남깁니다
+     · 카카오·네이버 → fetch 를 가로채서 가짜 카카오·네이버가 답합니다 (2026-11-08)
+     · 구글·알리고·그 밖의 바깥 주소 → 전부 막고 기록만 남깁니다
    ★ 여기 적힌 열쇠·비밀번호는 전부 시험용 가짜 값입니다 (진짜 값과 무관).
 
    혼자 띄워 눈으로 보고 싶을 때:  node tests/e2e/server.js
@@ -26,7 +27,8 @@ const TEST = {
   SECRET: 'e2e-test-dummy-secret-0123456789abcdef',    // 시험용 서명 열쇠 (가짜)
   FIELD_PW: 'e2e-test-field-password-long-2026',      // 시험용 두 번째 관리자 '현장' 비밀번호 (가짜)
 };
-for (const k of ['KAKAO_JS_KEY', 'GOOGLE_CLIENT_ID', 'TOSS_CLIENT_KEY', 'ALIGO_KEY', 'ALIGO_USER_ID',
+for (const k of ['KAKAO_JS_KEY', 'KAKAO_REST_KEY', 'KAKAO_APP_ID', 'KAKAO_CLIENT_SECRET',
+  'NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_ID', 'TOSS_CLIENT_KEY', 'ALIGO_KEY', 'ALIGO_USER_ID',
   'ALIGO_SENDER', 'KVC_ADMIN_SECRET', 'KVC_ASSIGN_FRESH_SEC', 'SUPABASE_PUBLISHABLE_KEY']) delete process.env[k];
 Object.assign(process.env, {
   SUPABASE_URL: `http://127.0.0.1:${DB_PORT}`,
@@ -130,6 +132,68 @@ async function fakeToss(url, opt) {
   return tossJson(404, { code: 'NOT_FOUND', message: '가짜 토스가 모르는 주소' });
 }
 
+/* ═══ 가짜 카카오 · 가짜 네이버 (2026-11-08) ═══════════════════════
+   시험이 codes 에 "인가 코드 → 사용자" 를 넣어 두면, 서버가 그 코드로 토큰을 바꾸고
+   사용자 정보를 받아 가는 길을 진짜와 같은 모양으로 흉내 냅니다.
+     kakao.codes['K-NEW'] = { id: 7001, nickname: '…', email, phone: '+82 10-…', appId: '424242' }
+     naver.codes['N-NEW'] = { id: 'nv-…', name: '…', email, mobile: '010-…' }
+   코드는 한 번 쓰면 사라집니다 (진짜도 그렇습니다). 값은 전부 시험용 가짜입니다. */
+const kakao = { codes: {}, tokens: {}, calls: [] };
+const naver = { codes: {}, tokens: {}, calls: [] };
+const formOf = opt => Object.fromEntries(new URLSearchParams(String((opt && opt.body) || '')));
+const bearer = opt => String((opt && opt.headers && (opt.headers.Authorization || opt.headers.authorization)) || '')
+  .replace(/^Bearer /, '');
+async function fakeKakao(url, opt) {
+  const u = new URL(url);
+  const method = (opt && opt.method) || 'GET';
+  kakao.calls.push(method + ' ' + u.hostname + u.pathname);
+  if (u.hostname === 'kauth.kakao.com' && u.pathname === '/oauth/token' && method === 'POST') {
+    const f = formOf(opt);
+    if (f.grant_type !== 'authorization_code' || f.client_id !== process.env.KAKAO_REST_KEY || !f.redirect_uri) {
+      return tossJson(401, { error: 'invalid_client', error_code: 'KOE101' });
+    }
+    if ((process.env.KAKAO_CLIENT_SECRET || '') !== (f.client_secret || '')) return tossJson(401, { error: 'invalid_client', error_code: 'KOE010' });
+    const who = kakao.codes[f.code];
+    if (!who) return tossJson(400, { error: 'invalid_grant', error_code: 'KOE320' });
+    delete kakao.codes[f.code];
+    const tok = 'kat_' + Math.random().toString(36).slice(2, 14);
+    kakao.tokens[tok] = who;
+    return tossJson(200, { access_token: tok, token_type: 'bearer', expires_in: 21599 });
+  }
+  const who = kakao.tokens[bearer(opt)];
+  if (!who) return tossJson(401, { msg: 'this access token does not exist', code: -401 });
+  if (u.hostname === 'kapi.kakao.com' && u.pathname === '/v1/user/access_token_info') {
+    return tossJson(200, { id: who.id, app_id: Number(who.appId), expires_in: 21000 });
+  }
+  if (u.hostname === 'kapi.kakao.com' && u.pathname === '/v2/user/me') {
+    return tossJson(200, { id: who.id, kakao_account: { profile: { nickname: who.nickname }, email: who.email, phone_number: who.phone } });
+  }
+  return tossJson(404, { msg: '가짜 카카오가 모르는 주소' });
+}
+async function fakeNaver(url, opt) {
+  const u = new URL(url);
+  const method = (opt && opt.method) || 'GET';
+  naver.calls.push(method + ' ' + u.hostname + u.pathname);
+  if (u.hostname === 'nid.naver.com' && u.pathname === '/oauth2.0/token') {
+    const f = formOf(opt);
+    if (f.client_id !== process.env.NAVER_CLIENT_ID || f.client_secret !== process.env.NAVER_CLIENT_SECRET) {
+      return tossJson(200, { error: 'invalid_client', error_description: 'client 오류' });
+    }
+    const who = naver.codes[f.code];
+    if (f.grant_type !== 'authorization_code' || !who || !f.state) return tossJson(200, { error: 'invalid_request', error_description: 'no valid data in session' });
+    delete naver.codes[f.code];
+    const tok = 'nat_' + Math.random().toString(36).slice(2, 14);
+    naver.tokens[tok] = who;
+    return tossJson(200, { access_token: tok, refresh_token: 'nrt', token_type: 'bearer', expires_in: '3600' });
+  }
+  if (u.hostname === 'openapi.naver.com' && u.pathname === '/v1/nid/me') {
+    const who = naver.tokens[bearer(opt)];
+    if (!who) return tossJson(401, { resultcode: '024', message: 'Authentication failed' });
+    return tossJson(200, { resultcode: '00', message: 'success', response: who });
+  }
+  return tossJson(404, { message: '가짜 네이버가 모르는 주소' });
+}
+
 /* ═══ 바깥 주소 막기 ═══════════════════════════════════════════════
    api 함수들이 부르는 fetch 를 가로챕니다. 내 컴퓨터(127.0.0.1)만 그대로 보내고,
    토스는 가짜로, 나머지(카카오·구글·알리고 등)는 막고 기록합니다. */
@@ -140,6 +204,8 @@ globalThis.fetch = async (url, opt) => {
   const u = new URL(s);
   if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return realFetch(url, opt);
   if (u.hostname === 'api.tosspayments.com') return fakeToss(s, opt);
+  if (u.hostname === 'kauth.kakao.com' || u.hostname === 'kapi.kakao.com') return fakeKakao(s, opt);
+  if (u.hostname === 'nid.naver.com' || u.hostname === 'openapi.naver.com') return fakeNaver(s, opt);
   blocked.push(u.hostname + u.pathname);
   throw new Error('시험 중에는 바깥 주소를 부르지 않습니다: ' + u.hostname);
 };
@@ -253,7 +319,7 @@ async function start() {
   };
 }
 
-module.exports = { start, fakeDb, toss, blocked, apiLog, TEST, ROOT, WEB_PORT };
+module.exports = { start, fakeDb, toss, kakao, naver, blocked, apiLog, TEST, ROOT, WEB_PORT };
 
 if (require.main === module) {
   start().then(s => {
