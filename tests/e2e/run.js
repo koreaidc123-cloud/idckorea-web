@@ -1708,6 +1708,12 @@ async function main() {
     });
     return ctx;
   }
+  /* 브라우저 없이 서버를 직접 부르기 — 쿠키·Origin 머리글을 마음대로 붙여 봅니다 */
+  const postH = async (url, body, headers) => {
+    const r = await fetch(BASE + url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify(body) });
+    let d = null; try { d = await r.json(); } catch (e) {}
+    return { status: r.status, d };
+  };
   const custCookie = async ctx => (await ctx.cookies()).find(c => c.name === 'kvc_cust');
   const codeCalls = kind => srv.apiLog.filter(a => a.url.includes('do=' + kind + '-code')).length;
   const errBox = p => p.waitForSelector('#oerr:not([hidden])', { timeout: 8000 }).then(() => p.$eval('#oerr', e => e.textContent));
@@ -1781,7 +1787,7 @@ async function main() {
     await ctx.close();
   });
 
-  await scenario('K4', '카카오 — 다른 앱 토큰(app_id 다름) 거절 · 예전 토큰 로그인 길 막힘 · 다른 Redirect URI 거절', async () => {
+  await scenario('K4', '카카오 — 다른 앱 토큰(app_id 다름) 거절 · 예전 토큰 로그인 길 막힘 · 다른 Redirect URI 거절 · 다른 사이트 직접 호출(state 쿠키·Origin) 거절', async () => {
     const ctx = await socialContext();
     srv.kakao.codes['K-OTHER'] = { id: 7002, nickname: '남의앱', appId: '999999' };
     const p = await openPage(ctx, '/login');
@@ -1796,9 +1802,23 @@ async function main() {
     ok(r.status === 400, '예전 카카오 토큰 길 ' + r.status);
     /* Redirect URI 조작 */
     srv.kakao.codes['K-URI'] = { id: 7004, nickname: '조작', appId: '424242' };
-    r = await post('/api/customer?do=kakao-code', { code: 'K-URI', redirectUri: 'https://evil.example/login' });
-    ok(r.status === 400 && srv.kakao.codes['K-URI'], '다른 Redirect URI ' + r.status);
-    delete srv.kakao.codes['K-URI'];
+    const ST = 'kk.' + '1'.repeat(32);
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: 'https://evil.example/login' }, { Cookie: 'kvc_os=' + ST });
+    ok(r.status === 400 && /로그인 주소/.test(r.d.error) && srv.kakao.codes['K-URI'], '다른 Redirect URI ' + r.status);
+    /* 로그인 CSRF (Codex T-0208) — 다른 사이트가 서버를 직접 부르면: state 쿠키가 없거나, Origin 이 다르면 거절 */
+    const goodUri = BASE + '/login';
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, {});
+    ok(r.status === 400 && srv.kakao.codes['K-URI'], 'state 쿠키 없이 통과 ' + r.status);
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, { Cookie: 'kvc_os=kk.' + '2'.repeat(32) });
+    ok(r.status === 400 && srv.kakao.codes['K-URI'], '다른 state 쿠키로 통과 ' + r.status);
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, { Cookie: 'kvc_os=' + ST, Origin: 'https://evil.example' });
+    ok(r.status === 403 && srv.kakao.codes['K-URI'], '다른 사이트 Origin 통과 ' + r.status);
+    r = await postH('/api/customer?do=naver-code', { code: 'N-NOPE', state: 'nv.' + '3'.repeat(32) }, { Origin: 'https://evil.example', Cookie: 'kvc_os=nv.' + '3'.repeat(32) });
+    ok(r.status === 403, '네이버 다른 사이트 Origin ' + r.status);
+    /* 쿠키·state·Origin 이 모두 맞으면 통과 (위 거절들이 다른 이유로 막힌 게 아님을 확인) */
+    r = await postH('/api/customer?do=kakao-code', { code: 'K-URI', state: ST, redirectUri: goodUri }, { Cookie: 'kvc_os=' + ST, Origin: BASE });
+    ok(r.status === 200 && r.d.ok && !srv.kakao.codes['K-URI'], '정상 요청이 거절됨 ' + r.status + ' ' + JSON.stringify(r.d));
+    db().members.splice(db().members.findIndex(x => x.social_id === '7004'), 1);
     ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
     await ctx.close();
   });
@@ -1894,11 +1914,11 @@ async function main() {
   /* 구글 공식 버튼 (Codex T-0207) — 가짜 구글 SDK 로 renderButton 이 불리는지만 봅니다.
      로그인까지 누르면 서버가 진짜 구글(tokeninfo)에 물어야 하므로 여기서는 누르지 않습니다. */
   const FAKE_GSI = `window.__gCalls={init:0,render:[],prompt:0};
-    window.google={accounts:{id:{initialize:function(o){__gCalls.init++;__gCalls.cid=o.client_id;__gCalls.hasCb=typeof o.callback==='function'},
+    window.google={accounts:{id:{initialize:function(o){__gCalls.init++;__gCalls.cid=o.client_id;__gCalls.hasCb=typeof o.callback==='function';window.__gCb=o.callback},
       renderButton:function(el,opt){__gCalls.render.push(opt);el.innerHTML='<div class="fake-gbtn" style="height:40px;width:240px;border:1px solid #ccc">Google 계정으로 계속</div>'},
       prompt:function(){__gCalls.prompt++}}}};
     if(typeof window.onGoogleLibraryLoad==='function') window.onGoogleLibraryLoad();`;
-  await scenario('GG1', '구글 — 키가 있으면 공식 버튼을 처음부터 그림 (로그인·가입 두 칸) · 자동 창은 안 띄움 · 키 없으면 숨김', async () => {
+  await scenario('GG1', '구글 — 키가 있으면 공식 버튼을 처음부터 그림 (로그인·가입 두 칸) · 자동 창은 안 띄움 · 서버 거절·연결 실패면 멈춤 · 다른 앱 토큰 거절 · 키 없으면 숨김', async () => {
     const GID = 'e2e-fake-client.apps.googleusercontent.com';
     process.env.GOOGLE_CLIENT_ID = GID;
     try {
@@ -1914,6 +1934,31 @@ async function main() {
       await p.click('.tabs button[data-t="up"]');
       ok(await p.isVisible('.gbtn[data-gbtn="up"] .fake-gbtn'), '회원가입 칸에 공식 버튼 없음');
       ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+      /* 공식 버튼이 부르는 callback — ① 서버가 거절하면 오류만 보이고 가입 단계로 가지 않음 (Codex T-0208) */
+      const jwt = (o, sig) => 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify(o)).toString('base64url') + '.' + sig;
+      const bad = jwt({ sub: 'g-bad', name: '거절됨' }, 'bad');
+      await p.evaluate(c => window.__gCb({ credential: c }), bad);
+      let t = await errBox(p);
+      ok(/로그인 확인에 실패/.test(t), '거절 안내 ' + t);
+      ok(!(await p.isVisible('#s-google.on')) && !(await custCookie(ctx)), '서버가 거절했는데 가입 단계로 감');
+      /* ② 서버에 연결이 안 되면 역시 멈춤 (예전에는 브라우저에만 저장하는 옛 방식으로 넘어갔음) */
+      await p.route('**/api/customer?do=login', r => r.abort());
+      await p.evaluate(c => window.__gCb({ credential: c }), bad);
+      await p.waitForFunction(() => /서버에 연결하지 못했습니다/.test(document.getElementById('oerr').textContent));
+      ok(!(await p.isVisible('#s-google.on')), '연결 실패인데 가입 단계로 감');
+      await p.unroute('**/api/customer?do=login');
+      /* ③ 서버가 확인하면 → 출입증 + 연락처 단계 (구글은 번호를 안 줌) */
+      const good = jwt({ sub: 'g-new-9001', name: '구글신규', email: 'g9001@example.com' }, 'ok');
+      srv.google.idTokens[good] = { aud: GID, sub: 'g-new-9001', name: '구글신규', email: 'g9001@example.com' };
+      await p.evaluate(c => window.__gCb({ credential: c }), good);
+      await p.waitForSelector('#s-google.on', { timeout: 8000 });
+      ok(await custCookie(ctx), '출입증 쿠키 없음');
+      ok(db().members.some(x => x.via === 'google' && x.social_id === 'g-new-9001'), '구글 회원 안 생김');
+      /* ④ 다른 앱(aud 다름) 토큰은 거절 */
+      const other = jwt({ sub: 'g-other' }, 'x');
+      srv.google.idTokens[other] = { aud: 'other-app.apps.googleusercontent.com', sub: 'g-other', name: '남' };
+      const r4 = await post('/api/customer?do=login', { via: 'google', token: other });
+      ok(r4.status === 401 && !db().members.some(x => x.social_id === 'g-other'), '다른 앱 구글 토큰 ' + r4.status);
       await ctx.close();
       /* 키가 없으면 공식 버튼도, 우리 버튼도 안 보입니다 */
       delete process.env.GOOGLE_CLIENT_ID;

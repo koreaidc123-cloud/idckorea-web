@@ -156,22 +156,40 @@ module.exports = async (req, res) => {
     const b = req.body || {};
     const code = String(b.code || '').trim();
     if (!code || code.length > 512) return res.status(400).json({ error: '로그인 정보가 없습니다. 다시 시도해 주세요.' });
+    const mine = loginUrlOf(req);
+    /* ★ 다른 사이트에서 이 주소를 직접 부르는 것을 막습니다 (Codex T-0208 지적 · 로그인 CSRF).
+       ① 브라우저가 Origin 을 실어 보냈다면 우리 주소여야 하고
+       ② 로그인 화면이 떠나기 전에 심어 둔 쿠키(kvc_os)와 보내온 state 가 같아야 합니다.
+          SameSite=Lax 쿠키라서 다른 사이트의 요청에는 따라오지 않습니다. */
+    const origin = String((req.headers && req.headers.origin) || '');
+    if (origin && (!mine || origin !== new URL(mine).origin)) {
+      return res.status(403).json({ error: '허용되지 않은 요청입니다.' });
+    }
+    const state = String(b.state || '');
+    const want = what === 'kakao-code' ? 'kk' : 'nv';
+    const osCookie = ((req.headers && req.headers.cookie) || '').split(';').map(s => s.trim())
+      .filter(s => s.startsWith('kvc_os=')).map(s => s.slice(7))[0] || '';
+    if (!new RegExp('^' + want + '\\.[a-f0-9]{32}$').test(state) || osCookie !== state) {
+      return res.status(400).json({ error: '로그인 요청이 만료되었거나 올바르지 않습니다. 버튼을 다시 눌러 주세요.' });
+    }
+    /* 한 번 쓴 state 쿠키는 지웁니다 */
+    const clearOs = 'kvc_os=; Path=/; Max-Age=0; SameSite=Lax';
     let got;
     try {
       if (what === 'kakao-code') {
         /* Redirect URI 는 우리 로그인 화면 주소만 받습니다 (카카오에 등록한 주소와 같아야 함) */
         const redirectUri = String(b.redirectUri || '');
-        const mine = loginUrlOf(req);
         if (!mine || redirectUri !== mine) return res.status(400).json({ error: '로그인 주소가 올바르지 않습니다. 다시 시도해 주세요.' });
         got = await kakaoFromCode(code, redirectUri);
       } else {
-        const state = String(b.state || '');
-        if (!/^nv\.[a-f0-9]{16,64}$/.test(state)) return res.status(400).json({ error: '로그인 요청이 올바르지 않습니다. 다시 시도해 주세요.' });
         got = await naverFromCode(code, state);
       }
     } catch (e) { got = { err: 401, msg: '로그인 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.' }; }
-    if (!got || !got.who) return res.status((got && got.err) || 401).json({ error: (got && got.msg) || '로그인 확인에 실패했습니다.' });
-    return finishLogin(res, got.who);
+    if (!got || !got.who) {
+      res.setHeader('Set-Cookie', clearOs);
+      return res.status((got && got.err) || 401).json({ error: (got && got.msg) || '로그인 확인에 실패했습니다.' });
+    }
+    return finishLogin(res, got.who, [clearOs]);
   }
 
   /* ── 로그인 (구글) ──
@@ -197,7 +215,7 @@ module.exports = async (req, res) => {
 };
 
 /* ── 회원 찾기(없으면 만들기) + 출입증 발급 — 카카오·네이버·구글 공통 ── */
-async function finishLogin(res, who) {
+async function finishLogin(res, who, moreCookies = []) {
     try {
       /* 회원 찾기 — 없으면 만듭니다 */
       const found = await sb('members', {
@@ -218,8 +236,9 @@ async function finishLogin(res, who) {
       }
       if (!m) return res.status(500).json({ error: '회원 등록에 실패했습니다' });
 
-      res.setHeader('Set-Cookie',
-        `kvc_cust=${encodeURIComponent(makeTicket(m.id))}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`);
+      res.setHeader('Set-Cookie', [
+        `kvc_cust=${encodeURIComponent(makeTicket(m.id))}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`,
+      ].concat(moreCookies));
       return res.status(200).json({
         ok: true,
         user: { name: m.name || who.name, phone: m.phone || '', via: who.via, email: m.email || who.email },

@@ -5,7 +5,8 @@
      · Supabase → 같은 프로세스 안의 가짜(fake-supabase.js)로 갑니다
      · 토스      → fetch 를 가로채서 가짜 토스가 답합니다
      · 카카오·네이버 → fetch 를 가로채서 가짜 카카오·네이버가 답합니다 (2026-11-08)
-     · 구글·알리고·그 밖의 바깥 주소 → 전부 막고 기록만 남깁니다
+     · 구글 tokeninfo → 가짜 구글이 답합니다 (시험이 넣어 둔 ID 토큰만 통과)
+     · 알리고·그 밖의 바깥 주소 → 전부 막고 기록만 남깁니다
    ★ 여기 적힌 열쇠·비밀번호는 전부 시험용 가짜 값입니다 (진짜 값과 무관).
 
    혼자 띄워 눈으로 보고 싶을 때:  node tests/e2e/server.js
@@ -194,6 +195,16 @@ async function fakeNaver(url, opt) {
   return tossJson(404, { message: '가짜 네이버가 모르는 주소' });
 }
 
+/* 가짜 구글 tokeninfo — google.idTokens['G-OK'] = { sub, name, email, aud } 처럼 넣어 둡니다 */
+const google = { idTokens: {}, calls: 0 };
+async function fakeGoogle(url) {
+  const u = new URL(url);
+  google.calls++;
+  const t = google.idTokens[u.searchParams.get('id_token') || ''];
+  if (u.pathname !== '/tokeninfo' || !t) return tossJson(400, { error: 'invalid_token' });
+  return tossJson(200, Object.assign({ exp: String(Math.floor(Date.now() / 1000) + 3600) }, t));
+}
+
 /* ═══ 바깥 주소 막기 ═══════════════════════════════════════════════
    api 함수들이 부르는 fetch 를 가로챕니다. 내 컴퓨터(127.0.0.1)만 그대로 보내고,
    토스는 가짜로, 나머지(카카오·구글·알리고 등)는 막고 기록합니다. */
@@ -206,6 +217,7 @@ globalThis.fetch = async (url, opt) => {
   if (u.hostname === 'api.tosspayments.com') return fakeToss(s, opt);
   if (u.hostname === 'kauth.kakao.com' || u.hostname === 'kapi.kakao.com') return fakeKakao(s, opt);
   if (u.hostname === 'nid.naver.com' || u.hostname === 'openapi.naver.com') return fakeNaver(s, opt);
+  if (u.hostname === 'oauth2.googleapis.com') return fakeGoogle(s);
   blocked.push(u.hostname + u.pathname);
   throw new Error('시험 중에는 바깥 주소를 부르지 않습니다: ' + u.hostname);
 };
@@ -319,7 +331,7 @@ async function start() {
   };
 }
 
-module.exports = { start, fakeDb, toss, kakao, naver, blocked, apiLog, TEST, ROOT, WEB_PORT };
+module.exports = { start, fakeDb, toss, kakao, naver, google, blocked, apiLog, TEST, ROOT, WEB_PORT };
 
 if (require.main === module) {
   start().then(s => {
