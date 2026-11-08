@@ -154,6 +154,22 @@ module.exports = async (req, res) => {
     }
   }
 
+  /* DB 업데이트(db/08~10) 실행 여부 — 열·표가 있는지만 봅니다. 데이터는 읽지 않습니다 (2026-11-09) */
+  const DB업데이트 = {};
+  if (ready()) {
+    for (const [name, t, col] of [
+      ['db/08-반납초기화.sql', 'orders', 'refund_state'],
+      ['db/09-자동알림.sql', 'alert_state', '*'],
+      ['db/10-연장결제.sql', 'orders', 'kind,parent_id'],
+    ]) {
+      try { await sb(t, { query: '?select=' + col + '&limit=0' }); DB업데이트[name] = '✅ 실행됨'; }
+      catch (e) {
+        const m = String(e.message || e);
+        DB업데이트[name] = /does not exist|PGRST20[45]|42P01|42703/.test(m) ? '❌ 아직 실행 안 함' : '❌ ' + m.slice(0, 120);
+      }
+    }
+  }
+
   /* AI 허브 표 3개 · 마지막 수집 시각 (2026-11-08) — 위 6개 표와 따로 셉니다 (db/11 은 나중에 돌려도 됨) */
   const AI허브 = {};
   if (ready()) {
@@ -179,6 +195,8 @@ module.exports = async (req, res) => {
   if (!env.KVC_SETUP_KEY) 다음할일.push('KVC_SETUP_KEY 등록 (현장에서 랙PC 설치할 때 입력할 암호)');
   if (!adminCount()) 다음할일.push('KVC_ADMINS (또는 KVC_ADMIN_PW) 등록 (관리자 화면 자물쇠 — 없으면 누구나 고객 접속정보를 봅니다)');
   if (!env.KVC_SECRET) 다음할일.push('KVC_SECRET 등록 (애니데스크 비밀번호 암호화용)');
+  for (const [k, v] of Object.entries(DB업데이트)) if (v.startsWith('❌')) 다음할일.push('Supabase SQL Editor 에서 ' + k + ' 실행 (07 → 08 → 09 → 10 순서)');
+  if (AI허브.상태 && AI허브.상태.startsWith('⚠️')) 다음할일.push('Supabase SQL Editor 에서 db/11-AI허브.sql 실행');
   if (!다음할일.length) 다음할일.push('모두 정상입니다. 현장에서 중계기·에이전트를 설치하시면 됩니다.');
 
   res.status(200).json({
@@ -186,6 +204,7 @@ module.exports = async (req, res) => {
     환경변수,
     데이터베이스,
     AI허브,
+    DB업데이트,
     다음할일,
   });
 };
