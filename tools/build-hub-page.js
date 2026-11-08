@@ -14,6 +14,7 @@ const cut = (a, b) => {
 };
 const font = cut('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard', '>');
 const style = cut('<style>', '</style>');
+const navfit = cut('<style id="kvc-nav-fit">', '</style>');   // 중간 폭 메뉴 쪼개짐 방지
 const header = cut('<header class="hd">', '</div></header>')
   .replace('<a class="lg" href="#">', '<a class="lg" href="index.html">')
   .replace(/href="#(price|qa|about)"/g, 'href="index.html#$1"')
@@ -49,6 +50,7 @@ const html = [
   '<meta property="og:locale" content="ko_KR">',
   font,
   style,
+  navfit,
   '<style>', css, '</style>',
   '</head>',
   '<body>',

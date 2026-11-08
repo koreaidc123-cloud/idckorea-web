@@ -542,6 +542,11 @@ section.cta .btn-w{color:var(--red)}
 /* content-visibility 는 카운트업·스크롤 중 섹션이 접히는 문제를 일으켜 제거.
    GPU 메모리는 이미지 지연 로딩과 실해상도 축소로 충분히 해결됨. */
 </style>
+<style id="kvc-nav-fit">/* 메뉴 6개가 중간 폭(태블릿)에서 글자째 쪼개지지 않게 (2026-11-08) */
+.gnb a,.lg .tx b{white-space:nowrap}
+@media(max-width:1240px){.hd .shell{gap:22px}.gnb{gap:18px!important}.gnb a{font-size:14.5px}}
+@media(max-width:1080px){.lg .tx span{display:none}.gnb{gap:13px!important}.gnb a{font-size:13.5px}.hd .r .btn-sm{padding:0 11px}}
+</style>
 </head>
 <body>
 
@@ -605,9 +610,9 @@ section.cta .btn-w{color:var(--red)}
 <!-- ═══ AI 작업용 PC 안내 띠 (2026-11) ═══ -->
 <section class="ai-band"><div class="shell">
   <a class="ai-band-in" href="ai.html">
-    <span class="t">NEW · 시범 운영</span>
-    <b>노트북을 덮으면 AI도 멈춥니다.</b>
-    <span class="d">클로드 코드 · 코덱스를 돌릴 메모리 32GB 윈도우 원격PC</span>
+    <span class="t">NEW · 1개월 무료 AI 세팅</span>
+    <b>개인 고객을 위한 AI 데이터센터</b>
+    <span class="d">서버실의 내 PC가 AI 에이전트로 일하고, AI 허브에서 매일의 AI 소식과 작업 도구를 받아 보세요</span>
     <span class="go">AI 작업용 PC 보기 →</span>
   </a>
 </div></section>
@@ -823,6 +828,10 @@ const SLIDES=[
   h:'내 PC는 서버실에 두고,<br><span>어디서든 원격으로</span>',
   p:'24시간 켜 둘 PC를 집에 둘 필요가 없습니다.<br>전기요금·소음·발열은 서버실이 맡고, 고객님은 접속만 하세요.',
   a:['실시간 PC 보기','live.html'],b:['요금제 확인하기','#price']},
+ {k:'개인 고객을 위한 AI 데이터센터',
+  h:'나만의 AI 서버를<br><span>서버실에 한 대</span>',
+  p:'AI가 밤새 일할 PC는 서버실에, 매일의 AI 소식과 작업 도구는 AI 허브에서.<br>AI 작업용 PC는 기본 요금 그대로, 한 달간 AI 세팅 무료.',
+  a:['AI 작업용 PC 보기','ai.html'],b:['AI 허브 보기','hub.html']},
  {k:'실물 PC 한 대 · 개별 공인 IP',
   h:'나눠 쓰는 자리가 아닌<br><span>나만의 서버 PC</span>',
   p:'PC 한 대를 통째로, 고유한 공인 IP로 씁니다.<br>여러 대를 써도 계정이 서로 묶이지 않습니다.',
