@@ -9,7 +9,8 @@
 -->
 
 <meta charset="utf-8">
-<link rel="icon" href="img/logo.svg" type="image/svg+xml">
+<link rel="icon" href="img/logo-64.png" type="image/png">
+<link rel="apple-touch-icon" href="img/logo-192.png">
 <meta name="color-scheme" content="only light">
 <meta name="darkreader-lock">
 
@@ -181,6 +182,23 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 
 @media(max-width:900px){.guide{grid-template-columns:repeat(2,1fr)}.gnb{display:none}}
 @media(max-width:520px){.guide{grid-template-columns:1fr}}
+/* ══ Q&A 카드 (2026-11-08 재디자인) ══
+   사진 위에 사이트 글꼴로 번호·제목·설명을 올립니다. 그림 안에 글자를 넣지 않아 선명하고 고치기 쉽습니다. */
+.qx{position:relative;display:block;aspect-ratio:4/3;border-radius:16px;overflow:hidden;background:#070B1A;isolation:isolate;
+  color:#fff;text-decoration:none;box-shadow:0 1px 2px rgba(11,14,20,.06);transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s}
+.qx img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .7s cubic-bezier(.2,.7,.2,1)}
+.qx::after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(7,11,26,0) 35%,rgba(7,11,26,.92) 100%)}
+.qx-n{position:absolute;top:14px;left:16px;z-index:2;font-size:11.5px;font-weight:800;letter-spacing:.1em;padding:5px 10px;
+  border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px)}
+.qx-t{position:absolute;left:18px;right:58px;bottom:16px;z-index:2}
+.qx-t b{display:block;font-size:17px;font-weight:800;letter-spacing:-.03em;line-height:1.3}
+.qx-t em{display:block;font-style:normal;font-size:12.5px;color:#C3CBE0;margin-top:3px}
+.qx-a{position:absolute;right:16px;bottom:18px;z-index:2;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.95);
+  color:#0B2FE8;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:15px;transition:.3s}
+.qx:hover{transform:translateY(-4px);box-shadow:0 20px 44px rgba(11,47,232,.18),0 0 0 1px rgba(91,140,255,.6)}
+.qx:hover img{transform:scale(1.06)}
+.qx:hover .qx-a{background:#0B2FE8;color:#fff;transform:translateX(3px)}
+@media(prefers-reduced-motion:reduce){.qx,.qx img,.qx-a{transition:none}}
 </style>
 </head>
 <body>
@@ -189,7 +207,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
 
 <header class="hd"><div class="shell">
   <a class="lg" href="index.html">
-    <svg class="lgm" width="38" height="38" viewBox="0 0 100 100" aria-hidden><defs><mask id="kvc-lg1"><rect width="100" height="100" fill="#fff"/><g fill="#000"><rect y="27" width="100" height="3.4"/><rect y="43" width="100" height="3.4"/><rect y="59" width="100" height="3.4"/><rect y="75" width="100" height="3.4"/><circle cx="76" cy="36.5" r="2.3"/><circle cx="76" cy="52.5" r="2.3"/><circle cx="76" cy="68.5" r="2.3"/></g></mask></defs><g mask="url(#kvc-lg1)"><path d="M4 50A46 46 0 0 1 96 50A23 23 0 0 1 50 50A23 23 0 0 0 4 50Z" fill="#E2233C"/><path d="M4 50A46 46 0 0 0 96 50A23 23 0 0 1 50 50A23 23 0 0 0 4 50Z" fill="#0B2FE8"/></g></svg><b>한국 가상컴</b></a>
+    <img class="lgm" src="img/logo-96.png" width="38" height="38" alt="" decoding="async"><b>한국 가상컴</b></a>
   <nav class="gnb">
     <a href="about.html">회사소개</a>
     <a href="index.html#price">요금제</a>
@@ -343,8 +361,7 @@ const FAQ=[
 ];
 const $=i=>document.getElementById(i);
 $('guide').innerHTML=ARTS.map((a,i)=>
- `<a class="g" href="#q${i+1}"><div class="cap"><img src="img/${a.img}.jpg" alt="${a.t}"></div>
-   <div class="bb"><b>${a.t}</b><span>${a.s}</span></div></a>`).join('');
+ `<a class="qx" href="#q${i+1}"><img src="img/${a.img}.jpg" alt=""><span class="qx-n">${String(i+1).padStart(2,'0')}</span><span class="qx-t"><b>${a.t}</b><em>${a.s}</em></span><i class="qx-a">→</i></a>`).join('');
 $('arts').innerHTML=ARTS.map((a,i)=>
  `<div class="art ${i===0?'on':''}" id="q${i+1}">
    <button><span class="n">${i+1}</span><span class="t"><b>${a.t}</b><span>${a.s}</span></span><i>+</i></button>

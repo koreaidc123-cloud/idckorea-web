@@ -28,7 +28,7 @@ const html = [
   '<html lang="ko">',
   '<head>',
   '<meta charset="utf-8">',
-  '<link rel="icon" href="img/logo.svg" type="image/svg+xml">',
+  '<link rel="icon" href="img/logo-64.png" type="image/png">',
   '<meta name="color-scheme" content="only light">',
   '<meta name="viewport" content="width=device-width,initial-scale=1">',
   '<title>AI 작업용 원격PC · 클로드 코드 24시간 | 한국 가상컴</title>',
