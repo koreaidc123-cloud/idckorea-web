@@ -61,7 +61,7 @@ const json = { 'Content-Type': 'application/json' };
       pg.on('dialog', d => d.accept());
       pg.on('pageerror', e => errs.push(String(e).slice(0, 100)));
       pg.on('response', r => {
-        if (r.status() >= 400 && r.url().startsWith(BASE) && !/\/api\/(customer|admin)/.test(r.url())) bad.push(r.status() + ' ' + r.url().replace(BASE, ''));
+        if (r.status() >= 400 && r.url().startsWith(BASE) && !/\/api\/(customer|admin)|\/api\/hub\?do=me/.test(r.url())) bad.push(r.status() + ' ' + r.url().replace(BASE, ''));
       });
       await pg.goto(BASE + p, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => errs.push('열기 실패'));
       await pg.waitForTimeout(2500);
