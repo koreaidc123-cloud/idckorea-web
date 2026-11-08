@@ -543,7 +543,7 @@ async function startPay(){
      예전에는 product.html 만 넘겨서, 로그인하고 오면 기본 상품으로 바뀌어
      고르지 않은 상품을 결제할 수 있었습니다 (2026-11-07). */
   const NEXT='login.html?next='+encodeURIComponent('product.html'+location.search);
-  if(!U){ if(confirm('결제하시려면 로그인이 필요합니다.\n카카오·구글로 3초면 됩니다.\n\n지금 로그인하시겠습니까?')) location.href=NEXT; return; }
+  if(!U){ if(confirm('결제하시려면 로그인이 필요합니다.\n간편 로그인으로 3초면 됩니다.\n\n지금 로그인하시겠습니까?')) location.href=NEXT; return; }
   /* 연락처가 서버에 없는 회원 — 예전 가입 흐름이 번호를 브라우저에만
      저장하고 서버로 안 보내던 시절의 회원입니다. 여기서 한 번 받아
      저장합니다. 안 그러면 서버가 주문을 거부합니다("연락처 형식이…"). */
