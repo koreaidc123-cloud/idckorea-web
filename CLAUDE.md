@@ -235,7 +235,11 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 | `KVC_ADMINS` | 관리자별 비밀번호 `대표:긴비번;현장:긴비번` (2026-11-08 · 기록에 이름이 남음) |
 | `KVC_ADMIN_PW` | (예전) 관리자 비밀번호 하나 — `KVC_ADMINS` 가 없을 때만 "대표" 로 씀 |
 | `KVC_SECRET` | 관리자 쿠키 서명 + 애니데스크 비밀번호 암호화 (하나로 둘 다) |
-| `KAKAO_JS_KEY` | 카카오 JavaScript 키 (넣으면 로그인이 바로 켜집니다) |
+| `KAKAO_JS_KEY` | 카카오 JavaScript 키 — `KAKAO_REST_KEY` 와 **둘 다** 있어야 카카오 로그인이 켜집니다 (2026-11-08) |
+| `KAKAO_REST_KEY` | 카카오 REST API 키 (서버만 씀 · 인가 코드를 토큰으로 바꿀 때) |
+| `KAKAO_APP_ID` | 카카오 앱 ID 숫자 (권장 · 다른 앱 토큰 차단) |
+| `KAKAO_CLIENT_SECRET` | 카카오 Client Secret (카카오에서 켰을 때만) |
+| `NAVER_CLIENT_ID` · `NAVER_CLIENT_SECRET` | 네이버 아이디로 로그인 (Secret 은 서버만 씀) |
 | `GOOGLE_CLIENT_ID` | 구글 OAuth 클라이언트 ID |
 | `TOSS_SECRET_KEY` | 토스 시크릿 키 (심사 통과 후) |
 
@@ -260,7 +264,7 @@ db/02-heartbeat.sql 하트비트 직접 전송용 (토큰 칼럼 + beat 함수)
 - `sitemap.xml` 의 모든 `<loc>`
 - 각 페이지 `<link rel="canonical">` · `og:url` · `og:image`
 - `index.html` · `product.html` 의 구조화 데이터 안 URL
-- 카카오 개발자센터 Redirect URI · 구글 승인된 JavaScript 원본
+- 카카오 개발자센터 Redirect URI·사이트 도메인 (`<새 주소>/login`) · 네이버 서비스 URL·Callback URL · 구글 승인된 JavaScript 원본
 - 토스 웹훅 URL
 
 ---
