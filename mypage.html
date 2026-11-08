@@ -58,6 +58,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;letter
  font-size:12px;font-weight:800}
 .b-kk{background:#FEE500;color:#3C1E1E}
 .b-gg{background:#fff;border:1px solid var(--line);color:var(--ink2)}
+.b-nv{background:#03C75A;color:#fff}
 
 .sec{margin-top:26px}
 .sec-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -220,8 +221,8 @@ function paintUser(){
   $('uname').textContent=(U.name||'회원')+'님';
   $('uphone').textContent=U.phone||'';
   $('av').textContent=(U.name||'회').charAt(0);
-  $('uvia').textContent=U.via==='kakao'?'카카오 로그인':U.via==='google'?'구글 로그인':'회원';
-  $('uvia').className='badge '+(U.via==='kakao'?'b-kk':'b-gg');
+  $('uvia').textContent=U.via==='kakao'?'카카오 로그인':U.via==='naver'?'네이버 로그인':U.via==='google'?'구글 로그인':'회원';
+  $('uvia').className='badge '+(U.via==='kakao'?'b-kk':U.via==='naver'?'b-nv':'b-gg');
   render();
 }
 

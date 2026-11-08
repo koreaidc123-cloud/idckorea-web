@@ -28,11 +28,24 @@ module.exports = async (req, res) => {
     TOSS_SECRET_KEY: process.env.TOSS_SECRET_KEY || '',
     TOSS_CLIENT_KEY: process.env.TOSS_CLIENT_KEY || '',
     KAKAO_JS_KEY: process.env.KAKAO_JS_KEY || '',
+    KAKAO_REST_KEY: process.env.KAKAO_REST_KEY || '',
+    KAKAO_APP_ID: process.env.KAKAO_APP_ID || '',
+    KAKAO_CLIENT_SECRET: process.env.KAKAO_CLIENT_SECRET || '',
+    NAVER_CLIENT_ID: process.env.NAVER_CLIENT_ID || '',
+    NAVER_CLIENT_SECRET: process.env.NAVER_CLIENT_SECRET || '',
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
     ALIGO_KEY: process.env.ALIGO_KEY || '',
     ALIGO_USER_ID: process.env.ALIGO_USER_ID || '',
     ALIGO_SENDER: process.env.ALIGO_SENDER || '',
   };
+
+  /* 로그인 화면 주소 — 카카오 Redirect URI · 네이버 Callback URL 로 똑같이 등록합니다 */
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const proto = String(req.headers['x-forwarded-proto'] ||
+    (/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? 'http' : 'https')).split(',')[0].trim();
+  const loginUrl = host ? `${proto}://${host}/login` : '';
+  const kakaoMissing = ['KAKAO_JS_KEY', 'KAKAO_REST_KEY'].filter(k => !env[k]);
+  const naverMissing = ['NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET'].filter(k => !env[k]);
 
   const 환경변수 = {
     'Supabase 주소': env.SUPABASE_URL
@@ -67,9 +80,20 @@ module.exports = async (req, res) => {
          : /^test_ck_/.test(env.TOSS_CLIENT_KEY) ? '⚠️ 테스트 키 (실결제 불가)'
          : '❌ 형식이 이상합니다 — test_ck_ 또는 live_ck_ 로 시작해야 합니다')
       : '⚠️ 미등록 (코드에 든 샌드박스 키로 동작)',
-    '카카오 로그인': env.KAKAO_JS_KEY
-      ? (env.KAKAO_JS_KEY.length > 40 ? '❌ JavaScript 키가 아닌 것 같습니다' : '✅ 켜짐')
-      : '❌ 꺼짐 — KAKAO_JS_KEY 가 없어 카카오 로그인 버튼이 동작하지 않습니다',
+    /* 카카오는 JavaScript 키 + REST API 키가 둘 다 있어야 켜집니다 (2026-11-08 공식 v2 방식).
+       빠진 것의 "이름" 만 보여 주고 값은 절대 보여 주지 않습니다. */
+    '카카오 로그인': kakaoMissing.length
+      ? '❌ 꺼짐 — 빠진 환경변수: ' + kakaoMissing.join(', ')
+      : (env.KAKAO_JS_KEY.length > 40 ? '❌ KAKAO_JS_KEY 가 JavaScript 키가 아닌 것 같습니다' : '✅ 켜짐'),
+    '카카오 앱 확인 (KAKAO_APP_ID)': env.KAKAO_APP_ID
+      ? '✅ 등록됨 — 우리 앱에서 나온 로그인만 받습니다'
+      : '⚠️ 미등록 — 넣어 두시면 다른 앱의 카카오 토큰을 확실히 막습니다 (앱 키 화면의 앱 ID 숫자)',
+    '카카오 Client Secret': env.KAKAO_CLIENT_SECRET ? '✅ 등록됨' : '선택 — 카카오에서 Client Secret 을 켜셨을 때만 필요합니다',
+    '카카오 Redirect URI (카카오에 등록할 주소)': loginUrl || '확인 필요',
+    '네이버 로그인': naverMissing.length
+      ? '❌ 꺼짐 — 빠진 환경변수: ' + naverMissing.join(', ')
+      : '✅ 켜짐 (네이버 검수 전에는 네이버 개발자센터에 등록한 아이디만 로그인됩니다)',
+    '네이버 Callback URL (네이버에 등록할 주소)': loginUrl || '확인 필요',
     '구글 로그인': env.GOOGLE_CLIENT_ID
       ? (/\.apps\.googleusercontent\.com$/.test(env.GOOGLE_CLIENT_ID)
           ? '✅ 켜짐 (구글 콘솔의 [승인된 JavaScript 원본] 에 이 사이트 주소가 있어야 실제로 됩니다)'

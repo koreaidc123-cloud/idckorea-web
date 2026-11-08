@@ -12,16 +12,24 @@
    넣을 곳 : Vercel → Settings → Environment Variables
      KAKAO_JS_KEY      developers.kakao.com → 앱 키 → JavaScript 키
      GOOGLE_CLIENT_ID  console.cloud.google.com → OAuth 클라이언트 ID
+     NAVER_CLIENT_ID   developers.naver.com → 내 애플리케이션 → Client ID
      TOSS_CLIENT_KEY   토스 개발자센터 → 내 개발정보 → API 키 → 클라이언트 키
 
-   ※ 이 셋은 원래 브라우저에 공개되는 키입니다.
+   ※ 이 넷은 원래 브라우저에 공개되는 키입니다.
       공개돼도 안전한 종류이므로 여기서 내려보내도 문제 없습니다.
-      (카카오 REST API 키 · 구글 클라이언트 보안 비밀 · 토스 시크릿 키는
-       절대 여기 넣지 마세요. 시크릿 키는 서버에서만 씁니다)
+      (카카오 REST API 키 · 카카오 Client Secret · 네이버 Client Secret ·
+       구글 클라이언트 보안 비밀 · 토스 시크릿 키는 절대 여기서 내려보내지 않습니다.
+       서버(api/customer.js)에서만 씁니다)
+
+   ★ 카카오는 JavaScript 키(KAKAO_JS_KEY)와 REST API 키(KAKAO_REST_KEY)가
+     둘 다 있어야 켜집니다. 공식 방식은 서버가 REST API 키로 로그인을 마무리하기 때문입니다.
+     하나만 있으면 버튼을 숨깁니다 (눌러도 실패하는 버튼을 보여주지 않으려고).
+   ★ 네이버도 Client ID · Client Secret 이 둘 다 있어야 켜집니다.
    ═══════════════════════════════════════════════════════════════ */
 module.exports = async (req, res) => {
-  const kakao = process.env.KAKAO_JS_KEY || '';
+  const kakao = (process.env.KAKAO_JS_KEY && process.env.KAKAO_REST_KEY) ? process.env.KAKAO_JS_KEY : '';
   const google = process.env.GOOGLE_CLIENT_ID || '';
+  const naver = (process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET) ? process.env.NAVER_CLIENT_ID : '';
   /* 토스 클라이언트 키 — 전에는 product.html 에 테스트 키가 박혀 있었습니다.
      그러면 심사에 통과해 라이브 키를 받으셔도 제가 코드를 고쳐 올릴 때까지
      실결제가 안 열립니다. 이제 환경변수만 바꾸시면 바로 열립니다. */
@@ -50,6 +58,7 @@ module.exports = async (req, res) => {
     JSON.stringify({
       KAKAO_JS_KEY: bad.length ? '' : kakao,
       GOOGLE_CLIENT_ID: bad.length ? '' : google,
+      NAVER_CLIENT_ID: bad.length ? '' : naver,
       TOSS_CLIENT_KEY: ckBad ? '' : tossCk,
       warn: bad.length ? bad : undefined,
     }) + ';'

@@ -73,7 +73,7 @@ create table if not exists pcs_unregistered (
 -- ── 3. 회원 ───────────────────────────────────────────────────
 create table if not exists members (
   id          uuid primary key default gen_random_uuid(),
-  via         text not null,                 -- kakao / google
+  via         text not null,                 -- kakao / naver / google (제한 없음 — 네이버 추가 때 SQL 불필요)
   social_id   text not null,                 -- 카카오 회원번호 / 구글 sub
   name        text,
   phone       text,

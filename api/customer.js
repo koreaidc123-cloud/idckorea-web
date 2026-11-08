@@ -1,8 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
    고객 로그인 · 내 가상컴
 
-   POST /api/customer?do=login   { via:'kakao', token:'<접근토큰>' }
-                                 { via:'google', token:'<ID 토큰>' }
+   POST /api/customer?do=login       { via:'google', token:'<ID 토큰>' }
+   POST /api/customer?do=kakao-code  { code, redirectUri }   카카오 (공식 v2 방식)
+   POST /api/customer?do=naver-code  { code, state }         네이버 아이디로 로그인
    GET  /api/customer?do=me      내 PC · 주문
    GET  /api/customer?do=secret&pn=Y-042   내 PC 의 비밀번호
    POST /api/customer?do=logout
@@ -27,22 +28,103 @@ const DAY = 86400000;
 /* ── 출입증 ── 주문 만들기에서도 같이 쓰도록 _ticket.js 로 옮겼습니다 */
 const { DAYS, makeTicket, readTicket } = require('./_ticket');
 
-/* ── 카카오·구글에 진짜 그 사람인지 물어봅니다 ── */
-async function checkKakao(token) {
+/* ── 전화번호를 010-0000-0000 모양으로 맞춥니다 ──
+   카카오는 "+82 10-1234-5678", 네이버는 "010-1234-5678" 또는 "+821012345678" 로 줍니다.
+   휴대폰 번호가 아니면 빈 값으로 둡니다 (가입 때 직접 받습니다). */
+function normPhone(raw) {
+  let d = String(raw || '').replace(/[^\d]/g, '');
+  if (/^82/.test(d)) d = '0' + d.slice(2);
+  if (!/^01[016789]\d{7,8}$/.test(d)) return '';
+  return d.replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
+}
+
+/* 로그인 화면 주소 (<우리 주소>/login) — 카카오·네이버에 등록하는 Redirect URI 와 같아야 합니다 */
+function loginUrlOf(req) {
+  const h = req.headers || {};
+  const host = String(h['x-forwarded-host'] || h.host || '').split(',')[0].trim();
+  const proto = String(h['x-forwarded-proto'] || (/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? 'http' : 'https'))
+    .split(',')[0].trim();
+  return host ? `${proto}://${host}/login` : '';
+}
+
+/* ── 카카오: 사용자 정보 받기 ── */
+async function kakaoUser(token) {
   const r = await fetch('https://kapi.kakao.com/v2/user/me', {
     headers: { Authorization: 'Bearer ' + token },
   });
   if (!r.ok) return null;
   const d = await r.json();
+  if (!d || d.id == null) return null;
   const acc = d.kakao_account || {};
-  let phone = (acc.phone_number || '').replace('+82 ', '0').replace(/-/g, '');
-  if (phone) phone = phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
   return {
     via: 'kakao', socialId: String(d.id),
     /* 별명은 고객이 마음대로 정하므로 30자로 자릅니다 (관리자 화면이 넘치지 않게) */
     name: String((acc.profile && acc.profile.nickname) || '회원').slice(0, 30),
-    phone, email: acc.email || null,
+    phone: normPhone(acc.phone_number), email: acc.email ? String(acc.email).slice(0, 120) : null,
   };
+}
+
+/* ── 카카오: 공식 v2 방식 (인가 코드 → 토큰 → 우리 앱 확인 → 사용자 정보) ──
+   ★ 전에는 브라우저가 Kakao.Auth.login 을 불렀는데, 이 함수는 SDK 2.x 에 없습니다.
+     그래서 키를 넣어도 카카오 버튼이 동작하지 않았습니다 (2026-11-08 확인).
+   ★ 토큰이 "우리 앱" 에서 나온 것인지(app_id)도 확인합니다.
+     이걸 안 하면 다른 앱에서 받은 토큰으로 그 사람인 척 들어올 수 있습니다. */
+async function kakaoFromCode(code, redirectUri) {
+  const rest = process.env.KAKAO_REST_KEY || '';
+  if (!rest) return { err: 503, msg: '카카오 로그인이 아직 준비되지 않았습니다. 다른 방법으로 로그인해 주세요.' };
+  const form = new URLSearchParams({ grant_type: 'authorization_code', client_id: rest, redirect_uri: redirectUri, code });
+  if (process.env.KAKAO_CLIENT_SECRET) form.set('client_secret', process.env.KAKAO_CLIENT_SECRET);
+  const t = await fetch('https://kauth.kakao.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body: form.toString(),
+  });
+  const td = await t.json().catch(() => ({}));
+  if (!t.ok || !td.access_token) return { err: 401, msg: '카카오 로그인 확인에 실패했습니다. 다시 시도해 주세요.' };
+
+  /* 우리 앱 확인 — KAKAO_APP_ID 가 등록돼 있으면 반드시 같아야 합니다 */
+  const i = await fetch('https://kapi.kakao.com/v1/user/access_token_info', {
+    headers: { Authorization: 'Bearer ' + td.access_token },
+  });
+  const info = await i.json().catch(() => ({}));
+  if (!i.ok) return { err: 401, msg: '카카오 로그인 확인에 실패했습니다. 다시 시도해 주세요.' };
+  const want = process.env.KAKAO_APP_ID || '';
+  if (want && String(info.app_id) !== String(want).trim()) {
+    return { err: 401, msg: '한국 가상컴용 카카오 로그인이 아닙니다. 다시 시도해 주세요.' };
+  }
+  const who = await kakaoUser(td.access_token);
+  if (!who || (info.id != null && String(info.id) !== who.socialId)) {
+    return { err: 401, msg: '카카오 정보를 가져오지 못했습니다. 다시 시도해 주세요.' };
+  }
+  return { who };
+}
+
+/* ── 네이버 아이디로 로그인 (인가 코드 → 토큰 → 사용자 정보) ──
+   토큰은 우리 Client ID · Secret 으로만 바꿀 수 있으므로 남의 앱 토큰이 끼어들 수 없습니다. */
+async function naverFromCode(code, state) {
+  const id = process.env.NAVER_CLIENT_ID || '', sec = process.env.NAVER_CLIENT_SECRET || '';
+  if (!id || !sec) return { err: 503, msg: '네이버 로그인이 아직 준비되지 않았습니다. 다른 방법으로 로그인해 주세요.' };
+  const form = new URLSearchParams({ grant_type: 'authorization_code', client_id: id, client_secret: sec, code, state });
+  const t = await fetch('https://nid.naver.com/oauth2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+    body: form.toString(),
+  });
+  const td = await t.json().catch(() => ({}));
+  if (!t.ok || !td.access_token) return { err: 401, msg: '네이버 로그인 확인에 실패했습니다. 다시 시도해 주세요.' };
+  const r = await fetch('https://openapi.naver.com/v1/nid/me', {
+    headers: { Authorization: 'Bearer ' + td.access_token },
+  });
+  const d = await r.json().catch(() => ({}));
+  const p = d && d.response;
+  if (!r.ok || d.resultcode !== '00' || !p || !p.id) {
+    return { err: 401, msg: '네이버 정보를 가져오지 못했습니다. 다시 시도해 주세요.' };
+  }
+  return { who: {
+    via: 'naver', socialId: String(p.id),
+    name: String(p.name || p.nickname || '회원').slice(0, 30),
+    phone: normPhone(p.mobile || p.mobile_e164), email: p.email ? String(p.email).slice(0, 120) : null,
+  } };
 }
 async function checkGoogle(token) {
   const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token));
@@ -69,20 +151,53 @@ module.exports = async (req, res) => {
   if (!ready()) return res.status(503).json({ error: 'DB 미연결' });
   if (!kv.ready()) return res.status(503).json({ error: 'KVC_SECRET 이 없습니다' });
 
-  /* ── 로그인 ── */
+  /* ── 카카오 · 네이버 — 로그인 화면이 돌려받은 인가 코드를 서버가 직접 바꿉니다 ── */
+  if (what === 'kakao-code' || what === 'naver-code') {
+    const b = req.body || {};
+    const code = String(b.code || '').trim();
+    if (!code || code.length > 512) return res.status(400).json({ error: '로그인 정보가 없습니다. 다시 시도해 주세요.' });
+    let got;
+    try {
+      if (what === 'kakao-code') {
+        /* Redirect URI 는 우리 로그인 화면 주소만 받습니다 (카카오에 등록한 주소와 같아야 함) */
+        const redirectUri = String(b.redirectUri || '');
+        const mine = loginUrlOf(req);
+        if (!mine || redirectUri !== mine) return res.status(400).json({ error: '로그인 주소가 올바르지 않습니다. 다시 시도해 주세요.' });
+        got = await kakaoFromCode(code, redirectUri);
+      } else {
+        const state = String(b.state || '');
+        if (!/^nv\.[a-f0-9]{16,64}$/.test(state)) return res.status(400).json({ error: '로그인 요청이 올바르지 않습니다. 다시 시도해 주세요.' });
+        got = await naverFromCode(code, state);
+      }
+    } catch (e) { got = { err: 401, msg: '로그인 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.' }; }
+    if (!got || !got.who) return res.status((got && got.err) || 401).json({ error: (got && got.msg) || '로그인 확인에 실패했습니다.' });
+    return finishLogin(res, got.who);
+  }
+
+  /* ── 로그인 (구글) ──
+     ★ 카카오 토큰을 직접 받던 예전 길은 없앴습니다 — 그 길은 토큰이 우리 앱 것인지 확인하지 않았습니다.
+       카카오는 위의 kakao-code 로만 들어옵니다. */
   if (what === 'login') {
     const b = req.body || {};
     const via = String(b.via || '');
     const token = String(b.token || '');
     if (!token) return res.status(400).json({ error: '인증 정보가 없습니다' });
+    if (via !== 'google') return res.status(400).json({ error: '지원하지 않는 로그인 방식입니다' });
 
     let who = null;
-    try {
-      if (via === 'kakao') who = await checkKakao(token);
-      else if (via === 'google') who = await checkGoogle(token);
-    } catch (e) { who = null; }
+    try { who = await checkGoogle(token); } catch (e) { who = null; }
     if (!who) return res.status(401).json({ error: '로그인 확인에 실패했습니다. 다시 시도해 주세요.' });
+    return finishLogin(res, who);
+  }
 
+  /* ── 여기서부터는 출입증이 있어야 합니다 ── */
+  const memberId = readTicket(req);
+  if (!memberId) return res.status(401).json({ error: '로그인이 필요합니다' });
+  return afterLogin(req, res, what, memberId);
+};
+
+/* ── 회원 찾기(없으면 만들기) + 출입증 발급 — 카카오·네이버·구글 공통 ── */
+async function finishLogin(res, who) {
     try {
       /* 회원 찾기 — 없으면 만듭니다 */
       const found = await sb('members', {
@@ -113,12 +228,10 @@ module.exports = async (req, res) => {
     } catch (e) {
       return res.status(500).json({ error: String(e.message || e).slice(0, 200) });
     }
-  }
+}
 
-  /* ── 여기서부터는 출입증이 있어야 합니다 ── */
-  const memberId = readTicket(req);
-  if (!memberId) return res.status(401).json({ error: '로그인이 필요합니다' });
-
+/* ── 출입증이 확인된 뒤의 요청들 ── */
+async function afterLogin(req, res, what, memberId) {
   /* ── 내 PC · 주문 ── */
   if (what === 'me') {
     try {
