@@ -685,6 +685,19 @@ section.cta .btn-w{color:var(--red)}
 @media (max-width:900px){.cc-cards{grid-template-columns:1fr}#ccSvg{height:240px}.cc-range input{width:160px}}
 @media (prefers-reduced-motion:reduce){#ccSvg .cp{animation:none}}
 
+/* 비용 카드 제품 사진 (2026-11-09) — 누끼 사진을 카드 위로 띄웁니다 */
+.cc-cards{margin-top:84px;row-gap:84px}
+.cc-card{position:relative;padding-top:118px;text-align:center}
+.cc-img{position:absolute;left:50%;top:-70px;width:auto;height:170px;max-width:78%;object-fit:contain;transform:translateX(-50%);
+  filter:drop-shadow(0 22px 26px rgba(0,0,0,.45));animation:ccFloat 5s ease-in-out infinite}
+.cc-card.on .cc-img{height:190px;top:-86px;filter:drop-shadow(0 0 30px rgba(91,140,255,.45)) drop-shadow(0 22px 26px rgba(0,0,0,.5));animation-delay:-1.6s}
+.cc-card.pw .cc-img{height:150px;top:-60px;filter:drop-shadow(0 18px 22px rgba(11,14,20,.25));animation-delay:-3.2s}
+.cc-card .cc-seg{justify-content:center}
+@keyframes ccFloat{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-8px)}}
+@media (prefers-reduced-motion:reduce){.cc-img{animation:none}}
+@media (max-width:900px){.cc-cards{row-gap:96px}.cc-img{height:140px;top:-62px}.cc-card.on .cc-img{height:156px;top:-72px}}
+.cc-leg{flex-wrap:wrap;gap:8px 18px}.cc-leg span{white-space:nowrap}
+
 </style>
 </head>
 <body>
@@ -830,16 +843,19 @@ section.cta .btn-w{color:var(--red)}
     <!-- 숫자 카드 -->
     <div class="cc-cards">
       <div class="cc-card">
+        <img class="cc-img" src="img/cc-minipc.png" alt="" loading="lazy">
         <span class="t">맥미니 M6 구매 + 전기요금</span>
         <b class="n"><i data-count id="ccBuyN">0</i>원</b>
         <span class="s">기계값 1,499,000원 + 전기(평균 20W 가정)</span>
       </div>
       <div class="cc-card on">
-        <span class="t">한국 가상컴 3700X 32GB</span>
+        <img class="cc-img" src="img/cc-serverpc.png" alt="" loading="lazy">
+        <span class="t">한국 가상컴 3700X 32GB · 서버실에서</span>
         <b class="n"><i data-count id="ccRentN">0</i>원</b>
         <span class="s">30일 65,000원 · 전기요금 0원(포함)</span>
       </div>
       <div class="cc-card pw">
+        <img class="cc-img" src="img/cc-power.png" alt="" loading="lazy">
         <span class="t">집에서 24시간 켜 두면 매달 전기요금</span>
         <div class="cc-seg xs" role="group" aria-label="PC 종류">
           <button type="button" data-w="20">맥미니</button><button type="button" class="on" data-w="100">일반 데스크톱</button><button type="button" data-w="300">고사양 PC</button>
