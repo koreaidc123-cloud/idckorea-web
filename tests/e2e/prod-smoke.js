@@ -99,13 +99,15 @@ const json = { 'Content-Type': 'application/json' };
     await pay.click(); await pg.waitForTimeout(3000);
     ok('로그인 안 한 결제 → 로그인 화면(상품·PC 유지)', /login/.test(pg.url()) && /g%3D|g=/.test(pg.url()), decodeURIComponent(pg.url().replace(BASE, '')));
   } else ok('결제 버튼', false, '없음');
-  await pg.goto(BASE + '/login', { waitUntil: 'networkidle' }); await pg.waitForTimeout(1500);
+  await pg.goto(BASE + '/login', { waitUntil: 'networkidle' }); await pg.waitForTimeout(3500);
   const vis = await pg.evaluate(() => ({
     kk: [...document.querySelectorAll('.so-kk')].some(e => e.offsetParent),
-    gg: [...document.querySelectorAll('[data-go="google"]')].some(e => e.offsetParent),
+    gg: [...document.querySelectorAll('[data-go="google"], iframe[src*="accounts.google.com"], [id*="gbtn"], .g-btn')].some(e => e.offsetParent),
+    nv: [...document.querySelectorAll('.so-nv,[data-go="naver"]')].some(e => e.offsetParent),
   }));
   ok('로그인 화면: 구글 버튼 보임', vis.gg === gOn);
   ok('로그인 화면: 카카오 버튼은 키가 있을 때만', vis.kk === kOn);
+  ok('로그인 화면: 네이버 버튼은 키가 있을 때만', vis.nv === /NAVER_CLIENT_ID"\s*:\s*"[^"]+/.test(ac.t));
   await pg.goto(BASE + '/mypage', { waitUntil: 'domcontentloaded' }); await pg.waitForTimeout(2500);
   ok('로그인 안 한 내 가상컴 → 로그인 안내', /로그인/.test(await pg.evaluate(() => document.body.innerText)));
   await b.close();
