@@ -544,6 +544,9 @@ async function main() {
 
   await scenario('A5', '관리자 — 원격 재부팅 요청 · 취소', async () => {
     await ensureAdmin();
+    /* 전체 시험이 길어지면 Y-002 의 마지막 신호가 오래돼 '다운'으로 바뀌어 명령이 지워질 수 있습니다.
+       시험 시작 때 신호를 지금 시각으로 맞춰, 앞 시험의 시간 경과와 무관하게 만듭니다. */
+    Object.assign(pcOf('Y-002'), { last_beat: new Date().toISOString(), online: true, cmd: null });
     ap.answers.push(true);            // 재부팅 확인
     await ap.evaluate(() => openPc('Y-002'));
     await ap.click('[data-reboot="Y-002"]');
