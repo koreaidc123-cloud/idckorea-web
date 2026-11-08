@@ -152,6 +152,7 @@ async function createExtension(req, res, b) {
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!require('./_pay').payOpen()) return res.status(503).json({ error: require('./_pay').PAY_CLOSED_MSG, closed: true });
 
   const b = req.body || {};
   /* 연장 결제 — 새 주문과 길을 완전히 나눕니다 (새 주문 흐름은 한 줄도 바뀌지 않게) */

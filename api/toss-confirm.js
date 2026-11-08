@@ -13,7 +13,7 @@
    아래 기본값은 토스 문서에 공개된 샌드박스 키입니다 (실결제 불가).
    ═══════════════════════════════════════════════════════════════ */
 const { ready, sb } = require('./_supa');
-const { tossSecret, tossAuth, tossGet, grabPc, period, applyExtension, logExtFail } = require('./_pay');
+const { payOpen, PAY_CLOSED_MSG, tossSecret, tossAuth, tossGet, grabPc, period, applyExtension, logExtFail } = require('./_pay');
 
 const LIVE_KEY = () => /^live_sk_/.test(tossSecret());
 
@@ -63,6 +63,8 @@ module.exports = async (req, res) => {
     return res.status(400).json({ error: 'paymentKey / orderId / amount 가 필요합니다' });
   }
   const paid = Number(amount);
+  /* 실결제 키가 없으면 승인도 배정도 하지 않습니다 (위 _pay.js 설명) */
+  if (!payOpen()) return res.status(503).json({ error: PAY_CLOSED_MSG, closed: true });
 
   /* ── 1. 금액 대조 ──────────────────────────────────────────── */
   let order = null;

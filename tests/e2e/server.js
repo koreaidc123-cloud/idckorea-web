@@ -38,6 +38,7 @@ Object.assign(process.env, {
   KVC_ADMINS: '대표:' + TEST.ADMIN_PW + ';현장:' + TEST.FIELD_PW,
   KVC_SETUP_KEY: 'test-dummy-setup-key',
   TOSS_SECRET_KEY: 'test_sk_e2e_dummy_not_real',
+  KVC_TEST_PAY: '1',   // 시험 결제 열기 (운영에서는 실결제 키가 없으면 결제가 닫힙니다)
 });
 
 const fakeDb = require('./fake-supabase');

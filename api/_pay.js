@@ -13,6 +13,12 @@ const { sb } = require('./_supa');
 
 /* 토스 시크릿 키 — 환경변수에서만 읽습니다.
    없을 때 쓰는 값은 토스 문서에 공개된 샌드박스 키입니다 (실결제 불가). */
+/* ★ 2026-11-08 오픈 점검 — 실결제 키가 없으면 결제를 받지 않습니다.
+   테스트 키로도 결제가 "승인"되고 진짜 PC 가 배정되어, 돈을 내지 않고 PC 를 받아 갈 수 있었습니다.
+   대표님이 결제 시험을 할 때만 Vercel 환경변수 KVC_TEST_PAY=1 을 넣어 잠깐 엽니다(시험 뒤 꼭 지우기). */
+const payLive = () => /^live_sk_/.test(process.env.TOSS_SECRET_KEY || '');
+const payOpen = () => payLive() || process.env.KVC_TEST_PAY === '1';
+const PAY_CLOSED_MSG = '온라인 결제를 준비하고 있습니다.\n카카오톡이나 전화(010-8446-8710)로 문의해 주시면 바로 안내해 드리겠습니다.';
 const tossSecret = () => process.env.TOSS_SECRET_KEY || 'test_sk_zXLkKEypNArWmo50nX3lmeaxYG5R';
 const tossAuth = () => 'Basic ' + Buffer.from(tossSecret() + ':').toString('base64');
 
@@ -168,5 +174,5 @@ async function logExtFail(orderId, r, where) {
   } catch (e) {}
 }
 
-module.exports = { tossSecret, tossAuth, tossGet, grabPc, lockPc, releasePc, pcBusyByOther, period, freshIso,
+module.exports = { payLive, payOpen, PAY_CLOSED_MSG, tossSecret, tossAuth, tossGet, grabPc, lockPc, releasePc, pcBusyByOther, period, freshIso,
   applyExtension, logExtFail };

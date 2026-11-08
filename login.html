@@ -244,8 +244,8 @@ input{font:inherit;color:inherit;letter-spacing:inherit}
 
       <div class="agree" id="agree" hidden>
         <label class="ag all"><input type="checkbox" id="all"><span>전체 동의</span></label>
-        <label class="ag"><input type="checkbox" class="need"><span>[필수] 이용약관 <a href="#">보기</a></span></label>
-        <label class="ag"><input type="checkbox" class="need"><span>[필수] 개인정보 수집·이용 동의 <a href="#">보기</a></span></label>
+        <label class="ag"><input type="checkbox" class="need"><span>[필수] 이용약관 <a href="terms.html" target="_blank" rel="noopener">보기</a></span></label>
+        <label class="ag"><input type="checkbox" class="need"><span>[필수] 개인정보 수집·이용 동의 <a href="privacy.html" target="_blank" rel="noopener">보기</a></span></label>
         <label class="ag"><input type="checkbox" class="need"><span>[필수] 만 14세 이상입니다</span></label>
         <label class="ag"><input type="checkbox"><span>[선택] 이벤트·할인 정보 수신<em>카카오톡 · 문자</em></span></label>
       </div>
@@ -385,9 +385,23 @@ function googleLogin(){
     });
     _gInit=true;
   }
+  /* ★ 2026-11-08 — 자동 창(원탭)은 한 번 닫으면 한동안 안 뜹니다. 그때는 구글 공식 버튼을 보여 줍니다. */
   google.accounts.id.prompt(n=>{
-    if(n.isNotDisplayed&&n.isNotDisplayed()) alert('구글 로그인 창이 차단되었습니다.\n브라우저 팝업 차단을 해제해 주세요.');
+    const off=(n.isNotDisplayed&&n.isNotDisplayed())||(n.isSkippedMoment&&n.isSkippedMoment());
+    if(off) showGoogleButton();
   });
+}
+function showGoogleButton(){
+  let box=document.getElementById('gbtn');
+  if(!box){
+    box=document.createElement('div'); box.id='gbtn';
+    box.style.cssText='margin:12px 0 4px;display:flex;flex-direction:column;align-items:center;gap:8px';
+    box.innerHTML='<span style="font-size:13px;color:#6B7381">아래 구글 버튼을 눌러 로그인해 주세요</span><div id="gbtn-in"></div>';
+    const first=document.querySelector('[data-go="google"]');
+    if(first) first.insertAdjacentElement('afterend',box); else document.body.appendChild(box);
+  }
+  box.style.display='flex';
+  google.accounts.id.renderButton(document.getElementById('gbtn-in'),{theme:'outline',size:'large',text:'continue_with',locale:'ko',width:300});
 }
 /* 신규 회원 가입 단계 — 소셜 인증은 끝났고 연락처·약관만 남았다 */
 function gotoJoinStep(u){
