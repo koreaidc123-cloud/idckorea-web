@@ -1,0 +1,107 @@
+<section class="sec nv" id="ai-price">
+  <div class="shell">
+    <div class="ai-h"><span class="k">비용 계산</span>
+      <h2>사기 전에, 켜 두기 전에 계산해 보세요</h2>
+      <p>PC를 사서 집에 24시간 켜 두면 기계값에 전기요금이 매달 더해집니다.<br>한국 가상컴 요금에는 서버실 전기가 들어 있습니다.</p></div>
+
+    <!-- 조절 버튼 -->
+    <div class="cc-ctl">
+      <label class="cc-range">사용 기간 <b id="ccMonthsT">24개월</b>
+        <input type="range" id="ccMonths" min="1" max="36" value="24"></label>
+      <div class="cc-seg sm" role="group" aria-label="하루 사용 시간">
+        <button type="button" class="on" data-h="24">하루 24시간</button>
+        <button type="button" data-h="12">하루 12시간</button>
+      </div>
+    </div>
+
+    <!-- 움직이는 누적 비용 그래프 -->
+    <div class="cc-chart">
+      <svg id="ccSvg" viewBox="0 0 800 340" preserveAspectRatio="none" aria-label="누적 비용 그래프">
+        <g id="ccGrid"></g>
+        <path id="ccBuy" class="ln buy" d=""/>
+        <path id="ccRent" class="ln rent" d=""/>
+        <g id="ccCross"></g>
+      </svg>
+      <div class="cc-leg"><span class="lb">맥미니 구매 + 전기요금</span><span class="lr">한국 가상컴 (전기 포함)</span></div>
+      <div class="cc-axis" id="ccAxis"></div>
+    </div>
+
+    <!-- 숫자 카드 -->
+    <div class="cc-cards">
+      <div class="cc-card">
+        <span class="t">맥미니 M6 구매 + 전기요금</span>
+        <b class="n"><i data-count id="ccBuyN">0</i>원</b>
+        <span class="s">기계값 1,499,000원 + 전기(평균 20W 가정)</span>
+      </div>
+      <div class="cc-card on">
+        <span class="t">한국 가상컴 3700X 32GB</span>
+        <b class="n"><i data-count id="ccRentN">0</i>원</b>
+        <span class="s">30일 65,000원 · 전기요금 0원(포함)</span>
+      </div>
+      <div class="cc-card pw">
+        <span class="t">집에서 24시간 켜 두면 매달 전기요금</span>
+        <div class="cc-seg xs" role="group" aria-label="PC 종류">
+          <button type="button" data-w="20">맥미니</button><button type="button" class="on" data-w="100">일반 데스크톱</button><button type="button" data-w="300">고사양 PC</button>
+        </div>
+        <b class="n">약 <i data-count id="ccPowN">0</i>원</b>
+        <span class="s" id="ccPowS">-</span>
+      </div>
+    </div>
+    <p class="ai-src c" id="ccNote">전기요금은 한전 주택용 저압 2구간 전력량요금 214.6원/kWh(2023.11.9 시행)만으로 계산했습니다. 기본요금·기후환경요금·연료비조정요금·부가세·전력기금을 빼서 실제 청구액은 이보다 많습니다.<br>소비전력은 가정치입니다(맥미니 M6 애플 공식 대기 4W·최대 70W, 일반 데스크톱 약 100W, 고사양 PC 약 300W). 임대료는 부가세 별도입니다.</p>
+  </div>
+</section>
+<script>
+/* 비용 계산 그래프 — 2026-11-08
+   숫자 근거(가정): POW 의 소비전력, RATE 의 1kWh 요금은 tools/ai-price-section.html 머리의 표를 따릅니다. */
+(function(){
+  const RATE = 214.6;   // 한전 주택용 저압 2구간 전력량요금(원/kWh, 2023.11.9 시행표 확인). 기후환경·연료비조정·부가세·기금은 빼서 실제보다 적게 잡힘
+  const MAC = { base:1499000, w:20 };           // 맥미니 M6 기본형 공식가 · 애플 공식 대기 4W~최대 70W 사이 평균 20W 가정
+  let cardW = 100;                                 // 전기요금 카드에서 고른 PC 소비전력(W, 가정)
+  const RENT = 65000;
+  let hours=24, months=24;
+  const $=id=>document.getElementById(id);
+  const won=n=>Math.round(n).toLocaleString('ko-KR');
+  const powMonth=w=>w/1000*hours*30*RATE;
+  function series(){
+    const p=powMonth(MAC.w), buy=[], rent=[];
+    for(let m=0;m<=months;m++){ buy.push(MAC.base+p*m); rent.push(RENT*m); }
+    return {buy,rent};
+  }
+  function path(arr,max){
+    return arr.map((v,i)=>(i?'L':'M')+(40+i*(740/months)).toFixed(1)+','+(310-v/max*280).toFixed(1)).join(' ');
+  }
+  function count(el,to){
+    const from=Number(el.dataset.v||0), t0=performance.now(), dur=matchMedia('(prefers-reduced-motion:reduce)').matches?0:900;
+    el.dataset.v=to;
+    (function step(t){ const k=dur?Math.min(1,(t-t0)/dur):1, e=1-Math.pow(1-k,3);
+      el.textContent=won(from+(to-from)*e); if(k<1) requestAnimationFrame(step); })(t0);
+  }
+  function draw(){
+    const {buy,rent}=series(), max=Math.max(buy[months],rent[months])*1.08||1;
+    const g=$('ccGrid'); g.innerHTML='';
+    for(let i=0;i<=4;i++){ const y=30+i*70; g.insertAdjacentHTML('beforeend',`<line x1="40" x2="780" y1="${y}" y2="${y}" class="gl"/><text x="34" y="${y+4}" class="gt">${won(max*(4-i)/4/10000)}만</text>`); }
+    for(const [id,arr] of [['ccBuy',buy],['ccRent',rent]]){
+      const el=$(id); el.setAttribute('d',path(arr,max));
+      const L=el.getTotalLength(); el.style.transition='none'; el.style.strokeDasharray=L; el.style.strokeDashoffset=L;
+      el.getBoundingClientRect(); el.style.transition='stroke-dashoffset 1.2s cubic-bezier(.2,.7,.2,1)'; el.style.strokeDashoffset=0;
+    }
+    /* 구매가 더 싸지는(선이 뒤집히는) 달 */
+    const cx=$('ccCross'); cx.innerHTML='';
+    let at=-1; for(let m=1;m<=months;m++){ if(rent[m]>=buy[m]){ at=m; break; } }
+    if(at>0){ const x=40+at*(740/months), y=310-rent[at]/max*280;
+      cx.innerHTML=`<circle cx="${x}" cy="${y}" r="7" class="cp"/><text x="${Math.min(x,640)}" y="${Math.max(y-16,20)}" class="ct">${at}개월째부터 구매가 유리</text>`; }
+    $('ccAxis').innerHTML=[0,Math.round(months/2),months].map(m=>`<span>${m}개월</span>`).join('');
+    count($('ccBuyN'),buy[months]); count($('ccRentN'),rent[months]); card();
+  }
+  function card(){
+    count($('ccPowN'),powMonth(cardW));
+    $('ccPowS').textContent=`약 ${cardW}W × 하루 ${hours}시간 × 30일 = ${(cardW/1000*hours*30).toFixed(0)}kWh · 1kWh ${RATE}원 · 한국 가상컴은 0원`;
+  }
+  document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ cardW=+b.dataset.w; document.querySelectorAll('[data-w]').forEach(x=>x.classList.toggle('on',x===b)); card(); });
+  document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{ hours=+b.dataset.h; document.querySelectorAll('[data-h]').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
+  $('ccMonths').oninput=e=>{ months=+e.target.value; $('ccMonthsT').textContent=months+'개월'; draw(); };
+  /* 화면에 들어올 때 처음 그립니다 */
+  const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ draw(); io.disconnect(); } },{threshold:.25});
+  io.observe($('ccSvg'));
+})();
+</script>

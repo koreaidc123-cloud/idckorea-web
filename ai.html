@@ -640,6 +640,45 @@ section.cta .btn-w{color:var(--red)}
 .ai-event{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;margin:-14px 0 26px;padding:9px 14px;border-radius:10px;background:rgba(226,35,60,.14);border:1px solid rgba(255,107,126,.35);color:#FFD5DB;font-size:14.5px}
 .ai-event b{color:#fff;background:#E2233C;padding:3px 9px;border-radius:6px;font-size:13px}
 .ai-event{display:flex;width:fit-content;max-width:100%}.ai-live{display:flex;width:fit-content}.ai-live[hidden]{display:none}
+/* 비용 계산 그래프 (2026-11-08) */
+.cc-ctl{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:center;margin-bottom:26px}
+.cc-seg{display:inline-flex;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:4px;gap:4px}
+.cc-seg button{border:0;background:transparent;color:#B9C2D8;font:inherit;font-weight:700;font-size:14.5px;padding:9px 14px;border-radius:9px;cursor:pointer;transition:.2s}
+.cc-seg button.on{background:#fff;color:var(--blue)}
+.cc-seg.xs{margin:10px 0 2px;background:#F1F4FA;border-color:var(--line)}
+.cc-seg.xs button{color:var(--ink3);font-size:12.5px;padding:6px 9px}
+.cc-seg.xs button.on{background:var(--blue);color:#fff}
+.cc-range{display:flex;align-items:center;gap:12px;color:#C9D0E4;font-weight:700;font-size:14.5px}
+.cc-range b{color:#fff;min-width:56px}
+.cc-range input{width:220px;accent-color:#5B8CFF}
+.cc-chart{position:relative;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:18px 18px 10px}
+#ccSvg{width:100%;height:320px;display:block;overflow:visible}
+#ccSvg .gl{stroke:rgba(255,255,255,.08)}
+#ccSvg .gt{fill:#7F8AA6;font-size:11px;text-anchor:end}
+#ccSvg .ln{fill:none;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+#ccSvg .ln.buy{stroke:#FF6B7E}
+#ccSvg .ln.rent{stroke:#5B8CFF;filter:drop-shadow(0 0 8px rgba(91,140,255,.55))}
+#ccSvg .cp{fill:#FFB808;stroke:#fff;stroke-width:3;animation:ccPulse 1.6s ease-out infinite}
+#ccSvg .ct{fill:#FFD66B;font-size:13px;font-weight:800}
+@keyframes ccPulse{0%{r:7}60%{r:11}100%{r:7}}
+.cc-leg{display:flex;gap:18px;justify-content:center;font-size:13.5px;color:#C9D0E4;margin-top:4px}
+.cc-leg span::before{content:"";display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:7px;vertical-align:middle}
+.cc-leg .lb::before{background:#FF6B7E}.cc-leg .lr::before{background:#5B8CFF}
+.cc-axis{display:flex;justify-content:space-between;padding:4px 4px 0 40px;font-size:12px;color:#7F8AA6}
+.cc-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:18px}
+.cc-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:22px 20px}
+.cc-card.on{border-color:#5B8CFF;background:rgba(91,140,255,.10)}
+.cc-card.pw{background:#fff;border:0;color:var(--ink)}
+.cc-card .t{display:block;font-size:14px;font-weight:700;color:#B9C2D8}
+.cc-card.pw .t{color:var(--ink2)}
+.cc-card .n{display:block;font-size:clamp(26px,3vw,36px);font-weight:900;letter-spacing:-.03em;margin:8px 0 6px;font-variant-numeric:tabular-nums;color:#fff}
+.cc-card.on .n{color:#8FB0FF}
+.cc-card.pw .n{color:var(--red)}
+.cc-card .n i{font-style:normal}
+.cc-card .s{font-size:12.5px;color:#9AA6C2;line-height:1.55}
+.cc-card.pw .s{color:var(--ink3)}
+@media (max-width:900px){.cc-cards{grid-template-columns:1fr}#ccSvg{height:240px}.cc-range input{width:160px}}
+@media (prefers-reduced-motion:reduce){#ccSvg .cp{animation:none}}
 
 </style>
 </head>
@@ -757,35 +796,110 @@ section.cta .btn-w{color:var(--red)}
 <section class="sec nv" id="ai-price">
   <div class="shell">
     <div class="ai-h"><span class="k">비용 계산</span>
-      <h2>사기 전에 나눠 보세요</h2>
-      <p>맥미니를 살지 원격PC를 빌릴지, 구매가와 임대료만 놓고 계산했습니다.</p></div>
-    <div class="ai-cmp">
-      <div class="ai-cmp-c">
-        <h3>맥미니 M6 기본형</h3>
-        <p class="pr">₩1,499,000</p>
-        <p class="sp">메모리 16GB · 저장 공간 256GB<br>애플 공식 판매가 · 2026년 11월 확인</p>
-      </div>
-      <div class="ai-cmp-x">÷</div>
-      <div class="ai-cmp-c on">
-        <h3>라이젠 3700X 원격PC</h3>
-        <p class="pr">65,000원<small> / 30일</small></p>
-        <p class="sp">메모리 32GB · SSD 480GB<br>부가세 별도</p>
-      </div>
-      <div class="ai-cmp-x">=</div>
-      <div class="ai-cmp-c big">
-        <p class="pr">약 23회</p>
-        <p class="sp">30일 요금 기준<br>부가세를 더하면 약 21회</p>
+      <h2>사기 전에, 켜 두기 전에 계산해 보세요</h2>
+      <p>PC를 사서 집에 24시간 켜 두면 기계값에 전기요금이 매달 더해집니다.<br>한국 가상컴 요금에는 서버실 전기가 들어 있습니다.</p></div>
+
+    <!-- 조절 버튼 -->
+    <div class="cc-ctl">
+      <label class="cc-range">사용 기간 <b id="ccMonthsT">24개월</b>
+        <input type="range" id="ccMonths" min="1" max="36" value="24"></label>
+      <div class="cc-seg sm" role="group" aria-label="하루 사용 시간">
+        <button type="button" class="on" data-h="24">하루 24시간</button>
+        <button type="button" data-h="12">하루 12시간</button>
       </div>
     </div>
-    <div class="ai-tbl">
-      <div><span>90일 결제 (5% 할인)</span><b>185,250원</b></div>
-      <div><span>30일 × 12번</span><b>780,000원</b></div>
-      <div><span>30일 × 24번</span><b class="r">1,560,000원</b></div>
+
+    <!-- 움직이는 누적 비용 그래프 -->
+    <div class="cc-chart">
+      <svg id="ccSvg" viewBox="0 0 800 340" preserveAspectRatio="none" aria-label="누적 비용 그래프">
+        <g id="ccGrid"></g>
+        <path id="ccBuy" class="ln buy" d=""/>
+        <path id="ccRent" class="ln rent" d=""/>
+        <g id="ccCross"></g>
+      </svg>
+      <div class="cc-leg"><span class="lb">맥미니 구매 + 전기요금</span><span class="lr">한국 가상컴 (전기 포함)</span></div>
+      <div class="cc-axis" id="ccAxis"></div>
     </div>
-    <p class="ai-src c">임대료는 부가세 별도입니다. 맥미니 전기료와 되팔 때 값은 뺐습니다.<br>
-      <b>2년 넘게 쓸 게 확실하고 맥 전용 프로그램이 필요하면 사는 쪽이 맞습니다.</b> 그렇다면 그렇게 말씀드립니다.</p>
+
+    <!-- 숫자 카드 -->
+    <div class="cc-cards">
+      <div class="cc-card">
+        <span class="t">맥미니 M6 구매 + 전기요금</span>
+        <b class="n"><i data-count id="ccBuyN">0</i>원</b>
+        <span class="s">기계값 1,499,000원 + 전기(평균 20W 가정)</span>
+      </div>
+      <div class="cc-card on">
+        <span class="t">한국 가상컴 3700X 32GB</span>
+        <b class="n"><i data-count id="ccRentN">0</i>원</b>
+        <span class="s">30일 65,000원 · 전기요금 0원(포함)</span>
+      </div>
+      <div class="cc-card pw">
+        <span class="t">집에서 24시간 켜 두면 매달 전기요금</span>
+        <div class="cc-seg xs" role="group" aria-label="PC 종류">
+          <button type="button" data-w="20">맥미니</button><button type="button" class="on" data-w="100">일반 데스크톱</button><button type="button" data-w="300">고사양 PC</button>
+        </div>
+        <b class="n">약 <i data-count id="ccPowN">0</i>원</b>
+        <span class="s" id="ccPowS">-</span>
+      </div>
+    </div>
+    <p class="ai-src c" id="ccNote">전기요금은 한전 주택용 저압 2구간 전력량요금 214.6원/kWh(2023.11.9 시행)만으로 계산했습니다. 기본요금·기후환경요금·연료비조정요금·부가세·전력기금을 빼서 실제 청구액은 이보다 많습니다.<br>소비전력은 가정치입니다(맥미니 M6 애플 공식 대기 4W·최대 70W, 일반 데스크톱 약 100W, 고사양 PC 약 300W). 임대료는 부가세 별도입니다.</p>
   </div>
 </section>
+<script>
+/* 비용 계산 그래프 — 2026-11-08
+   숫자 근거(가정): POW 의 소비전력, RATE 의 1kWh 요금은 tools/ai-price-section.html 머리의 표를 따릅니다. */
+(function(){
+  const RATE = 214.6;   // 한전 주택용 저압 2구간 전력량요금(원/kWh, 2023.11.9 시행표 확인). 기후환경·연료비조정·부가세·기금은 빼서 실제보다 적게 잡힘
+  const MAC = { base:1499000, w:20 };           // 맥미니 M6 기본형 공식가 · 애플 공식 대기 4W~최대 70W 사이 평균 20W 가정
+  let cardW = 100;                                 // 전기요금 카드에서 고른 PC 소비전력(W, 가정)
+  const RENT = 65000;
+  let hours=24, months=24;
+  const $=id=>document.getElementById(id);
+  const won=n=>Math.round(n).toLocaleString('ko-KR');
+  const powMonth=w=>w/1000*hours*30*RATE;
+  function series(){
+    const p=powMonth(MAC.w), buy=[], rent=[];
+    for(let m=0;m<=months;m++){ buy.push(MAC.base+p*m); rent.push(RENT*m); }
+    return {buy,rent};
+  }
+  function path(arr,max){
+    return arr.map((v,i)=>(i?'L':'M')+(40+i*(740/months)).toFixed(1)+','+(310-v/max*280).toFixed(1)).join(' ');
+  }
+  function count(el,to){
+    const from=Number(el.dataset.v||0), t0=performance.now(), dur=matchMedia('(prefers-reduced-motion:reduce)').matches?0:900;
+    el.dataset.v=to;
+    (function step(t){ const k=dur?Math.min(1,(t-t0)/dur):1, e=1-Math.pow(1-k,3);
+      el.textContent=won(from+(to-from)*e); if(k<1) requestAnimationFrame(step); })(t0);
+  }
+  function draw(){
+    const {buy,rent}=series(), max=Math.max(buy[months],rent[months])*1.08||1;
+    const g=$('ccGrid'); g.innerHTML='';
+    for(let i=0;i<=4;i++){ const y=30+i*70; g.insertAdjacentHTML('beforeend',`<line x1="40" x2="780" y1="${y}" y2="${y}" class="gl"/><text x="34" y="${y+4}" class="gt">${won(max*(4-i)/4/10000)}만</text>`); }
+    for(const [id,arr] of [['ccBuy',buy],['ccRent',rent]]){
+      const el=$(id); el.setAttribute('d',path(arr,max));
+      const L=el.getTotalLength(); el.style.transition='none'; el.style.strokeDasharray=L; el.style.strokeDashoffset=L;
+      el.getBoundingClientRect(); el.style.transition='stroke-dashoffset 1.2s cubic-bezier(.2,.7,.2,1)'; el.style.strokeDashoffset=0;
+    }
+    /* 구매가 더 싸지는(선이 뒤집히는) 달 */
+    const cx=$('ccCross'); cx.innerHTML='';
+    let at=-1; for(let m=1;m<=months;m++){ if(rent[m]>=buy[m]){ at=m; break; } }
+    if(at>0){ const x=40+at*(740/months), y=310-rent[at]/max*280;
+      cx.innerHTML=`<circle cx="${x}" cy="${y}" r="7" class="cp"/><text x="${Math.min(x,640)}" y="${Math.max(y-16,20)}" class="ct">${at}개월째부터 구매가 유리</text>`; }
+    $('ccAxis').innerHTML=[0,Math.round(months/2),months].map(m=>`<span>${m}개월</span>`).join('');
+    count($('ccBuyN'),buy[months]); count($('ccRentN'),rent[months]); card();
+  }
+  function card(){
+    count($('ccPowN'),powMonth(cardW));
+    $('ccPowS').textContent=`약 ${cardW}W × 하루 ${hours}시간 × 30일 = ${(cardW/1000*hours*30).toFixed(0)}kWh · 1kWh ${RATE}원 · 한국 가상컴은 0원`;
+  }
+  document.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{ cardW=+b.dataset.w; document.querySelectorAll('[data-w]').forEach(x=>x.classList.toggle('on',x===b)); card(); });
+  document.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{ hours=+b.dataset.h; document.querySelectorAll('[data-h]').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
+  $('ccMonths').oninput=e=>{ months=+e.target.value; $('ccMonthsT').textContent=months+'개월'; draw(); };
+  /* 화면에 들어올 때 처음 그립니다 */
+  const io=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ draw(); io.disconnect(); } },{threshold:.25});
+  io.observe($('ccSvg'));
+})();
+</script>
 
 <section class="sec lt">
   <div class="shell">
