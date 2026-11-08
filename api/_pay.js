@@ -17,7 +17,16 @@ const { sb } = require('./_supa');
    테스트 키로도 결제가 "승인"되고 진짜 PC 가 배정되어, 돈을 내지 않고 PC 를 받아 갈 수 있었습니다.
    대표님이 결제 시험을 할 때만 Vercel 환경변수 KVC_TEST_PAY=1 을 넣어 잠깐 엽니다(시험 뒤 꼭 지우기). */
 const payLive = () => /^live_sk_/.test(process.env.TOSS_SECRET_KEY || '');
-const payOpen = () => payLive() || process.env.KVC_TEST_PAY === '1';
+/* KVC_TEST_PAY 에 날짜·시간(예: 2026-11-10T23:59)을 넣으면 그 시각까지만 시험 결제가 열립니다.
+   끄는 것을 잊어도 저절로 닫히게 하려는 것입니다 (Codex 검토 T-0207). '1' 은 시각 제한 없이 엽니다. */
+const testPayOpen = () => {
+  const v = String(process.env.KVC_TEST_PAY || '').trim();
+  if (v === '1') return true;
+  if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return false;
+  const until = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(v) ? v : v + '+09:00');   // 시간대가 없으면 한국 시각
+  return Number.isFinite(until) && Date.now() < until;
+};
+const payOpen = () => payLive() || testPayOpen();
 const PAY_CLOSED_MSG = '온라인 결제를 준비하고 있습니다.\n카카오톡이나 전화(010-8446-8710)로 문의해 주시면 바로 안내해 드리겠습니다.';
 const tossSecret = () => process.env.TOSS_SECRET_KEY || 'test_sk_zXLkKEypNArWmo50nX3lmeaxYG5R';
 const tossAuth = () => 'Basic ' + Buffer.from(tossSecret() + ':').toString('base64');
