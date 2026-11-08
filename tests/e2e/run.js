@@ -170,7 +170,7 @@ const post = async (url, body) => {
 /* ═══════════════════════════════════════════════════════════════ */
 const XSS_ID = '22222222-2222-4222-8222-222222222222';
 const XSS_USER = { name: XSS, phone: '010-3333-4444', via: 'kakao' };
-const CUSTOMER_PAGES = ['/', '/live', '/product', '/about', '/qa', '/login', '/mypage', '/success', '/fail', '/terms', '/privacy'];
+const CUSTOMER_PAGES = ['/', '/live', '/product', '/about', '/qa', '/login', '/mypage', '/success', '/fail', '/terms', '/privacy', '/hub'];
 /* 관리자-사용설명서.html 은 .vercelignore 로 배포되지 않으므로 넣지 않습니다 */
 const ALL_PAGES = CUSTOMER_PAGES.concat(['/admin', '/ai', '/diag']);
 const S = {};       // 시나리오끼리 넘겨 쓰는 값
@@ -245,7 +245,7 @@ async function main() {
   await scenario('G4', '휴대폰 폭 390 에서 가로 넘침 없음', async () => {
     const ctx = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const bad = [];
-    for (const u of ['/', '/live', '/product?g=3&pc=Y-003', '/about', '/qa', '/login', '/mypage', '/success', '/fail', '/terms', '/privacy']) {
+    for (const u of ['/', '/live', '/product?g=3&pc=Y-003', '/about', '/qa', '/login', '/mypage', '/success', '/fail', '/terms', '/privacy', '/hub']) {
       const p = await openPage(ctx, u);
       await sleep(400);
       const w = await p.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth));
@@ -1998,11 +1998,300 @@ async function main() {
   });
   for (const k of Object.keys(SOCIAL_ENV)) delete process.env[k];   // 뒤 시험은 예전처럼 (키 없음)
 
+  /* ══════════ AI 허브 (2026-11-08) — 수집 · 공개 목록 · 브리핑 초안 · 관리자 게시 · 내 AI PC ══════════
+     진짜 RSS · 유튜브 · Supabase 는 부르지 않습니다 (hub-fixtures.js 의 가짜 피드 · 가짜 DB) */
+  const hubFx = require('./hub-fixtures');
+  const hubGet = async (url, headers) => {
+    const r = await fetch(BASE + url, { headers: headers || {} });
+    let d = null; try { d = await r.json(); } catch (e) {}
+    return { status: r.status, d, cc: r.headers.get('cache-control') || '' };
+  };
+  const cronH = { Authorization: 'Bearer ' + srv.TEST.CRON };
+  const hubItems = () => db().hub_items;
+  const noOverflow = async (p, w) => p.evaluate(x => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) <= x + 1, w);
+  seed();          // 앞 시험들이 바꾼 DB 를 처음 상태로 (AI 허브 시험은 서로 이어집니다)
+
+  await scenario('HUB1', 'AI 허브 수집 — 열쇠 없으면 거절 · RSS/Atom/유튜브 읽기 · 같은 주소 하나로 · 30일 지난 글·javascript: 주소 버림 · 고장난 출처는 오류로 · 꺼 둔 출처는 안 부름 · 다시 모아도 숨김/고정 유지', async () => {
+    hubFx.setup(srv);
+    ok((await hubGet('/api/hub?do=collect')).status === 401, '열쇠 없이 수집됨');
+    ok((await hubGet('/api/hub?do=collect', { Authorization: 'Bearer wrong-secret-0000000000' })).status === 401, '틀린 열쇠로 수집됨');
+    const r = await hubGet('/api/hub?do=collect', cronH);
+    ok(r.status === 200 && r.d.ok, '크론 수집 실패 ' + r.status + ' ' + JSON.stringify(r.d));
+    ok(!srv.feeds.calls.includes(hubFx.URLS.off), '꺼 둔 출처를 불렀음');
+    ok(r.d.errors.length === 1 && r.d.errors[0].name === '고장난 출처' && /500/.test(r.d.errors[0].error), '출처 오류 ' + JSON.stringify(r.d.errors));
+    const it = hubItems();
+    const urls = it.map(x => x.url);
+    ok(new Set(urls).size === urls.length, 'url 겹침');
+    ok(urls.filter(u => u === 'https://news.e2e.test/a/1').length === 1, '같은 기사 두 줄');
+    ok(!urls.includes('https://news.e2e.test/a/old'), '40일 지난 글 저장됨');
+    ok(!urls.some(u => /^javascript:/i.test(u)), 'javascript: 주소 저장됨');
+    ok(it.filter(x => x.kind === 'news').length === 3 && it.filter(x => x.kind === 'youtube').length === 3, '개수 ' + it.map(x => x.kind + ':' + x.title).join(' | '));
+    const bad = it.find(x => x.url === 'https://news.e2e.test/a/2');
+    ok(bad && bad.title === '위험한 제목 & 기호' && !/[<>]/.test(bad.title + bad.summary), '태그를 못 벗김: ' + JSON.stringify(bad));
+    const first = it.find(x => x.url === 'https://news.e2e.test/a/1');
+    ok(first.summary && !/[<>]|alert/.test(first.summary), '요약에 태그·스크립트 ' + first.summary);
+    const fast = it.find(x => x.url.endsWith('vidFast0002')), slow = it.find(x => x.url.endsWith('vidSlow0001'));
+    ok(fast.views === 5000 && Math.abs(fast.score - 2500) < 5 && Math.abs(slow.score - 100) < 1 && /^https:\/\/i1\.ytimg\.com\//.test(fast.thumb), '유튜브 점수 ' + JSON.stringify([fast, slow]));
+    const last = db().settings.find(s => s.k === 'hub_last_collect');
+    ok(last && JSON.parse(last.v).saved === 6 && JSON.parse(last.v).by === 'cron', '마지막 수집 기록 ' + (last && last.v));
+    /* 관리자가 숨기거나 고정한 표시는 다시 모아도 그대로 */
+    bad.hidden = true; fast.pinned = true;
+    const r2 = await hubGet('/api/hub?do=collect', cronH);
+    ok(r2.status === 200 && hubItems().length === 6, '다시 모으니 개수가 바뀜 ' + hubItems().length);
+    ok(hubItems().find(x => x.url === bad.url).hidden === true && hubItems().find(x => x.url === fast.url).pinned === true, '숨김/고정이 풀림');
+    /* 관리자 쿠키로는 POST 만 (주소만 열어 수집 금지) · 크론 열쇠 아닌 HUB_TOKEN 으로는 안 됨 */
+    ok((await hubGet('/api/hub?do=collect', { Authorization: 'Bearer ' + srv.TEST.HUB })).status === 401, 'HUB_TOKEN 으로 수집됨');
+  });
+
+  await scenario('HUB2', 'AI 허브 공개 목록 — 숨긴 글 빠짐 · 고정 먼저 · 뉴스 최신순 · 유튜브 시간당 조회수순 · 초안 브리핑은 안 보임 · 5분 캐시', async () => {
+    const r = await hubGet('/api/hub?do=feed');
+    ok(r.status === 200 && r.d.ready, 'feed ' + r.status);
+    ok(/s-maxage=300/.test(r.cc), 'Cache-Control ' + r.cc);
+    ok(!r.d.news.some(n => n.url === 'https://news.e2e.test/a/2'), '숨긴 글이 보임');
+    ok(r.d.news.length === 2 && r.d.news[0].url === 'https://atom.e2e.test/b/1', '뉴스 최신순 ' + r.d.news.map(n => n.url).join(','));
+    ok(r.d.news[0].source === '테스트 아톰', '출처 이름 ' + r.d.news[0].source);
+    ok(r.d.youtube[0].url.endsWith('vidFast0002') && r.d.youtube[0].pinned, '고정 영상이 맨 앞 아님');
+    /* 고정을 풀면 시간당 조회수 순서 — 빠름(2500) > 보통(2000) > 느림(100) */
+    hubItems().forEach(x => { x.pinned = false; });
+    db().hub_items.find(x => x.url === 'https://news.e2e.test/a/1').pinned = true;
+    const r2 = await hubGet('/api/hub?do=feed');
+    ok(r2.d.youtube.map(v => v.url.slice(-11)).join(',') === 'vidFast0002,vidMid00003,vidSlow0001', '유튜브 순서 ' + r2.d.youtube.map(v => v.perHour).join(','));
+    ok(r2.d.news[0].url === 'https://news.e2e.test/a/1' && r2.d.news[0].pinned, '고정 뉴스가 맨 앞 아님');
+    db().hub_briefs.push({ id: 7001, day: '2026-01-01', title: '초안만', body: '본문', status: 'draft', source: 'ai_hq', created_at: iso(Date.now()), published_at: null, who: 'ai_hq' });
+    ok((await hubGet('/api/hub?do=feed')).d.brief === null, '초안 브리핑이 공개됨');
+    db().hub_briefs.length = 0;
+    /* 표가 없으면(db/11 전) 빈 목록 · 200 */
+    srv.fakeDb.setHub(false);
+    try {
+      const r3 = await hubGet('/api/hub?do=feed');
+      ok(r3.status === 200 && r3.d.ready === false && !r3.d.news.length && !r3.d.youtube.length && r3.d.brief === null, '표 없을 때 ' + r3.status + JSON.stringify(r3.d));
+      ok((await hubGet('/api/hub?do=collect', cronH)).status === 409, '표 없을 때 수집이 409 아님');
+    } finally { srv.fakeDb.setHub(true); }
+  });
+
+  await scenario('HUB3', 'AI 본부 브리핑 — 열쇠 없거나 틀리면 401 · 맞으면 초안으로만 · 같은 날 다시 올리면 초안 갱신 · status 를 보내도 게시 안 됨 · 게시된 날은 409', async () => {
+    const day = '2026-11-08';
+    const body = { day, title: '오늘의 AI 브리핑', body: '# 요약\n- 첫째 소식\n- 둘째 소식', status: 'published' };
+    const noTok = await post('/api/hub?do=brief', body);
+    ok(noTok.status === 401, '열쇠 없이 올라감 ' + noTok.status);
+    const bad = await postH('/api/hub?do=brief', body, { Authorization: 'Bearer ' + srv.TEST.CRON });
+    ok(bad.status === 401, 'CRON 열쇠로 올라감');
+    const r = await postH('/api/hub?do=brief', body, { Authorization: 'Bearer ' + srv.TEST.HUB });
+    ok(r.status === 200 && r.d.status === 'draft', '올리기 ' + r.status + JSON.stringify(r.d));
+    let b = db().hub_briefs.find(x => x.day === day);
+    ok(b && b.status === 'draft' && b.source === 'ai_hq' && b.published_at == null, '초안 아님 ' + JSON.stringify(b));
+    const r2 = await postH('/api/hub?do=brief', Object.assign({}, body, { title: '고친 제목' }), { Authorization: 'Bearer ' + srv.TEST.HUB });
+    ok(r2.status === 200 && db().hub_briefs.filter(x => x.day === day).length === 1 && db().hub_briefs.find(x => x.day === day).title === '고친 제목', '같은 날 갱신 안 됨');
+    ok((await hubGet('/api/hub?do=feed')).d.brief === null, '초안이 공개 목록에 나옴');
+    const bad2 = await postH('/api/hub?do=brief', { day: '2026-13-45', title: 'x', body: 'y' }, { Authorization: 'Bearer ' + srv.TEST.HUB });
+    ok(bad2.status === 400, '이상한 날짜 ' + bad2.status);
+    /* 게시된 날은 덮어쓰지 않음 */
+    b = db().hub_briefs.find(x => x.day === day);
+    b.status = 'published'; b.published_at = iso(Date.now());
+    const r3 = await postH('/api/hub?do=brief', body, { Authorization: 'Bearer ' + srv.TEST.HUB });
+    ok(r3.status === 409 && db().hub_briefs.find(x => x.day === day).title === '고친 제목', '게시된 브리핑을 덮어씀 ' + r3.status);
+    b.status = 'draft'; b.published_at = null;
+  });
+
+  await scenario('HUB4', 'AI 허브 관리 — 마지막 수집 · 출처 오류 · [지금 수집] · 검색 · 숨기기 · 출처 끄기/추가(내부 주소 거절) · 초안 [게시] → /hub 에 보임 → [내리기]', async () => {
+    const ctx = await newContext();
+    const p = await openPage(ctx, '/admin', { answers: [true, true] });
+    await adminLogin(p); await adminReady(p);
+    await view(p, 'hub');
+    await p.waitForSelector('#hub-last', { timeout: 8000 });
+    let t = await mainText(p);
+    ok(/마지막 수집/.test(t) && /매일 자동/.test(t), '마지막 수집 안 보임');
+    ok(/고장난 출처/.test(await p.$eval('#hub-errs', e => e.innerText)), '출처 오류 안 보임');
+    ok(/CRON_SECRET\) 등록됨/.test(t) && !t.includes(srv.TEST.CRON) && !t.includes(srv.TEST.HUB), '열쇠 표시 ' + t.slice(0, 300));
+    /* 지금 수집 (관리자 쿠키 · POST) */
+    const before = srv.feeds.calls.length;
+    await p.click('#hub-collect');
+    await p.waitForFunction(() => /수집 끝/.test((document.getElementById('hub-msg') || {}).textContent || ''), null, { timeout: 8000 });
+    ok(srv.feeds.calls.length > before, '수집이 안 돎');
+    ok(db().view_log.some(v => /AI 허브 수집/.test(v.act) && v.who === '대표'), '수집 기록에 이름 없음');
+    /* 검색 */
+    await p.fill('#hub-q', '코덱스');
+    await p.click('#hub-find');
+    await p.waitForFunction(() => document.querySelectorAll('#hub-items tr[data-hubitem]').length === 1, null, { timeout: 5000 });
+    await p.fill('#hub-q', '');
+    await p.click('#hub-find');
+    await p.waitForFunction(() => document.querySelectorAll('#hub-items tr[data-hubitem]').length === 6, null, { timeout: 5000 });
+    /* 숨기기 */
+    const target = db().hub_items.find(x => x.url === 'https://atom.e2e.test/b/1');
+    await p.click(`[data-hubhide="${target.id}"]`);
+    await until(() => db().hub_items.find(x => x.id === target.id).hidden === true, 5000, '숨기기 안 됨');
+    ok(!(await hubGet('/api/hub?do=feed')).d.news.some(n => n.url === target.url), '숨긴 글이 공개 목록에 나옴');
+    /* 출처 끄기 */
+    await p.waitForSelector('[data-hubsrctog="9002"]');
+    await p.click('[data-hubsrctog="9002"]');
+    await until(() => db().hub_sources.find(s => s.id === 9002).enabled === false, 5000, '출처 끄기 안 됨');
+    /* 출처 추가 — 내부 주소는 거절, 채널 번호는 받음 */
+    await p.waitForSelector('#hs-add');
+    await p.selectOption('#hs-kind', 'rss'); await p.fill('#hs-name', '내부'); await p.fill('#hs-target', 'https://127.0.0.1/rss.xml');
+    await p.click('#hs-add');
+    await p.waitForFunction(() => /공개 주소/.test((document.getElementById('hs-msg') || {}).textContent || ''), null, { timeout: 5000 });
+    ok(!db().hub_sources.some(s => s.name === '내부'), '내부 주소 출처가 들어감');
+    await p.selectOption('#hs-kind', 'youtube'); await p.fill('#hs-name', '새 채널'); await p.fill('#hs-target', 'UCabcdefghijklmnopqrstuv');
+    await p.click('#hs-add');
+    await until(() => db().hub_sources.some(s => s.name === '새 채널' && s.kind === 'youtube'), 5000, '채널 출처 추가 안 됨');
+    db().hub_sources.find(s => s.name === '새 채널').enabled = false;     // 뒤 수집에서 진짜 유튜브를 부르지 않게
+    /* 초안 열기 → 고치기 → 게시 */
+    await p.waitForSelector('#hub-briefs tr[data-hubbrief]');
+    await p.click('#hub-briefs tr[data-hubbrief] td[data-label="제목"]');
+    await p.waitForSelector('#drawer.on #hb-body');
+    await p.fill('#hb-title', '관리자가 고친 브리핑');
+    await p.click('#hb-save');
+    await until(() => db().hub_briefs.some(b => b.title === '관리자가 고친 브리핑' && b.status === 'draft'), 5000, '저장 안 됨 또는 상태가 바뀜');
+    await p.waitForSelector('#hub-briefs [data-hubpub]');
+    await p.click('#hub-briefs [data-hubpub]');
+    await until(() => db().hub_briefs.some(b => b.status === 'published' && b.published_at), 5000, '게시 안 됨');
+    ok(db().view_log.some(v => /AI 허브 브리핑 게시/.test(v.act) && v.who === '대표'), '게시 기록 없음');
+    /* 고객 화면 /hub 에 보임 */
+    const ctx2 = await newContext();
+    const h = await openPage(ctx2, '/hub');
+    await h.waitForFunction(() => /관리자가 고친 브리핑/.test(document.getElementById('hb-brief').innerText), null, { timeout: 8000 });
+    const bt = await h.$eval('#hb-brief', e => ({ h4: e.querySelectorAll('h4').length, li: e.querySelectorAll('li').length }));
+    ok(bt.h4 === 1 && bt.li === 2, '브리핑 제목·목록 모양 ' + JSON.stringify(bt));
+    ok(!h.errors.length, '콘솔 오류 ' + h.errors.join('|'));
+    await ctx2.close();
+    /* 내리기 */
+    await p.waitForSelector('#hub-briefs [data-hubunpub]');
+    await p.click('#hub-briefs [data-hubunpub]');
+    await until(() => db().hub_briefs.every(b => b.status === 'draft'), 5000, '내리기 안 됨');
+    ok((await hubGet('/api/hub?do=feed')).d.brief === null, '내린 브리핑이 보임');
+    ok(!p.errors.length && !p.xss.length, '관리자 콘솔 오류 ' + p.errors.join('|'));
+    await ctx.close();
+  });
+
+  await scenario('HUB5', 'AI 허브 화면 — 표 없을 때 빈 화면 · 내용 있을 때 카드 · PC/390 폭 가로 넘침·콘솔 오류 없음 · 템플릿 복사', async () => {
+    const shapes = [{ viewport: { width: 1280, height: 900 } }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }];
+    srv.fakeDb.setHub(false);
+    try {
+      for (const o of shapes) {
+        const ctx = await newContext(o);
+        const p = await openPage(ctx, '/hub');
+        await p.waitForFunction(() => /준비 중/.test(document.getElementById('hb-brief').innerText) && /아직 모인 뉴스가 없습니다/.test(document.getElementById('hb-news').innerText)
+          && /아직 모인 영상이 없습니다/.test(document.getElementById('hb-yt').innerText), null, { timeout: 8000 });
+        await p.waitForFunction(() => /로그인하시면/.test(document.getElementById('hb-me').innerText), null, { timeout: 8000 });
+        ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 빈 화면 가로 넘침');
+        ok(!p.errors.length, '빈 화면 콘솔 오류 ' + p.errors.join('|'));
+        await ctx.close();
+      }
+    } finally { srv.fakeDb.setHub(true); }
+    /* 브리핑 하나 게시해 두고 꽉 찬 화면 */
+    db().hub_briefs.push({ id: 7101, day: '2026-11-07', title: '꽉 찬 화면 브리핑', body: '## 오늘\n- 하나\n긴 문장 '.repeat(5), status: 'published', source: 'admin', created_at: iso(Date.now()), published_at: iso(Date.now()), who: '대표' });
+    for (const o of shapes) {
+      const ctx = await newContext(Object.assign({ permissions: ['clipboard-read', 'clipboard-write'] }, o));
+      const p = await openPage(ctx, '/hub');
+      await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nc').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 3, null, { timeout: 8000 });
+      const s = await p.evaluate(() => ({
+        badge: document.querySelector('#hb-yt .badge').textContent,
+        ext: [...document.querySelectorAll('#hb-news a.hb-nc,#hb-yt a.hb-vc')].every(a => a.target === '_blank' && /noopener/.test(a.rel) && /^https?:/.test(a.href)),
+        tpl: document.querySelectorAll('#hb-tpl .hb-tc').length, guide: document.querySelectorAll('.hb-gc').length,
+        upd: document.getElementById('hb-upd').textContent, on: (document.querySelector('.gnb a.on') || {}).textContent,
+      }));
+      ok(/^시간당 2,[45][0-9][0-9]회$/.test(s.badge), '시간당 배지 ' + s.badge);
+      ok(s.ext && s.tpl === 5 && s.guide >= 5 && s.upd && s.upd !== '확인 중…' && s.on === 'AI 허브', '화면 ' + JSON.stringify(s));
+      ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 꽉 찬 화면 가로 넘침');
+      /* 템플릿 복사 */
+      await p.click('#hb-tpl [data-tpl="0"]');
+      await p.waitForFunction(() => /복사했습니다|복사가 막혀/.test(document.querySelector('#hb-tpl .hb-tc .ok').textContent), null, { timeout: 5000 });
+      const okMsg = await p.$eval('#hb-tpl .hb-tc .ok', e => e.textContent);
+      if (/복사했습니다/.test(okMsg)) {
+        const clip = await p.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+        ok(!clip || /블로그 작가/.test(clip), '복사된 글 ' + clip.slice(0, 40));
+      }
+      ok(!p.errors.length && !p.xss.length, '꽉 찬 화면 콘솔 오류 ' + p.errors.join('|'));
+      await ctx.close();
+    }
+    db().hub_briefs.length = 0;
+  });
+
+  await scenario('HUB6', '내 AI PC — 로그인 안 하면 401·로그인 안내 · 고객A 는 자기 PC(Y-004)만 · 끝난 주문 PC 안 보임 · 애니데스크·비밀번호 안 나감', async () => {
+    ok((await hubGet('/api/hub?do=me')).status === 401, '로그인 없이 me 200');
+    const ctx = await newContext();
+    await loginCustomer(ctx, '11111111-1111-4111-8111-111111111111', { name: '고객A', phone: '010-1111-2222', via: 'kakao' });
+    const p = await openPage(ctx, '/hub');
+    await p.waitForSelector('#hb-me .hb-pc', { timeout: 8000 });
+    const cards = await p.$$eval('#hb-me .hb-pc .pn', es => es.map(e => e.textContent));
+    ok(cards.join(',') === 'Y-004', '내 PC 목록 ' + cards.join(','));
+    const st = await p.$eval('#hb-me .hb-pc .st', e => e.className + ' ' + e.textContent);
+    ok(/on/.test(st) && /켜짐/.test(st), '켜짐 표시 ' + st);
+    const api = await apiIn(p, '/api/hub?do=me');
+    const raw = JSON.stringify(api.d);
+    ok(api.status === 200 && api.d.pcs.length === 1 && !/anydesk|pw_enc|ad"|10428876/.test(raw), '응답에 민감정보 ' + raw);
+    ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
+    await ctx.close();
+    /* 다른 회원(고객E)은 자기 PC(Y-013)만 */
+    const ctx2 = await newContext();
+    await loginCustomer(ctx2, '55555555-5555-4555-8555-555555555555', { name: '고객E', phone: '010-4444-0005', via: 'kakao' });
+    const p2 = await openPage(ctx2, '/hub');
+    await p2.waitForSelector('#hb-me .hb-pc', { timeout: 8000 });
+    ok((await p2.$$eval('#hb-me .hb-pc .pn', es => es.map(e => e.textContent))).join(',') === 'Y-013', '고객E 가 남의 PC 를 봄');
+    await ctx2.close();
+    /* 로그인 안 함 → 로그인 안내 (next=hub.html) */
+    const ctx3 = await newContext();
+    const p3 = await openPage(ctx3, '/hub');
+    await p3.waitForSelector('#hb-me a[href="login.html?next=hub.html"]', { timeout: 8000 });
+    await ctx3.close();
+  });
+
+  await scenario('HUB7', 'AI 허브 XSS — 제목·출처 이름·브리핑 본문에 <img onerror> 가 있어도 고객·관리자 화면에서 글자로만', async () => {
+    const now = Date.now();
+    db().hub_sources.push({ id: 9100, kind: 'rss', name: XSS, url_or_channel_id: 'https://xss.e2e.test/rss.xml', topic: XSS, enabled: false, created_at: iso(now) });
+    db().hub_items.push(
+      { id: 9101, source_id: 9100, kind: 'news', title: XSS + ' 뉴스', url: 'https://xss.e2e.test/1?"><img src=x onerror=alert(1)>', summary: XSS, thumb: null, published_at: iso(now - 60000), views: null, score: 0, hidden: false, pinned: true, created_at: iso(now) },
+      { id: 9102, source_id: 9100, kind: 'youtube', title: XSS + ' 영상', url: 'javascript:alert(1)', summary: null, thumb: 'javascript:alert(1)', published_at: iso(now - 60000), views: 10, score: 99999, hidden: false, pinned: false, created_at: iso(now) },
+    );
+    db().hub_briefs.push({ id: 9103, day: '2026-11-06', title: XSS, body: '# ' + XSS + '\n- ' + XSS + '\n' + XSS, status: 'published', source: 'admin', created_at: iso(now), published_at: iso(now), who: XSS });
+    const ctx = await newContext();
+    const p = await openPage(ctx, '/hub');
+    await p.waitForFunction(x => document.getElementById('hb-news').innerText.includes(x) && document.getElementById('hb-brief').innerText.includes(x), XSS, { timeout: 8000 });
+    await sleep(300);
+    const s = await p.evaluate(() => ({ imgs: document.querySelectorAll('#hb-news img,#hb-brief img').length,
+      js: [...document.querySelectorAll('a')].some(a => /^javascript:/i.test(a.getAttribute('href') || '')) }));
+    ok(!p.xss.length && !s.imgs && !s.js, '고객 화면 XSS ' + JSON.stringify(s) + p.xss.join(','));
+    await ctx.close();
+    const ctx2 = await newContext();
+    const a = await openPage(ctx2, '/admin');
+    await adminLogin(a); await adminReady(a);
+    await a.evaluate(() => { HUB.data = null; HUB.err = ''; HUB.q = ''; HUB.show = ''; HUB.kind = ''; });
+    await view(a, 'hub');
+    await a.waitForFunction(x => (document.getElementById('hub-items') || {}).innerText && document.getElementById('hub-items').innerText.includes(x), XSS, { timeout: 8000 });
+    await a.click('#hub-briefs tr[data-hubbrief="9103"] td[data-label="제목"]');
+    await a.waitForSelector('#drawer.on #hb-body');
+    const v = await a.$eval('#hb-body', e => e.value);
+    ok(v.includes(XSS), '편집창 본문이 글자로 안 들어감');
+    await sleep(300);
+    ok(!a.xss.length, '관리자 화면 XSS ' + a.xss.join(','));
+    ok(!(await a.evaluate(() => [...document.querySelectorAll('#hub-items a')].some(x => /^javascript:/i.test(x.getAttribute('href') || '')))), '관리자 화면에 javascript: 링크');
+    await ctx2.close();
+    db().hub_items = db().hub_items.filter(x => x.id < 9100);
+    db().hub_briefs.length = 0;
+    db().hub_sources = db().hub_sources.filter(x => x.id !== 9100);
+  });
+
+  await scenario('HUB8', 'AI 허브 진단 · 함수 개수 — health 에 표 3개·열쇠 이름·마지막 수집 (값 없음) · 라우트 12개 이하 · 크론 설정 · SQL 에 RLS · 실명 없음', async () => {
+    const h = await (await fetch(BASE + '/api/health')).text();
+    const j = JSON.parse(h);
+    ok(j.AI허브 && /표 3개 모두 있음/.test(j.AI허브.상태) && /저장/.test(j.AI허브['마지막 수집']), 'health AI허브 ' + JSON.stringify(j.AI허브));
+    ok(/CRON_SECRET/.test(h) && /HUB_TOKEN/.test(h) && !h.includes(srv.TEST.CRON) && !h.includes(srv.TEST.HUB), 'health 에 열쇠 값 또는 이름 없음');
+    const routes = fs.readdirSync(path.join(srv.ROOT, 'api')).filter(f => /\.js$/.test(f) && !f.startsWith('_'));
+    ok(routes.length <= 12 && routes.includes('hub.js'), '라우트 ' + routes.length + ' ' + routes.join(','));
+    const vj = JSON.parse(fs.readFileSync(path.join(srv.ROOT, 'vercel.json'), 'utf8'));
+    ok(vj.cleanUrls === true && vj.trailingSlash === false && vj.crons && vj.crons[0].path === '/api/hub?do=collect' && vj.crons[0].schedule === '0 21 * * *', 'vercel.json ' + JSON.stringify(vj));
+    const sql = fs.readFileSync(path.join(srv.ROOT, 'db', '11-AI허브.sql'), 'utf8');
+    for (const t of ['hub_sources', 'hub_items', 'hub_briefs']) ok(new RegExp('alter table ' + t + '\\s+enable row level security').test(sql), t + ' RLS 없음');
+    ok(!/create policy/i.test(sql) && /url\s+text not null unique/.test(sql) && /day\s+date not null unique/.test(sql), 'SQL 정책·유일 조건');
+    ok(!/금촌|영태리|등원리/.test(sql + fs.readFileSync(path.join(srv.ROOT, 'hub.html'), 'utf8')), '실명 들어감');
+    ok(!/무중단/.test(fs.readFileSync(path.join(srv.ROOT, 'tools', 'hub-page-body.html'), 'utf8')), '허브 본문에 무중단 문구');
+  });
+
   /* ══════════ 마무리 확인 ══════════ */
   await scenario('Z1', '시험 중 진짜 외부 서비스 호출 없음 · 서버 오류(500) 없음', async () => {
     ok(!srv.blocked.length, '서버가 바깥 주소를 부르려 함: ' + srv.blocked.join(','));
     const errs = srv.apiLog.filter(a => a.st >= 500);
-    ok(!errs.length, '500 응답: ' + errs.map(e => e.url + ' ' + (e.err || '')).join(' | '));
+    ok(!errs.length, '500 응답: ' + errs.map(e => e.url + ' ' + (e.err || e.body || '')).join(' | '));
     const real = external.filter(h => /supabase|vercel|aligo|kakao\.com\/v2|googleapis/.test(h));
     ok(!real.length, '브라우저가 진짜 서비스로 나가려 함: ' + real.join(','));
   });

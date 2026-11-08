@@ -386,6 +386,8 @@ a{color:inherit;text-decoration:none}
     <a href="#find" data-v="find"><i>🔎</i><span>통합검색</span></a>
     <!-- 토스 거래내역과 우리 주문을 맞대 보는 화면 (읽기만 · 2026-11-08) -->
     <a href="#recon" data-v="recon"><i>💳</i><span>정산 · 대사</span></a>
+    <!-- 고객 화면 /hub 의 뉴스·유튜브·오늘의 브리핑 관리 (2026-11-08) -->
+    <a href="#hub" data-v="hub"><i>🤖</i><span>AI 허브 관리</span></a>
     <a href="#set" data-v="set"><i>⚙️</i><span>설정</span></a>
   </nav>
   <!-- 지금 로그인한 관리자 이름 — 관리자마다 비밀번호가 따로라 기록에 이 이름이 남습니다 (2026-11-08) -->
@@ -1428,6 +1430,201 @@ async function loadRecon(){
   route();
 }
 
+/* ═══════════════ AI 허브 관리 (2026-11-08) ═══════════════
+   /hub 고객 화면에 나가는 뉴스 · 유튜브 · 오늘의 브리핑을 관리합니다.
+   · [지금 수집] — 켜진 출처를 지금 바로 모읍니다 (평소에는 매일 아침 6시 자동)
+   · 글 숨기기 · 고정 — 숨긴 글은 고객 화면에서 빠지고, 고정한 글은 맨 앞에 오고 30일이 지나도 남습니다
+   · 브리핑 — AI 본부가 올린 초안을 읽고 고친 뒤 [게시] 를 눌러야 고객 화면에 보입니다
+   ★ 서버에서 온 글자(제목·출처 이름·오류·본문)는 전부 esc() 로 글자 그대로 넣습니다. */
+const HUB={data:null,err:'',loading:false,q:'',kind:'',show:'',msg:'',busy:false};
+const hubWhen=iso=>iso?new Date(iso).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+const hubSafeUrl=u=>/^https?:\/\//i.test(String(u||''))?String(u):'';
+function vHub(){
+  if(LIVE&&!HUB.data&&!HUB.loading&&!HUB.err) setTimeout(loadHub,0);
+  const d=HUB.data;
+  const head=`<div class="top"><h1>AI 허브 관리</h1><span class="live">고객 화면 <a href="hub.html" target="_blank" rel="noopener" style="color:var(--blue);font-weight:800">/hub ↗</a> · 게시는 이 화면에서 직접 눌러야만 됩니다</span></div>`;
+  if(!LIVE) return head+'<div class="card"><div class="empty2">서버에 연결된 상태에서만 볼 수 있습니다</div></div>';
+  if(HUB.loading&&!d) return head+'<div class="card"><div class="empty2">불러오는 중…</div></div>';
+  if(HUB.err&&!d) return head+`<div class="card"><div class="empty2" style="color:var(--red)">${esc(HUB.err)}<br><button class="btn btn-o btn-sm" style="margin-top:12px" data-hubreload>다시 불러오기</button></div></div>`;
+  if(!d) return head;
+  if(d.ready===false) return head+`<div class="card" id="hub-missing"><div class="empty2"><b>AI 허브 표가 아직 없습니다</b>Supabase SQL Editor 에서 <b style="display:inline">db/11-AI허브.sql</b> 을 한 번 실행해 주세요.<br>
+    <button class="btn btn-o btn-sm" style="margin-top:12px" data-hubreload>다시 불러오기</button></div></div>`;
+  const L=d.last;
+  const srcName=id=>{const s=(d.sources||[]).find(x=>x.id===id);return s?s.name:'—'};
+  const msg=HUB.msg?`<div class="card" id="hub-msg" style="margin-bottom:14px;padding:12px 18px;font-size:13.5px;font-weight:700">${esc(HUB.msg)}</div>`:'';
+  /* ① 수집 */
+  const errs=(L&&L.errors)||[];
+  const collectCard=`<div class="card" style="margin-bottom:14px" id="hub-last">
+    <div class="sec-h"><h3>수집</h3><div class="r">
+      <button class="btn btn-o btn-sm" data-hubreload>새로고침</button>
+      <button class="btn btn-r btn-sm" id="hub-collect" ${HUB.busy?'disabled':''}>${HUB.busy?'수집 중…':'지금 수집'}</button></div></div>
+    <div style="padding:14px 18px;font-size:13.5px;line-height:1.8">
+      ${L&&L.at?`마지막 수집 <b>${esc(hubWhen(L.at))}</b> (${esc(L.by==='cron'?'매일 자동':(L.by||'—'))}) · 출처 ${w(L.sources||0)}곳 · 받은 글 ${w(L.fetched||0)} · 저장 ${w(L.saved||0)} · 30일 지나 지움 ${w(L.pruned||0)}`
+        :'아직 수집한 적이 없습니다 — [지금 수집] 을 눌러 보세요'}
+      <br><span class="dim">매일 자동 수집 열쇠(CRON_SECRET) ${d.cronSecret?'<b style="color:var(--gr)">등록됨</b>':'<b style="color:var(--red)">없음 — 매일 자동 수집이 거절됩니다</b>'}
+      · AI 본부 브리핑 열쇠(HUB_TOKEN) ${d.hubToken?'<b style="color:var(--gr)">등록됨</b>':'<b style="color:var(--red)">없음</b>'}</span>
+      ${errs.length?`<div id="hub-errs" style="margin-top:8px;padding:10px 12px;border-radius:9px;background:var(--red-l);color:var(--red);font-weight:700">출처 오류 ${errs.length}곳<br>
+        ${errs.map(e=>`· ${esc(e.name||'—')} — ${esc(e.error||'')}`).join('<br>')}</div>`:(L&&L.at?'<div style="margin-top:6px;color:var(--gr);font-weight:700">출처 오류 없음</div>':'')}
+    </div></div>`;
+  /* ② 브리핑 */
+  const briefs=d.briefs||[];
+  const briefCard=`<div class="card" style="margin-bottom:14px" id="hub-briefs">
+    <div class="sec-h"><h3>오늘의 AI 브리핑</h3><span class="cnt">${briefs.length}</span>
+      <div class="r"><span class="dim" style="font-size:12px">AI 본부 초안은 [게시] 를 눌러야 고객에게 보입니다</span>
+      <button class="btn btn-o btn-sm" data-hubbrief="new">새 브리핑 쓰기</button></div></div>
+    <div class="sec-b"><table class="tbl mc"><tbody>${briefs.map(b=>`
+      <tr data-hubbrief="${esc(b.id)}"><td data-label="날짜" class="num">${esc(b.day)}</td>
+      <td data-label="제목" style="font-weight:700">${esc(b.title)}</td>
+      <td data-label="상태"><span class="tag ${b.status==='published'?'t-ok':'t-unv'}"><i></i>${b.status==='published'?'게시됨':'초안'}</span></td>
+      <td data-label="올린 곳" class="dim">${b.source==='ai_hq'?'AI 본부':'관리자'}${b.who?' · '+esc(b.who):''}</td>
+      <td data-label="동작" style="white-space:nowrap">${b.status==='published'
+        ?`<button class="btn btn-o btn-sm" data-hubunpub="${esc(b.id)}">내리기</button>`
+        :`<button class="btn btn-g btn-sm" data-hubpub="${esc(b.id)}">게시</button>`}</td></tr>`).join('')
+      ||'<tr><td class="dim" style="padding:16px">아직 브리핑이 없습니다 — AI 본부가 올리거나 [새 브리핑 쓰기] 로 직접 쓰실 수 있습니다</td></tr>'}</tbody></table></div></div>`;
+  /* ③ 글 */
+  const items=d.items||[];
+  const itemCard=`<div class="card" style="margin-bottom:14px" id="hub-items">
+    <div class="sec-h"><h3>모은 글</h3><span class="cnt">${items.length}</span></div>
+    <div class="recon-h" style="padding:12px 18px;border-bottom:1px solid var(--line2)">
+      <input id="hub-q" placeholder="제목 검색" value="${esc(HUB.q)}" style="flex:1;min-width:140px">
+      <select id="hub-kind" style="height:36px;border:1px solid var(--line);border-radius:8px">
+        <option value="" ${!HUB.kind?'selected':''}>전체</option><option value="news" ${HUB.kind==='news'?'selected':''}>뉴스</option><option value="youtube" ${HUB.kind==='youtube'?'selected':''}>유튜브</option></select>
+      <select id="hub-show" style="height:36px;border:1px solid var(--line);border-radius:8px">
+        <option value="" ${!HUB.show?'selected':''}>모두</option><option value="hidden" ${HUB.show==='hidden'?'selected':''}>숨긴 글</option><option value="pinned" ${HUB.show==='pinned'?'selected':''}>고정한 글</option></select>
+      <button class="btn btn-r btn-sm" id="hub-find">검색</button></div>
+    <div class="sec-b"><table class="tbl mc"><tbody>${items.map(it=>{const u=hubSafeUrl(it.url);return `
+      <tr data-hubitem="${esc(it.id)}"${it.hidden?' style="opacity:.55"':''}>
+      <td data-label="종류"><span class="tag ${it.kind==='youtube'?'t-down':'t-rent'}"><i></i>${it.kind==='youtube'?'유튜브':'뉴스'}</span>${it.pinned?' <span class="tag t-fix"><i></i>고정</span>':''}${it.hidden?' <span class="tag t-unv"><i></i>숨김</span>':''}</td>
+      <td data-label="제목" style="max-width:420px">${u?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="font-weight:700">${esc(it.title)}</a>`:esc(it.title)}</td>
+      <td data-label="출처" class="dim">${esc(srcName(it.source_id))}</td>
+      <td data-label="시각" class="dim num">${esc(hubWhen(it.published_at))}${it.kind==='youtube'&&it.score?' · 시간당 '+w(Math.round(it.score)):''}</td>
+      <td data-label="동작" style="white-space:nowrap">
+        <button class="btn btn-o btn-sm" data-hubhide="${esc(it.id)}" data-on="${it.hidden?'0':'1'}">${it.hidden?'보이기':'숨기기'}</button>
+        <button class="btn btn-o btn-sm" data-hubpin="${esc(it.id)}" data-on="${it.pinned?'0':'1'}">${it.pinned?'고정 풀기':'고정'}</button></td></tr>`}).join('')
+      ||'<tr><td class="dim" style="padding:16px">조건에 맞는 글이 없습니다</td></tr>'}</tbody></table></div></div>`;
+  /* ④ 출처 */
+  const srcs=d.sources||[];
+  const srcCard=`<div class="card" style="margin-bottom:14px" id="hub-sources">
+    <div class="sec-h"><h3>출처</h3><span class="cnt">${srcs.filter(s=>s.enabled).length} / ${srcs.length}</span>
+      <div class="r"><span class="dim" style="font-size:12px">공개 RSS · 유튜브 채널 RSS 만 씁니다 (유료 API 없음)</span></div></div>
+    <div class="sec-b"><table class="tbl mc"><tbody>${srcs.map(s=>`
+      <tr data-hubsrc="${esc(s.id)}"${s.enabled?'':' style="opacity:.55"'}><td data-label="이름" style="font-weight:700">${esc(s.name)}</td>
+      <td data-label="종류"><span class="tag ${s.kind==='youtube'?'t-down':'t-rent'}"><i></i>${s.kind==='youtube'?'유튜브':'RSS'}</span></td>
+      <td data-label="주소" class="dim" style="max-width:360px;word-break:break-all">${esc(s.url_or_channel_id)}</td>
+      <td data-label="분류" class="dim">${esc(s.topic||'')}</td>
+      <td data-label="켜기" style="white-space:nowrap"><button class="btn ${s.enabled?'btn-o':'btn-g'} btn-sm" data-hubsrctog="${esc(s.id)}" data-on="${s.enabled?'0':'1'}">${s.enabled?'끄기':'켜기'}</button></td></tr>`).join('')
+      ||'<tr><td class="dim" style="padding:16px">출처가 없습니다 — db/11 SQL 이 기본 출처를 넣습니다</td></tr>'}</tbody></table></div>
+    <div class="recon-h" style="padding:12px 18px;border-top:1px solid var(--line2)">
+      <select id="hs-kind" style="height:36px;border:1px solid var(--line);border-radius:8px"><option value="rss">RSS</option><option value="youtube">유튜브 채널</option></select>
+      <input id="hs-name" placeholder="이름" style="width:130px">
+      <input id="hs-target" placeholder="https://…rss 주소 또는 UC… 채널 번호" style="flex:1;min-width:180px">
+      <input id="hs-topic" placeholder="분류 (선택)" style="width:110px">
+      <button class="btn btn-r btn-sm" id="hs-add">출처 추가</button>
+      <span id="hs-msg" style="font-size:12.5px;color:var(--red);font-weight:700"></span></div></div>`;
+  return head+msg+collectCard+briefCard+itemCard+srcCard;
+}
+async function loadHub(){
+  if(!LIVE) return;
+  HUB.loading=true; route();
+  try{
+    const qs='&q='+encodeURIComponent(HUB.q)+'&kind='+encodeURIComponent(HUB.kind)+'&show='+encodeURIComponent(HUB.show);
+    const r=await fetch('/api/admin?do=hub'+qs,{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json().catch(()=>({}));
+    HUB.loading=false;
+    if(!r.ok){ HUB.err=d.error||('불러오지 못했습니다 ('+r.status+')'); }
+    else { HUB.data=d; HUB.err=''; }
+  }catch(e){ HUB.loading=false; HUB.err='서버에 연결하지 못했습니다'; }
+  if((location.hash||'').slice(1)==='hub') route();
+}
+async function hubPost(body){
+  try{
+    const r=await fetch('/api/admin?do=hub',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    return r.ok? {ok:true,d} : {ok:false,msg:d.error||('실패 ('+r.status+')'),d};
+  }catch(e){ return {ok:false,msg:'서버에 연결하지 못했습니다'}; }
+}
+/* 브리핑 쓰기 · 고치기 — 서랍(오른쪽 창)에서 합니다. 30초마다 화면을 다시 그려도 서랍은 그대로라 쓰던 글이 안 날아갑니다 */
+function openHubBrief(id){
+  const b=id==='new'?null:((HUB.data&&HUB.data.briefs)||[]).find(x=>String(x.id)===String(id));
+  if(id!=='new'&&!b) return;
+  const pub=b&&b.status==='published';
+  $('drawer').innerHTML=`
+  <div class="hd"><b>${b?'브리핑 '+esc(b.day):'새 브리핑 쓰기'}</b>${b?`<span class="tag ${pub?'t-ok':'t-unv'}"><i></i>${pub?'게시됨':'초안'}</span>`:''}
+    <button class="x" data-close>✕</button></div>
+  <div class="bd" id="hub-ed">
+    <p class="dim" style="font-size:12.5px;margin-bottom:12px">글자만 씁니다. 줄 맨 앞에 <b># </b> 를 쓰면 소제목, <b>- </b> 를 쓰면 목록으로 보입니다.
+      ${pub?'<br><b style="color:var(--red)">게시된 글입니다 — 저장하면 고객 화면에 바로 바뀌어 보입니다</b>':'<br>저장해도 초안입니다. 고객에게 보이려면 [게시] 를 눌러 주세요.'}</p>
+    <div class="kv">
+      ${b?'':`<span class="k">날짜</span><span class="v"><input id="hb-day" type="date" value="${esc(kstDay(Date.now()))}" style="height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px"></span>`}
+      <span class="k">제목</span><span class="v"><input id="hb-title" maxlength="120" value="${esc(b?b.title:'')}" style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;padding:0 10px"></span>
+    </div>
+    <textarea id="hb-body" style="width:100%;min-height:340px;border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;font-size:14px;line-height:1.7">${esc(b?b.body:'')}</textarea>
+    <div id="hb-msg" style="font-size:12.5px;color:var(--red);font-weight:700;min-height:18px;margin-top:6px"></div>
+  </div>
+  <div class="dracts">
+    <button class="btn btn-r" id="hb-save" data-id="${b?esc(b.id):''}">저장</button>
+    ${b?(pub?`<button class="btn btn-o" data-hubunpub="${esc(b.id)}">내리기</button>`:`<button class="btn btn-g" data-hubpub="${esc(b.id)}">게시</button>`):''}
+    <button class="btn btn-o" data-close>닫기</button>
+  </div>`;
+  $('drawer').classList.add('on');$('overlay').classList.add('on');
+}
+document.addEventListener('click',async e=>{
+  const t=e.target;
+  if(!t.closest) return;
+  if(t.closest('[data-hubreload]')){ HUB.err=''; HUB.msg=''; loadHub(); return; }
+  if(t.id==='hub-find'){ HUB.q=($('hub-q')||{}).value||''; loadHub(); return; }
+  if(t.id==='hub-collect'){
+    if(HUB.busy) return;
+    HUB.busy=true; HUB.msg=''; route();
+    const r=await hubPost({act:'collect'});
+    HUB.busy=false;
+    HUB.msg=r.ok? `수집 끝 — 저장 ${w(r.d.saved||0)}건 · 출처 오류 ${(r.d.errors||[]).length}곳` : r.msg;
+    await loadHub(); return;
+  }
+  const pubB=t.closest('[data-hubpub],[data-hubunpub]');
+  if(pubB){
+    const pub=pubB.hasAttribute('data-hubpub'), id=pubB.getAttribute(pub?'data-hubpub':'data-hubunpub');
+    if(!confirm(pub?'이 브리핑을 고객 화면(/hub)에 게시할까요?':'이 브리핑을 고객 화면에서 내릴까요? (초안으로 돌아갑니다)')) return;
+    const r=await hubPost({act:pub?'brief-publish':'brief-unpublish',id:Number(id)});
+    HUB.msg=r.ok?(pub?'게시했습니다 — 고객 화면에는 5분 안에 반영됩니다':'내렸습니다'):r.msg;
+    closeDrawer(); await loadHub(); return;
+  }
+  const hb=t.closest('[data-hubbrief]');
+  if(hb&&!t.closest('button:not([data-hubbrief])')&&!t.closest('a')){ openHubBrief(hb.getAttribute('data-hubbrief')); return; }
+  if(t.id==='hb-save'){
+    const id=t.dataset.id, title=$('hb-title').value, body=$('hb-body').value;
+    const r=await hubPost(id?{act:'brief-save',id:Number(id),title,body}:{act:'brief-save',day:$('hb-day').value,title,body});
+    if(!r.ok){ $('hb-msg').textContent=r.msg; return; }
+    HUB.msg='저장했습니다'; closeDrawer(); await loadHub(); return;
+  }
+  const hide=t.closest('[data-hubhide]'), pin=t.closest('[data-hubpin]');
+  if(hide||pin){
+    const b=hide||pin, on=b.dataset.on==='1';
+    const body={act:'item',id:Number(b.getAttribute(hide?'data-hubhide':'data-hubpin'))};
+    body[hide?'hidden':'pinned']=on;
+    const r=await hubPost(body);
+    HUB.msg=r.ok?'':r.msg; await loadHub(); return;
+  }
+  const tog=t.closest('[data-hubsrctog]');
+  if(tog){
+    const r=await hubPost({act:'source-toggle',id:Number(tog.getAttribute('data-hubsrctog')),enabled:tog.dataset.on==='1'});
+    HUB.msg=r.ok?'':r.msg; await loadHub(); return;
+  }
+  if(t.id==='hs-add'){
+    const r=await hubPost({act:'source-add',kind:$('hs-kind').value,name:$('hs-name').value,target:$('hs-target').value,topic:$('hs-topic').value});
+    /* 틀렸을 때는 화면을 다시 그리지 않고 안내만 — 적은 값이 그대로 남아 고쳐서 다시 누를 수 있게 */
+    if(!r.ok){ $('hs-msg').textContent=r.msg; return; }
+    HUB.msg='출처를 추가했습니다 — 다음 수집부터 모읍니다'; await loadHub(); return;
+  }
+});
+document.addEventListener('input',e=>{ if(e.target&&e.target.id==='hub-q') HUB.q=e.target.value; });
+document.addEventListener('change',e=>{
+  if(!e.target) return;
+  if(e.target.id==='hub-kind'){ HUB.kind=e.target.value; loadHub(); }
+  if(e.target.id==='hub-show'){ HUB.show=e.target.value; loadHub(); }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target&&e.target.id==='hub-q'){ HUB.q=e.target.value; loadHub(); } });
+
 /* 화면에서 PC 한 대를 찾습니다.
 
    ★ 2026-08-18 정환님 지적 — 여기서 엉뚱한 PC 가 잡히고 있었습니다.
@@ -1836,7 +2033,7 @@ function openManual(pn){
 }
 
 /* ═══════════════ 라우터 ═══════════════ */
-const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,members:vMembers,orders:vOrders,noti:vNoti,find:vFind,recon:vRecon,set:vSet};
+const VIEWS={dash:vDash,newpc:vNew,verify:vVerify,today:vToday,rack:vRack,pcs:vPcs,members:vMembers,orders:vOrders,noti:vNoti,find:vFind,recon:vRecon,hub:vHub,set:vSet};
 function route(){
   const v=(location.hash||'#dash').slice(1);
   const fn=VIEWS[v]||vDash;
@@ -1858,7 +2055,7 @@ function route(){
      예전에는 목업을 먼저 보여줘서 "가짜가 떴다가 사라지는" 것처럼 보였습니다. */
   if(!LIVE && (LOADING || LOAD_ERR)){
     $('main').innerHTML = LOADING
-      ? `<div class="top"><h1>${({dash:'대시보드',newpc:'미등록 PC',verify:'검증 대기',today:'오늘 할 일',rack:'랙맵',pcs:'PC 관리',members:'회원 관리',orders:'주문 · 고객',noti:'알림 발송',find:'통합검색',recon:'정산 · 대사',set:'설정'})[v]||'대시보드'}</h1></div>
+      ? `<div class="top"><h1>${({dash:'대시보드',newpc:'미등록 PC',verify:'검증 대기',today:'오늘 할 일',rack:'랙맵',pcs:'PC 관리',members:'회원 관리',orders:'주문 · 고객',noti:'알림 발송',find:'통합검색',recon:'정산 · 대사',hub:'AI 허브 관리',set:'설정'})[v]||'대시보드'}</h1></div>
          <div class="card" style="padding:60px 20px;text-align:center;color:var(--ink4)">
            <div style="font-size:17px;font-weight:800;color:var(--ink2);margin-bottom:8px">불러오는 중입니다</div>
            서버에서 PC 목록을 받아오고 있습니다.</div>`

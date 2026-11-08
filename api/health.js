@@ -12,6 +12,8 @@
 const { ready, sb } = require('./_supa');
 /* 관리자가 몇 명 등록됐는지만 셉니다 (비밀번호는 읽어 오지 않습니다) — 2026-11-08 관리자별 비밀번호 */
 const { adminCount } = require('./admin-login');
+/* AI 허브 마지막 수집 결과 (settings 표의 hub_last_collect) — 2026-11-08 */
+const { lastCollect } = require('./_hub');
 
 const mask = v => (v ? '등록됨' : null);
 
@@ -104,6 +106,13 @@ module.exports = async (req, res) => {
       : (env.ALIGO_KEY || env.ALIGO_USER_ID || env.ALIGO_SENDER)
         ? '⚠️ 일부만 등록됨 — ALIGO_KEY · ALIGO_USER_ID · ALIGO_SENDER 셋 다 필요합니다'
         : '⚠️ 미등록 — 접속정보 문자·만료 안내가 나가지 않습니다',
+    /* AI 허브 (2026-11-08) — 있다/없다만 보여 줍니다. 값·길이는 절대 내보내지 않습니다 */
+    'AI 허브 매일 수집 (CRON_SECRET)': process.env.CRON_SECRET
+      ? '✅ 등록됨 — Vercel 크론이 매일 아침 6시(한국)에 뉴스·유튜브를 모읍니다'
+      : '⚠️ 미등록 — 매일 자동 수집이 거절됩니다 (관리자 화면 [지금 수집] 은 됩니다)',
+    'AI 허브 브리핑 올리기 (HUB_TOKEN)': process.env.HUB_TOKEN
+      ? '✅ 등록됨 — AI 본부가 초안을 올릴 수 있습니다 (게시는 관리자만)'
+      : '⚠️ 미등록 — AI 본부 브리핑 초안을 받을 수 없습니다',
   };
 
   const 데이터베이스 = {};
@@ -145,6 +154,24 @@ module.exports = async (req, res) => {
     }
   }
 
+  /* AI 허브 표 3개 · 마지막 수집 시각 (2026-11-08) — 위 6개 표와 따로 셉니다 (db/11 은 나중에 돌려도 됨) */
+  const AI허브 = {};
+  if (ready()) {
+    let 있음 = 0;
+    for (const t of ['hub_sources', 'hub_items', 'hub_briefs']) {
+      try { await sb(t, { query: '?select=*&limit=0' }); AI허브[t] = '✅ 있음'; 있음++; }
+      catch (e) {
+        const m = String(e.message || e);
+        AI허브[t] = /does not exist|PGRST205|42P01/.test(m) ? '❌ 없음 — db/11-AI허브.sql 을 실행해 주세요' : '❌ ' + m.slice(0, 120);
+      }
+    }
+    AI허브.상태 = 있음 === 3 ? '✅ 표 3개 모두 있음' : '⚠️ 표 ' + 있음 + '/3 — db/11-AI허브.sql 을 실행해 주세요';
+    const last = 있음 === 3 ? await lastCollect() : null;
+    AI허브['마지막 수집'] = last && last.at
+      ? new Date(last.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' · 저장 ' + (last.saved || 0) + '건 · 출처 오류 ' + ((last.errors || []).length) + '곳'
+      : '아직 없음';
+  } else AI허브.상태 = '❌ 데이터베이스 연결 전';
+
   const 다음할일 = [];
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) 다음할일.push('Vercel 환경변수에 SUPABASE_URL / SUPABASE_SERVICE_KEY 등록 후 Redeploy');
   if (ready() && 데이터베이스.상태 && 데이터베이스.상태.startsWith('⚠️')) 다음할일.push('Supabase SQL Editor 에서 db/schema.sql 실행');
@@ -158,6 +185,7 @@ module.exports = async (req, res) => {
     확인시각: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
     환경변수,
     데이터베이스,
+    AI허브,
     다음할일,
   });
 };

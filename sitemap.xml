@@ -11,6 +11,13 @@
   </url>
 
   <url>
+    <loc>https://idckorea-dusky.vercel.app/hub</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
     <loc>https://idckorea-dusky.vercel.app/ai</loc>
     <lastmod>2026-11-07</lastmod>
     <changefreq>weekly</changefreq>

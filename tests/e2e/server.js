@@ -6,6 +6,7 @@
      · 토스      → fetch 를 가로채서 가짜 토스가 답합니다
      · 카카오·네이버 → fetch 를 가로채서 가짜 카카오·네이버가 답합니다 (2026-11-08)
      · 구글 tokeninfo → 가짜 구글이 답합니다 (시험이 넣어 둔 ID 토큰만 통과)
+     · AI 허브 RSS · 유튜브 피드 → 시험이 넣어 둔 가짜 피드 글자로 답합니다 (2026-11-08)
      · 알리고·그 밖의 바깥 주소 → 전부 막고 기록만 남깁니다
    ★ 여기 적힌 열쇠·비밀번호는 전부 시험용 가짜 값입니다 (진짜 값과 무관).
 
@@ -27,10 +28,12 @@ const TEST = {
   ADMIN_PW: 'e2e-test-admin-password-long-2026',     // 시험용 관리자 비밀번호 (가짜)
   SECRET: 'e2e-test-dummy-secret-0123456789abcdef',    // 시험용 서명 열쇠 (가짜)
   FIELD_PW: 'e2e-test-field-password-long-2026',      // 시험용 두 번째 관리자 '현장' 비밀번호 (가짜)
+  CRON: 'e2e-test-cron-secret-0123456789',            // 시험용 Vercel 크론 열쇠 (가짜 · AI 허브 수집)
+  HUB: 'e2e-test-hub-token-0123456789abcd',           // 시험용 AI 본부 브리핑 열쇠 (가짜)
 };
 for (const k of ['KAKAO_JS_KEY', 'KAKAO_REST_KEY', 'KAKAO_APP_ID', 'KAKAO_CLIENT_SECRET',
   'NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET', 'GOOGLE_CLIENT_ID', 'TOSS_CLIENT_KEY', 'ALIGO_KEY', 'ALIGO_USER_ID',
-  'ALIGO_SENDER', 'KVC_ADMIN_SECRET', 'KVC_ASSIGN_FRESH_SEC', 'SUPABASE_PUBLISHABLE_KEY']) delete process.env[k];
+  'ALIGO_SENDER', 'KVC_ADMIN_SECRET', 'KVC_ASSIGN_FRESH_SEC', 'SUPABASE_PUBLISHABLE_KEY', 'CRON_SECRET', 'HUB_TOKEN']) delete process.env[k];
 Object.assign(process.env, {
   SUPABASE_URL: `http://127.0.0.1:${DB_PORT}`,
   SUPABASE_SERVICE_KEY: 'test-dummy',
@@ -42,6 +45,8 @@ Object.assign(process.env, {
   KVC_SETUP_KEY: 'test-dummy-setup-key',
   TOSS_SECRET_KEY: 'test_sk_e2e_dummy_not_real',
   KVC_TEST_PAY: '1',   // 시험 결제 열기 (운영에서는 실결제 키가 없으면 결제가 닫힙니다)
+  CRON_SECRET: TEST.CRON,
+  HUB_TOKEN: TEST.HUB,
 });
 
 const fakeDb = require('./fake-supabase');
@@ -205,6 +210,18 @@ async function fakeGoogle(url) {
   return tossJson(200, Object.assign({ exp: String(Math.floor(Date.now() / 1000) + 3600) }, t));
 }
 
+/* ═══ 가짜 RSS · 유튜브 피드 (AI 허브 · 2026-11-08) ═══════════════════
+   시험이 feeds.byUrl['https://…'] = { status, body } 를 넣어 두면 그 주소만 그 글자로 답합니다.
+   넣지 않은 피드 주소는 진짜로 나가지 않고 아래 '바깥 주소 막기' 에 걸립니다.
+   feeds.calls 에 서버가 부른 피드 주소가 쌓입니다 (꺼 둔 출처를 부르지 않는지 확인용). */
+const feeds = { byUrl: {}, calls: [] };
+async function fakeFeed(url) {
+  feeds.calls.push(url);
+  const f = feeds.byUrl[url];
+  if (f.delayMs) await new Promise(r => setTimeout(r, f.delayMs));
+  return new Response(f.body || '', { status: f.status || 200, headers: { 'Content-Type': f.type || 'application/xml; charset=utf-8' } });
+}
+
 /* ═══ 바깥 주소 막기 ═══════════════════════════════════════════════
    api 함수들이 부르는 fetch 를 가로챕니다. 내 컴퓨터(127.0.0.1)만 그대로 보내고,
    토스는 가짜로, 나머지(카카오·구글·알리고 등)는 막고 기록합니다. */
@@ -218,6 +235,7 @@ globalThis.fetch = async (url, opt) => {
   if (u.hostname === 'kauth.kakao.com' || u.hostname === 'kapi.kakao.com') return fakeKakao(s, opt);
   if (u.hostname === 'nid.naver.com' || u.hostname === 'openapi.naver.com') return fakeNaver(s, opt);
   if (u.hostname === 'oauth2.googleapis.com') return fakeGoogle(s);
+  if (Object.prototype.hasOwnProperty.call(feeds.byUrl, s)) return fakeFeed(s);
   blocked.push(u.hostname + u.pathname);
   throw new Error('시험 중에는 바깥 주소를 부르지 않습니다: ' + u.hostname);
 };
@@ -238,6 +256,7 @@ function vercelify(req, res, rawBody) {
   }
   res.status = code => { res.statusCode = code; return res; };
   res.json = obj => {
+    if (res.statusCode >= 500) res.__err = JSON.stringify(obj).slice(0, 200);   // 500 일 때 무슨 오류였는지 Z1 에 보여 주려고
     if (!res.getHeader('Content-Type')) res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify(obj));
     return res;
@@ -300,7 +319,7 @@ async function serveApi(req, res, u, rawBody) {
   const fn = require(file);
   try {
     await fn(req, res);
-    apiLog.push({ m: req.method, url: req.url, st: res.statusCode });
+    apiLog.push({ m: req.method, url: req.url, st: res.statusCode, body: res.__err });
   } catch (e) {
     apiLog.push({ m: req.method, url: req.url, st: 500, err: String(e && e.stack || e) });
     if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'text/plain' }); }
@@ -331,7 +350,7 @@ async function start() {
   };
 }
 
-module.exports = { start, fakeDb, toss, kakao, naver, google, blocked, apiLog, TEST, ROOT, WEB_PORT };
+module.exports = { start, fakeDb, toss, kakao, naver, google, feeds, blocked, apiLog, TEST, ROOT, WEB_PORT };
 
 if (require.main === module) {
   start().then(s => {

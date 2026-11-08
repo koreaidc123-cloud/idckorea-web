@@ -18,6 +18,7 @@
      POST /api/admin?do=order-action        연장 · 해지환불 · 이전 · 세금계산서 · 직접 송금 완료(refund-done)
      GET  /api/admin?do=log&pn=&q=&days=    변경 · 열람 · 로그인 기록 (읽기만)
      GET  /api/admin?do=recon&from=&to=     토스 거래내역 ↔ 주문 대조 (읽기만 · 최대 31일)
+     GET·POST /api/admin?do=hub             AI 허브 관리 (자세한 것은 _admin-hub.js 맨 위)
 
    ※ 각 기능 파일이 스스로 관리자 출입증을 확인합니다.
       여기서는 넘기기만 합니다.
@@ -34,6 +35,7 @@ const HANDLERS = {
   'settings':     require('./_admin-settings'),
   'log':          require('./_admin-log'),          // 관리자 기록 보기 (2026-11-08)
   'recon':        require('./_admin-recon'),        // 토스 ↔ 주문 대사 · 읽기 전용 (2026-11-08)
+  'hub':          require('./_admin-hub'),          // AI 허브 관리 — 수집 · 글 숨김/고정 · 출처 · 브리핑 게시 (2026-11-08)
 };
 
 module.exports = async (req, res) => {

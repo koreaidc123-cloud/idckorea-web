@@ -31,7 +31,16 @@ const COLS = {
         'refund_why', 'created_at'],
   view_log: ['id', 'pn', 'act', 'who', 'at'],
   settings: ['k', 'v'],
+  /* AI 허브 (db/11-AI허브.sql · 2026-11-08) — setHub(false) 면 '아직 안 돌린 Supabase' 처럼 표가 없습니다 */
+  hub_sources: ['id', 'kind', 'name', 'url_or_channel_id', 'topic', 'enabled', 'created_at'],
+  hub_items: ['id', 'source_id', 'kind', 'title', 'url', 'summary', 'thumb', 'published_at', 'views', 'score', 'hidden', 'pinned', 'created_at'],
+  hub_briefs: ['id', 'day', 'title', 'body', 'status', 'source', 'created_at', 'published_at', 'who'],
 };
+let hubOn = true;
+/* db/11 의 unique · check 제약 (겹치면 23505 · 값이 틀리면 23514) */
+const HUB_UNIQ = { hub_sources: 'url_or_channel_id', hub_items: 'url', hub_briefs: 'day' };
+const HUB_CHECK = { hub_sources: r => ['rss', 'youtube'].includes(r.kind), hub_items: r => ['news', 'youtube'].includes(r.kind) && (r.summary == null || r.summary.length <= 200) && !!r.title && !!r.url,
+  hub_briefs: r => ['draft', 'published'].includes(r.status) && ['ai_hq', 'admin'].includes(r.source) && /^\d{4}-\d{2}-\d{2}$/.test(String(r.day)) && !!r.title && !!r.body };
 /* db/08-반납초기화.sql 을 돌리면 생기는 칸 — v08 이 false 면 "아직 안 돌린 Supabase" 처럼
    이 칸들이 없고, 만료 정리도 예전(07) 방식으로 돕니다. 대표님이 SQL 을 돌리기 전에도
    코드가 멈추지 않는지 시험하려고 둘 다 흉내 냅니다. */
@@ -48,7 +57,8 @@ const colsOf = t => {
   if (v10 && V10[t]) c = c.concat(V10[t]);
   return c;
 };
-const PK = { pcs: 'pn', pcs_unregistered: 'hw_id', members: 'id', orders: 'order_id', view_log: 'id', settings: 'k' };
+const PK = { pcs: 'pn', pcs_unregistered: 'hw_id', members: 'id', orders: 'order_id', view_log: 'id', settings: 'k',
+  hub_sources: 'id', hub_items: 'id', hub_briefs: 'id' };
 
 /* 다른 표를 붙여 읽기 (select=*,pcs(pn,anydesk) 같은 것) — 외래키 방향 */
 const EMBED = {
@@ -58,7 +68,7 @@ const EMBED = {
   },
 };
 
-let seqLog = 1;
+let seqLog = 1, seqHub = 1;
 function defaults(table) {
   const now = new Date().toISOString();
   switch (table) {
@@ -68,6 +78,9 @@ function defaults(table) {
     case 'orders': return Object.assign({ status: 'ready', setup_fee: 5000, tax_invoice: false, created_at: now },
       v10 ? { kind: 'new' } : {});
     case 'view_log': return { id: seqLog++, at: now };
+    case 'hub_sources': return { id: seqHub++, enabled: true, created_at: now };
+    case 'hub_items': return { id: seqHub++, score: 0, hidden: false, pinned: false, created_at: now };
+    case 'hub_briefs': return { id: seqHub++, status: 'draft', source: 'admin', created_at: now };
     default: return {};
   }
 }
@@ -257,6 +270,12 @@ function checkRow(table, row, self) {
         throw new PgErr(409, '23505', 'duplicate key value violates unique constraint "orders_ext_req_uq"');
       }
     }
+  }
+  if (HUB_UNIQ[table] && others.some(r => r[HUB_UNIQ[table]] === row[HUB_UNIQ[table]])) {
+    throw new PgErr(409, '23505', 'duplicate key value violates unique constraint "' + table + '_' + HUB_UNIQ[table] + '_key"');
+  }
+  if (HUB_CHECK[table] && !HUB_CHECK[table](row)) {
+    throw new PgErr(400, '23514', 'new row for relation "' + table + '" violates check constraint');
   }
   if (table === 'pcs' && row.room && !['K', 'Y', 'D'].includes(row.room)) {
     throw new PgErr(400, '23514', 'new row for relation "pcs" violates check constraint "pcs_room_check"');
@@ -494,6 +513,7 @@ function handle(method, path, qs, headers, body) {
   }
   const table = name;
   if (!COLS[table]) throw new PgErr(404, '42P01', `relation "public.${table}" does not exist`);
+  if (!hubOn && /^hub_/.test(table)) throw new PgErr(404, 'PGRST205', `Could not find the table 'public.${table}' in the schema cache`);
   const prefer = String(headers.prefer || '');
   const wantRows = /return=representation/.test(prefer);
   const q = parseQuery(table, qs);
@@ -584,7 +604,9 @@ function start(port) {
 module.exports = {
   start,
   get db() { return DB; },
-  reset() { DB = makeDb(); calls.length = 0; v08 = true; v10 = false; },
+  reset() { DB = makeDb(); calls.length = 0; v08 = true; v10 = false; hubOn = true; seqHub = 1; },
+  /* false = db/11-AI허브.sql 을 아직 안 돌린 Supabase (hub_* 표 없음) */
+  setHub(on) { hubOn = !!on; },
   /* false = db/08 SQL 을 아직 안 돌린 Supabase 흉내 (새 칸 없음 · 옛 만료 정리) */
   setV08(on) { v08 = !!on; },
   get v08() { return v08; },
