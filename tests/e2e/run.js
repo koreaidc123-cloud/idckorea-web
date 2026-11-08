@@ -1891,6 +1891,41 @@ async function main() {
     ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
     await ctx.close();
   });
+  /* 구글 공식 버튼 (Codex T-0207) — 가짜 구글 SDK 로 renderButton 이 불리는지만 봅니다.
+     로그인까지 누르면 서버가 진짜 구글(tokeninfo)에 물어야 하므로 여기서는 누르지 않습니다. */
+  const FAKE_GSI = `window.__gCalls={init:0,render:[],prompt:0};
+    window.google={accounts:{id:{initialize:function(o){__gCalls.init++;__gCalls.cid=o.client_id;__gCalls.hasCb=typeof o.callback==='function'},
+      renderButton:function(el,opt){__gCalls.render.push(opt);el.innerHTML='<div class="fake-gbtn" style="height:40px;width:240px;border:1px solid #ccc">Google 계정으로 계속</div>'},
+      prompt:function(){__gCalls.prompt++}}}};
+    if(typeof window.onGoogleLibraryLoad==='function') window.onGoogleLibraryLoad();`;
+  await scenario('GG1', '구글 — 키가 있으면 공식 버튼을 처음부터 그림 (로그인·가입 두 칸) · 자동 창은 안 띄움 · 키 없으면 숨김', async () => {
+    const GID = 'e2e-fake-client.apps.googleusercontent.com';
+    process.env.GOOGLE_CLIENT_ID = GID;
+    try {
+      const ctx = await newContext();
+      await ctx.route('https://accounts.google.com/gsi/client**', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_GSI }));
+      const p = await openPage(ctx, '/login');
+      await p.waitForSelector('.gbtn[data-gbtn="in"] .fake-gbtn', { state: 'visible', timeout: 8000 });
+      ok(!(await p.isVisible('[data-go="google"]')), '공식 버튼이 있는데 우리 구글 버튼도 보임');
+      const g = await p.evaluate(() => window.__gCalls);
+      ok(g.init === 1 && g.cid === GID && g.hasCb, '초기화 ' + JSON.stringify(g));
+      ok(g.render.length === 2 && g.render.every(o => o.locale === 'ko' && o.theme === 'outline' && o.size === 'large'), '공식 버튼 설정 ' + JSON.stringify(g.render));
+      ok(g.prompt === 0, '자동 창(원탭)을 스스로 띄움');
+      await p.click('.tabs button[data-t="up"]');
+      ok(await p.isVisible('.gbtn[data-gbtn="up"] .fake-gbtn'), '회원가입 칸에 공식 버튼 없음');
+      ok(!p.errors.length, '콘솔 오류 ' + p.errors.join(' | '));
+      await ctx.close();
+      /* 키가 없으면 공식 버튼도, 우리 버튼도 안 보입니다 */
+      delete process.env.GOOGLE_CLIENT_ID;
+      const ctx2 = await newContext();
+      await ctx2.route('https://accounts.google.com/gsi/client**', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_GSI }));
+      const p2 = await openPage(ctx2, '/login');
+      await sleep(300);
+      ok(!(await p2.isVisible('.gbtn')) && !(await p2.isVisible('[data-go="google"]')), '키 없는데 구글 버튼이 보임');
+      ok((await p2.evaluate(() => window.__gCalls.render.length)) === 0, '키 없는데 공식 버튼을 그림');
+      await ctx2.close();
+    } finally { delete process.env.GOOGLE_CLIENT_ID; }
+  });
   for (const k of Object.keys(SOCIAL_ENV)) delete process.env[k];   // 뒤 시험은 예전처럼 (키 없음)
 
   /* ══════════ 마무리 확인 ══════════ */
