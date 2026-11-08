@@ -211,3 +211,4 @@
 @media (prefers-reduced-motion:reduce){.cc-img{animation:none}}
 @media (max-width:900px){.cc-cards{row-gap:96px}.cc-img{height:140px;top:-62px}.cc-card.on .cc-img{height:156px;top:-72px}}
 .cc-leg{flex-wrap:wrap;gap:8px 18px}.cc-leg span{white-space:nowrap}
+.ai-box a{color:var(--blue,#1d4ed8);font-weight:700;text-decoration:underline;text-underline-offset:3px}
