@@ -2049,6 +2049,9 @@ async function main() {
     hub.parseFeed('<feed>' + '<entry><title a="'.repeat(60000), 'youtube');
     hub.plain('<a'.repeat(200000) + '<script'.repeat(20000));
     ok(Date.now() - t0 < 1500, '깨진 피드 처리가 느림 ' + (Date.now() - t0) + 'ms');
+    /* Codex T-0225 — İ(소문자로 바꾸면 길이가 늘어나는 글자) · </titleExtra> 같은 가짜 닫는 태그 · 대문자 닫는 태그 · <item/> */
+    const edge = hub.parseFeed('<rss><item><title>İstanbul İİ 소식</TITLE ><link>https://e.e2e.test/1</link><description>a </itemExtra> b</description></item><item/><ITEM><title>둘째</title><link>https://e.e2e.test/2</link></ITEM></rss>', 'rss');
+    ok(edge.length === 2 && edge[0].title === 'İstanbul İİ 소식' && edge[0].url === 'https://e.e2e.test/1' && edge[1].url === 'https://e.e2e.test/2', '경계 경우 ' + JSON.stringify(edge.map(x => [x.title, x.url])));
     const big = 'https://big.e2e.test/rss.xml';
     srv.feeds.byUrl[big] = { body: '<rss><channel>' + 'a'.repeat(2.2 * 1024 * 1024) + '</channel></rss>' };
     for (let i = 0; i < 60; i++) {
@@ -2057,13 +2060,17 @@ async function main() {
       db().hub_sources.push({ id: 9200 + i, kind: 'rss', name: '아주 긴 이름의 고장난 출처 번호 ' + i + ' '.repeat(10) + 'ㅁ'.repeat(30), url_or_channel_id: u, topic: null, enabled: true, created_at: iso(Date.now()) });
     }
     db().hub_sources.push({ id: 9199, kind: 'rss', name: '큰 피드', url_or_channel_id: big, topic: null, enabled: true, created_at: iso(Date.now()) });
+    /* Codex T-0225 — 공개 이름인데 DNS 가 내부 주소면 받지 않음 */
+    srv.feeds.byUrl['https://internal.e2e.test/rss.xml'] = { body: '<rss></rss>' };
+    db().hub_sources.push({ id: 9198, kind: 'rss', name: '내부망 출처', url_or_channel_id: 'https://internal.e2e.test/rss.xml', topic: null, enabled: true, created_at: iso(Date.now()) });
     try {
       const r3 = await hubGet('/api/hub?do=collect', cronH);
-      ok(r3.status === 200 && r3.d.errorCount === 62, '오류 개수 ' + (r3.d && r3.d.errorCount));
+      ok(r3.status === 200 && r3.d.errorCount === 63, '오류 개수 ' + (r3.d && r3.d.errorCount));
+      ok(r3.d.errors.some(e => e.name === '내부망 출처' && /내부망/.test(e.error)) && !srv.feeds.calls.includes('https://internal.e2e.test/rss.xml'), '내부망 출처를 부름');
       ok(r3.d.errors.some(e => e.name === '큰 피드' && /너무 큽니다/.test(e.error)), '큰 피드를 안 끊음 ' + JSON.stringify(r3.d.errors.find(e => e.name === '큰 피드')));
       const lv = db().settings.find(s => s.k === 'hub_last_collect').v;
       let parsed = null; try { parsed = JSON.parse(lv); } catch (e) {}
-      ok(parsed && parsed.errorCount === 62 && parsed.errors.length <= 30, '마지막 수집 기록이 깨짐 (' + lv.length + '자)');
+      ok(parsed && parsed.errorCount === 63 && parsed.errors.length <= 30, '마지막 수집 기록이 깨짐 (' + lv.length + '자)');
     } finally {
       db().hub_sources = db().hub_sources.filter(s => s.id < 9100);
       delete srv.feeds.byUrl[big];

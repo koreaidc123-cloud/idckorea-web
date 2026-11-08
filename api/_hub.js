@@ -15,6 +15,7 @@
      유튜브는 공개 채널 RSS (https://www.youtube.com/feeds/videos.xml?channel_id=…) 만 읽습니다.
      API 키가 필요 없고, 피드에 들어 있는 조회수(media:statistics)를 그대로 씁니다.
    ═══════════════════════════════════════════════════════════════ */
+const dns = require('dns');
 const { ready, sb } = require('./_supa');
 
 const MAX_BYTES = 2 * 1024 * 1024;   // 피드 하나 최대 크기
@@ -81,6 +82,21 @@ function parseDate(s) {
 
 /* ── 작은 XML 읽기 ─────────────────────────────────────────── */
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/* ★ Codex T-0225: toLowerCase() 는 İ 같은 글자를 두 칸으로 늘려 위치가 어긋납니다 → 영문 대문자만 바꿉니다 (길이 그대로) */
+const asciiLow = s => s.replace(/[A-Z]+/g, c => c.toLowerCase());
+/* 닫는 태그 </name> 찾기 — 이름 바로 뒤가 > 나 공백이어야 진짜 닫는 태그입니다 (</titleExtra> 같은 것은 건너뜀) */
+function findClose(low, name, from) {
+  const key = '</' + name;
+  let i = from;
+  for (;;) {
+    i = low.indexOf(key, i);
+    if (i < 0) return -1;
+    let j = i + key.length;
+    while (j < low.length && /\s/.test(low[j])) j++;
+    if (low[j] === '>') return i;
+    i += key.length;
+  }
+}
 /* <tag ...>값</tag> 의 값 (처음 하나) */
 /* ★ Codex T-0222: 닫는 태그가 없는 글자가 반복되면 정규식이 같은 곳을 몇 번이고 다시 훑어 느려집니다.
    여는 태그는 [^<>]* (다음 < 에서 멈춤)로 찾고, 닫는 태그는 indexOf 로 한 번만 찾습니다. */
@@ -88,7 +104,7 @@ function tagText(block, tag) {
   const m = new RegExp('<' + reEsc(tag) + '(?:\\s[^<>]*)?>', 'i').exec(block);
   if (!m) return '';
   const start = m.index + m[0].length;
-  const end = block.toLowerCase().indexOf('</' + tag.toLowerCase(), start);
+  const end = findClose(asciiLow(block), tag.toLowerCase(), start);
   return end < 0 ? '' : block.slice(start, end);
 }
 /* <tag ... attr="값"> 의 값 (처음 하나 · 조건 attrs 가 맞는 것) */
@@ -112,13 +128,14 @@ function parseFeed(xml, kind) {
   const seen = new Set();
   /* 글 묶음(<item>…</item> · <entry>…</entry>)을 앞에서부터 한 번만 훑습니다.
      닫는 태그가 없으면 거기서 멈춥니다 (깨진 피드에서 같은 곳을 다시 훑지 않게 · Codex T-0222) */
-  const low = text.toLowerCase();
+  const low = asciiLow(text);
   const open = /<(item|entry)(?=[\s>/])[^<>]*>/g;
   let m;
   while (out.length < MAX_PER_FEED && (m = open.exec(low))) {
     const name = m[1];
     const from = m.index + m[0].length;
-    const close = low.indexOf('</' + name, from);
+    if (/\/>$/.test(m[0])) continue;               // <item/> 처럼 빈 묶음
+    const close = findClose(low, name, from);
     if (close < 0) break;
     open.lastIndex = close + name.length + 2;
     if (close - from > MAX_ITEM) continue;          // 글 하나가 너무 크면 건너뜀
@@ -193,10 +210,37 @@ function feedUrlOf(src) {
 }
 
 /* ── 피드 받기 (시간 제한 · 크기 제한 · 다른 곳으로 넘기면 거절) ── */
+/* ── 내부망 주소 막기 (Codex T-0225) ─────────────────────────────
+   이름만 봐서는 "공개 도메인인데 내부 IP 로 가리키는" 경우를 못 막습니다.
+   받기 직전에 DNS 로 실제 주소를 모두 확인해, 하나라도 내부·내 컴퓨터 주소면 받지 않습니다.
+   ※ 확인과 실제 연결 사이에 DNS 답이 바뀌는 공격(DNS 재바인딩)까지는 막지 못합니다.
+     출처는 관리자만 추가할 수 있어 위험은 낮습니다 (남은 위험으로 기록). */
+function privateIp(ip) {
+  let s = String(ip || '').toLowerCase();
+  const mapped = s.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) s = mapped[1];
+  const v4 = s.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = +v4[1], b = +v4[2], c = +v4[3];
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && c === 0) ||
+      (a === 198 && (b === 18 || b === 19));
+  }
+  if (s === '::' || s === '::1') return true;
+  return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(s);
+}
+let lookupAll = h => dns.promises.lookup(h, { all: true, verbatim: true });
+async function assertPublicHost(host) {
+  let addrs;
+  try { addrs = await lookupAll(host); } catch (e) { throw new Error('주소를 찾을 수 없습니다'); }
+  if (!addrs || !addrs.length || addrs.some(a => privateIp(a.address))) throw new Error('내부망 주소로 연결되는 출처라 받지 않습니다');
+}
+
 async function fetchFeed(url) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
+    await assertPublicHost(new URL(url).hostname);
     let r = await fetch(url, {
       signal: ctl.signal, redirect: 'manual',
       headers: { 'User-Agent': 'KVC-Hub/1.0 (+https://idckorea-dusky.vercel.app/hub)', Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5' },
@@ -207,6 +251,7 @@ async function fetchFeed(url) {
       let next = '';
       try { next = new URL(loc, url).toString(); } catch (e) {}
       if (!feedUrlOf({ kind: 'rss', url_or_channel_id: next })) throw new Error('다른 주소로 넘김 (따라가지 않음)');
+      await assertPublicHost(new URL(next).hostname);
       r = await fetch(next, { signal: ctl.signal, redirect: 'manual', headers: { 'User-Agent': 'KVC-Hub/1.0' } });
     }
     if (!r.ok) throw new Error('응답 ' + r.status);
@@ -226,7 +271,8 @@ async function fetchFeed(url) {
         parts.push(Buffer.from(value));
       }
       text = Buffer.concat(parts).toString('utf8');
-    } else text = await r.text();
+    } else if (!r.body) text = '';
+    else throw new Error('응답을 나눠 읽을 수 없어 받지 않았습니다');   // 크기를 셀 수 없으면 받지 않습니다 (Codex T-0225)
     if (!/<(rss|feed|rdf:RDF)\b/i.test(text.slice(0, 4000))) throw new Error('RSS 가 아닙니다');
     return text;
   } catch (e) {
@@ -290,13 +336,17 @@ async function collect(by) {
   const cutoff = now - KEEP_DAYS * 86400000;
   const fresh = rows.filter(r => !r.published_at || Date.parse(r.published_at) >= cutoff);
   let saved = 0;
+  /* 저장이 중간에 실패해도 멈추지 않고 오류로 남깁니다 — 마지막 수집 기록은 꼭 남도록 (Codex T-0225).
+     다음 수집 때 같은 주소는 덮어쓰므로 다시 돌려도 겹치지 않습니다. */
   for (let i = 0; i < fresh.length; i += 200) {
     const chunk = fresh.slice(i, i + 200);
-    await sb('hub_items', {
-      method: 'POST', query: '?on_conflict=url', body: chunk,
-      prefer: 'resolution=merge-duplicates,return=minimal',
-    });
-    saved += chunk.length;
+    try {
+      await sb('hub_items', {
+        method: 'POST', query: '?on_conflict=url', body: chunk,
+        prefer: 'resolution=merge-duplicates,return=minimal',
+      });
+      saved += chunk.length;
+    } catch (e) { errors.push({ id: null, name: '저장', error: String((e && e.message) || e).slice(0, 120) }); }
   }
 
   /* 정리 — 30일 지난 글 (고정 제외) */
@@ -346,6 +396,8 @@ function cleanBody(s, max = 20000) {
 const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 
 module.exports = {
+  /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
+  __setLookup(fn) { lookupAll = fn; }, privateIp,
   parseFeed, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

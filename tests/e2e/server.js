@@ -50,6 +50,8 @@ Object.assign(process.env, {
 });
 
 const fakeDb = require('./fake-supabase');
+/* AI 허브의 DNS 확인(내부망 막기)도 가짜로 — 진짜 DNS 를 묻지 않습니다. internal.e2e.test 만 내부 주소로 답합니다 */
+require('../../api/_hub').__setLookup(async h => (h === 'internal.e2e.test' ? [{ address: '10.0.0.5', family: 4 }] : [{ address: '203.0.113.10', family: 4 }]));
 
 /* ═══ 가짜 토스 ═══════════════════════════════════════════════════ */
 const toss = {
