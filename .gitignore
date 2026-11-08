@@ -9,3 +9,5 @@ agent/kvc-config.local.json
 # E2E 시험 도구 — 설치물과 결과 파일은 올리지 않습니다 (npm --prefix tests/e2e install 로 다시 받음)
 tests/e2e/node_modules/
 tests/e2e/result.json
+tests/sql/node_modules/
+tests/sql/package-lock.json
