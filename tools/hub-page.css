@@ -156,3 +156,38 @@
 }
 @media(max-width:380px){.hb-yt{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.hb-nc,.hb-jump a{transition:none}}
+
+/* ── 주간 AI 뉴스 (2026-11-09) — 사진 카드 · 주 선택 ── */
+.hb-weeks{display:flex;gap:10px;margin:-18px 0 22px;flex-wrap:wrap}
+.hb-weeks .wk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 16px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer;font:inherit;color:var(--ink3);transition:all .2s}
+.hb-weeks .wk b{font-size:15px;color:var(--ink)}
+.hb-weeks .wk span{font-size:12.5px}
+.hb-weeks .wk.on{background:var(--navy,#0B1736);border-color:transparent;color:#B8C6E8}
+.hb-weeks .wk.on b{color:#fff}
+.hb-nc{padding:0;overflow:hidden;gap:0}
+.hb-nc .th{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#0B1736,#2E5BFF);overflow:hidden;flex:none}
+.hb-nc .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .5s}
+.hb-nc:hover .th img{transform:scale(1.04)}
+.hb-nc .th .fb{position:absolute;left:16px;bottom:12px;right:16px;font-size:13px;font-weight:800;color:rgba(255,255,255,.85);letter-spacing:.01em}
+.hb-nc .bd{display:flex;flex-direction:column;gap:9px;padding:16px 20px 20px;min-width:0}
+.hb-nc.big{grid-column:span 2;grid-row:span 2}
+.hb-nc.big .th{aspect-ratio:16/8.4}
+.hb-nc.big h3{font-size:21px;-webkit-line-clamp:2}
+.hb-nc.big p{-webkit-line-clamp:4;font-size:15px}
+@media(max-width:1100px){.hb-nc.big{grid-column:span 2;grid-row:auto}}
+@media(max-width:700px){.hb-nc.big{grid-column:auto}.hb-nc.big h3{font-size:18px}.hb-weeks .wk{flex:1;min-width:0}}
+/* ── 인기 AI 도구 (2026-11-09) ── */
+.hb-tools{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.hb-tool{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px 18px;color:inherit;text-decoration:none;transition:transform .2s,box-shadow .2s,border-color .2s;min-width:0}
+a.hb-tool:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--blue)}
+.hb-tool .hd{display:flex;align-items:center;gap:8px}
+.hb-tool .rk{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:#EEF2FB;color:var(--ink3);font-weight:900;font-size:13px}
+.hb-tool.top .rk{background:linear-gradient(135deg,#2E5BFF,#7FA4FF);color:#fff}
+.hb-tool .cat{font-size:12px;font-weight:700;color:var(--ink3)}
+.hb-tool h3{margin:4px 0 0;font-size:20px;letter-spacing:-.02em;color:var(--ink);overflow-wrap:anywhere}
+.hb-tool .by{margin:0;font-size:13px;color:var(--ink4,#8A93A6)}
+.hb-tool .bar{height:6px;border-radius:6px;background:#EEF2FB;overflow:hidden;margin-top:6px}
+.hb-tool .bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#2E5BFF,#7FA4FF)}
+.hb-tool .ct{margin:0;font-size:12.5px;color:var(--ink3)}
+@media(max-width:1000px){.hb-tools{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:420px){.hb-tools{grid-template-columns:1fr 1fr;gap:10px}.hb-tool{padding:14px}.hb-tool h3{font-size:17px}}

@@ -28,7 +28,7 @@ const float = idx.slice(fi, idx.indexOf('</style>', fi) + 8);
 const li = idx.indexOf('/* 로그인 상태를 헤더에 반영');
 const loginJs = li > 0 ? '<script>\n' + idx.slice(li, idx.indexOf('</script>', li)).trim() + '\n</script>' : '';
 const url = 'https://idckorea-dusky.vercel.app/hub';
-const desc = '오늘의 AI 브리핑, 국내외 AI 뉴스, 유튜브 AI 트렌드, 원격PC 에서 클로드 코드·코덱스를 돌리는 방법과 복사해 쓰는 작업 템플릿을 한곳에 모았습니다.';
+const desc = '국내·해외 언론의 AI 기사와 유튜브 AI 영상을 매일 자동으로 모아 주간 AI 뉴스와 인기 AI 도구 순위로 정리합니다.';
 const html = [
   '<!doctype html>',
   '<html lang="ko">',
@@ -37,13 +37,13 @@ const html = [
   '<link rel="icon" href="img/logo-64.png" type="image/png">',
   '<meta name="color-scheme" content="only light">',
   '<meta name="viewport" content="width=device-width,initial-scale=1">',
-  '<title>AI 허브 · 오늘의 AI 뉴스와 원격PC AI 가이드 | 한국 가상컴</title>',
+  '<title>AI 소식 · 주간 AI 뉴스와 인기 AI 도구 | 한국 가상컴</title>',
   `<meta name="description" content="${desc}">`,
-  '<meta name="keywords" content="AI 허브,AI 뉴스,AI 브리핑,클로드 코드,코덱스,AI 유튜브,원격PC AI,AI 프롬프트 템플릿">',
+  '<meta name="keywords" content="AI 뉴스,주간 AI 뉴스,AI 소식,인기 AI 도구,AI 트렌드,클로드,챗GPT,제미나이,코덱스,AI 유튜브">',
   `<link rel="canonical" href="${url}">`,
   '<meta property="og:type" content="website">',
   '<meta property="og:site_name" content="한국 가상컴">',
-  '<meta property="og:title" content="AI 허브 — 개인 고객을 위한 AI 데이터센터 허브 | 한국 가상컴">',
+  '<meta property="og:title" content="AI 소식 — 주간 AI 뉴스와 인기 AI 도구 | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
   '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/idc-hall.jpg">',

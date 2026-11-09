@@ -238,6 +238,13 @@ globalThis.fetch = async (url, opt) => {
   if (u.hostname === 'nid.naver.com' || u.hostname === 'openapi.naver.com') return fakeNaver(s, opt);
   if (u.hostname === 'oauth2.googleapis.com') return fakeGoogle(s);
   if (Object.prototype.hasOwnProperty.call(feeds.byUrl, s)) return fakeFeed(s);
+  /* AI 허브가 기사 대표 사진·설명(og:image)을 읽으러 오는 가짜 기사 (2026-11-09) */
+  if (/\.e2e\.test$/.test(u.hostname) && u.hostname !== 'internal.e2e.test') {
+    feeds.articleHits = (feeds.articleHits || 0) + 1;
+    return new Response('<!doctype html><html><head><meta property="og:image" content="https://img.e2e.test' + u.pathname + '.jpg">' +
+      '<meta property="og:description" content="가짜 기사 설명 ' + u.pathname + '"></head><body>본문</body></html>',
+      { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+  }
   blocked.push(u.hostname + u.pathname);
   throw new Error('시험 중에는 바깥 주소를 부르지 않습니다: ' + u.hostname);
 };

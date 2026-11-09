@@ -120,6 +120,13 @@ function tagAttr(block, tag, attr, need) {
   return '';
 }
 
+/* 본문 HTML 속 첫 사진 주소 (https 만) — &lt;img&gt; 처럼 글자로 감싼 것도 풉니다 (2026-11-09) */
+function firstImg(raw) {
+  const h = decodeEntities(String(raw || '').slice(0, MAX_PLAIN).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1'));
+  const m = h.match(/<img\b[^<>]*?\bsrc\s*=\s*["'](https:\/\/[^"'\s<>]{8,900})["']/i);
+  return m ? m[1] : '';
+}
+
 /* 피드 글자 → 글 목록 [{title,url,summary,thumb,published_at,views,channelTitle}]
    kind: 'youtube' 이면 유튜브 Atom 으로 읽습니다 (조회수·썸네일) */
 function parseFeed(xml, kind) {
@@ -164,10 +171,11 @@ function parseFeed(xml, kind) {
     } else {
       /* 구글 뉴스는 요약 대신 "제목 + 언론사" 만 줍니다 — 그때는 언론사 이름만 남깁니다 */
       const src = plain(tagText(b, 'source'), 60);
-      summary = src ? '출처 ' + src
-        : plain(tagText(b, 'description') || tagText(b, 'summary') || tagText(b, 'content'), SUMMARY_MAX);
+      const body = tagText(b, 'description') || tagText(b, 'summary') || tagText(b, 'content:encoded') || tagText(b, 'content');
+      summary = src ? '출처 ' + src : plain(body, SUMMARY_MAX);
       thumb = httpsUrl(tagAttr(b, 'media:thumbnail', 'url') || tagAttr(b, 'media:content', 'url', { medium: 'image' }) ||
-        tagAttr(b, 'enclosure', 'url', { type: 'image/jpeg' }) || tagAttr(b, 'enclosure', 'url', { type: 'image/png' }));
+        tagAttr(b, 'enclosure', 'url', { type: 'image/jpeg' }) || tagAttr(b, 'enclosure', 'url', { type: 'image/png' }) ||
+        firstImg(body) || firstImg(tagText(b, 'content:encoded')));
     }
     /* 구글 뉴스 제목 끝의 " - 언론사" 는 요약 칸에 이미 있으니 뗍니다 */
     const src2 = kind === 'youtube' ? '' : plain(tagText(b, 'source'), 60);
@@ -281,6 +289,101 @@ async function fetchFeed(url) {
   } finally { clearTimeout(timer); }
 }
 
+/* ── 기사 대표 사진·설명 (og:image · og:description) — 2026-11-09 ─────────
+   RSS 에 사진이 없는 뉴스만, 한 번 수집에 ENRICH_MAX 건까지 기사 주소를 열어 머리(head) 부분만 읽습니다.
+   · https 공개 주소만 · 다른 곳으로 넘기면 한 번까지 (넘긴 곳도 같은 검사) · 앞 256KB 만 읽음 · 4초 제한
+   · 구글 뉴스 주소는 기사 원문이 아니라서 열지 않습니다
+   · 이미 사진을 받아 둔 기사는 다시 열지 않습니다 (표에 있는 값을 그대로 씀) */
+const ENRICH_MAX = 24, ENRICH_BYTES = 256 * 1024, ENRICH_MS = 4000;
+function metaContent(html, key) {
+  const re = /<meta\b[^<>]*>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const t = m[0];
+    const k = t.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i);
+    if (!k || k[1].toLowerCase() !== key) continue;
+    const v = t.match(/\bcontent\s*=\s*"([^"]*)"/i) || t.match(/\bcontent\s*=\s*'([^']*)'/i);
+    if (v) return v[1];
+  }
+  return '';
+}
+function pageMeta(html, base) {
+  const head = String(html || '').slice(0, ENRICH_BYTES);
+  let img = metaContent(head, 'og:image') || metaContent(head, 'og:image:secure_url') || metaContent(head, 'twitter:image');
+  img = decodeEntities(img.trim());
+  if (img && !/^https?:/i.test(img)) { try { img = new URL(img, base).toString(); } catch (e) { img = ''; } }
+  const desc = plain(metaContent(head, 'og:description') || metaContent(head, 'description') || metaContent(head, 'twitter:description'), SUMMARY_MAX);
+  return { thumb: httpsUrl(img), summary: desc };
+}
+const articleUrlOk = u => {
+  try {
+    const x = new URL(u);
+    return x.protocol === 'https:' && !x.username && !x.password && (!x.port || x.port === '443') &&
+      publicHost(x.hostname) && !/(^|\.)news\.google\.com$/i.test(x.hostname);
+  } catch (e) { return false; }
+};
+async function fetchMeta(url) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ENRICH_MS);
+  try {
+    let at = url;
+    for (let hop = 0; hop < 2; hop++) {
+      if (!articleUrlOk(at)) return null;
+      await assertPublicHost(new URL(at).hostname);
+      const r = await fetch(at, { signal: ctl.signal, redirect: 'manual',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KVC-Hub/1.0)', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' } });
+      if (r.status >= 300 && r.status < 400) {
+        try { at = new URL(r.headers.get('location') || '', at).toString(); } catch (e) { return null; }
+        try { if (r.body) await r.body.cancel(); } catch (e) {}
+        continue;
+      }
+      if (!r.ok || !/html/i.test(r.headers.get('content-type') || '') || !r.body || typeof r.body.getReader !== 'function') return null;
+      const reader = r.body.getReader();
+      const parts = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(Buffer.from(value)); got += value.length;
+        if (got >= ENRICH_BYTES || /<\/head\s*>/i.test(Buffer.from(value).toString('latin1'))) { try { await reader.cancel(); } catch (e) {} break; }
+      }
+      return pageMeta(Buffer.concat(parts).toString('utf8'), at);
+    }
+    return null;
+  } catch (e) { return null; }
+  finally { clearTimeout(timer); }
+}
+/* 표에 이미 있는 사진·요약을 먼저 채우고, 없는 것만 기사에서 읽어 옵니다 */
+async function enrich(rows) {
+  const need = rows.filter(r => r.kind === 'news' && !r.thumb);
+  if (!need.length) return { reused: 0, fetched: 0 };
+  let reused = 0, fetched = 0;
+  try {
+    for (let i = 0; i < need.length; i += 40) {
+      const part = need.slice(i, i + 40);
+      const list = part.map(r => '"' + r.url.replace(/["\\]/g, '') + '"').join(',');
+      const old = await sb('hub_items', { query: '?select=url,thumb,summary&thumb=not.is.null&url=in.(' + encodeURIComponent(list) + ')' }) || [];
+      const byUrl = new Map(old.map(o => [o.url, o]));
+      for (const r of part) {
+        const o = byUrl.get(r.url);
+        if (o && o.thumb) { r.thumb = o.thumb; if ((!r.summary || r.summary.startsWith('출처 ')) && o.summary) r.summary = o.summary; reused++; }
+      }
+    }
+  } catch (e) {}
+  /* 새 글부터 ENRICH_MAX 건 — 6건씩 동시에 */
+  const todo = need.filter(r => !r.thumb && articleUrlOk(r.url))
+    .sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0)).slice(0, ENRICH_MAX);
+  for (let i = 0; i < todo.length; i += 6) {
+    await Promise.all(todo.slice(i, i + 6).map(async r => {
+      const m = await fetchMeta(r.url);
+      if (!m) return;
+      if (m.thumb) { r.thumb = m.thumb; fetched++; }
+      if (m.summary && (!r.summary || r.summary.startsWith('출처 ') || r.summary.length < 40)) r.summary = m.summary;
+    }));
+  }
+  return { reused, fetched };
+}
+
 /* ── 마지막 수집 결과 읽기 ── */
 async function lastCollect() {
   try {
@@ -335,6 +438,8 @@ async function collect(by) {
   /* 30일보다 오래된 글은 처음부터 넣지 않습니다 */
   const cutoff = now - KEEP_DAYS * 86400000;
   const fresh = rows.filter(r => !r.published_at || Date.parse(r.published_at) >= cutoff);
+  let pics = { reused: 0, fetched: 0 };
+  try { pics = await enrich(fresh); } catch (e) { errors.push({ id: null, name: '사진', error: String((e && e.message) || e).slice(0, 120) }); }
   let saved = 0;
   /* 저장이 중간에 실패해도 멈추지 않고 오류로 남깁니다 — 마지막 수집 기록은 꼭 남도록 (Codex T-0225).
      다음 수집 때 같은 주소는 덮어쓰므로 다시 돌려도 겹치지 않습니다. */
@@ -362,7 +467,7 @@ async function collect(by) {
      "수집 기록 없음" 으로 보였습니다. 저장 전에 목록 길이·글자 수를 줄여 늘 올바른 JSON 이 되게 합니다. */
   const result = {
     at: new Date(now).toISOString(), by: String(by || '').slice(0, 40),
-    sources: (sources || []).length, fetched: rows.length, saved, pruned,
+    sources: (sources || []).length, fetched: rows.length, saved, pruned, pics,
     errorCount: errors.length,
     perSource: perSource.slice(0, 100).map(p => ({ id: p.id, name: String(p.name || '').slice(0, 40), count: p.count })),
     errors: errors.slice(0, 30).map(e => ({ id: e.id, name: String(e.name || '').slice(0, 40), error: String(e.error || '').slice(0, 100) })),
@@ -398,6 +503,6 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 module.exports = {
   /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
   __setLookup(fn) { lookupAll = fn; }, privateIp,
-  parseFeed, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
+  parseFeed, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

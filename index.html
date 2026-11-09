@@ -563,7 +563,7 @@ section.cta .btn-w{color:var(--red)}
     <a href="about.html">회사소개</a>
     <a href="#price">요금제</a>
     <a href="ai.html">AI 작업용 PC<i class="nw"></i></a>
-    <a href="hub.html">AI 허브</a>
+    <a href="hub.html">AI 소식</a>
     <a href="live.html">실시간 PC임대<i class="nw"></i></a>
     <a href="qa.html">Q&amp;A안내</a>
   </nav>
@@ -612,7 +612,7 @@ section.cta .btn-w{color:var(--red)}
   <a class="ai-band-in" href="ai.html">
     <span class="t">NEW · AI 전용 요금 없음</span>
     <b>개인 고객을 위한 AI 데이터센터</b>
-    <span class="d">서버실의 내 PC가 AI 에이전트로 일하고, AI 허브에서 매일의 AI 소식과 작업 도구를 받아 보세요</span>
+    <span class="d">서버실의 내 PC가 AI 에이전트로 일하고, AI 소식에서 주간 AI 뉴스와 인기 AI 도구를 받아 보세요</span>
     <span class="go">AI 작업용 PC 보기 →</span>
   </a>
 </div></section>
@@ -627,6 +627,56 @@ section.cta .btn-w{color:var(--red)}
 @media (max-width:760px){.ai-band-in{grid-template-columns:1fr;grid-template-areas:"t" "b" "d" "go";padding:22px 20px;row-gap:8px}
   .ai-band-in .t{justify-self:start}.ai-band-in .go{text-align:center;margin-top:6px}}
 </style>
+
+<!-- ═══ 이번 주 AI 뉴스 (2026-11-09) — /api/hub?do=feed, 비어 있으면 data/hub-snapshot.json · 글자는 textContent 로만 ═══ -->
+<section class="wn" id="wn" hidden><div class="shell">
+  <div class="wn-h"><div><span class="k">AI 소식</span><h2>이번 주 AI 뉴스</h2></div>
+    <a class="wn-all" href="hub.html">AI 소식 전체 보기 →</a></div>
+  <div class="wn-g" id="wn-g"></div>
+</div></section>
+<style>
+.wn{padding:20px 0 56px}
+.wn-h{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.wn-h .k{font-size:13px;font-weight:800;color:var(--blue,#2E5BFF)}
+.wn-h h2{margin:4px 0 0;font-size:clamp(22px,2.4vw,30px);letter-spacing:-.03em}
+.wn-all{font-weight:800;font-size:14.5px;color:var(--blue,#2E5BFF);text-decoration:none;white-space:nowrap}
+.wn-g{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.wn-c{display:flex;flex-direction:column;background:#fff;border:1px solid var(--line,#E4E8F0);border-radius:16px;overflow:hidden;color:inherit;text-decoration:none;transition:transform .2s,box-shadow .2s;min-width:0}
+.wn-c:hover{transform:translateY(-3px);box-shadow:var(--sh)}
+.wn-c .th{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#0B1736,#2E5BFF)}
+.wn-c .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.wn-c .th span{position:absolute;left:12px;bottom:10px;right:12px;font-size:12px;font-weight:800;color:rgba(255,255,255,.85)}
+.wn-c .bd{padding:13px 15px 16px}
+.wn-c .src{font-size:12px;color:#8A93A6;font-weight:700;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wn-c h3{margin:0;font-size:15px;line-height:1.5;letter-spacing:-.02em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+@media(max-width:900px){.wn-g{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.wn-g{grid-template-columns:1fr 1fr;gap:10px}.wn-c h3{font-size:13.5px}.wn-h{flex-direction:column;align-items:flex-start}}
+</style>
+<script>
+(function(){
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=String(x);return e}
+  function okUrl(u){return typeof u==='string'&&/^https?:\/\//i.test(u)?u:''}
+  function okImg(u){return typeof u==='string'&&/^https:\/\//i.test(u)?u:''}
+  function show(d){
+    var list=((d&&d.news)||[]).filter(function(n){return okUrl(n.url)});
+    list=list.filter(function(n){return okImg(n.thumb)}).concat(list.filter(function(n){return !okImg(n.thumb)})).slice(0,4);
+    if(list.length<2)return;
+    var g=document.getElementById('wn-g');g.textContent='';
+    list.forEach(function(n){
+      var s0=String(n.summary||''),pub=/^출처 /.test(s0)?s0.slice(3):(n.source||'AI 뉴스');
+      var a=el('a','wn-c');a.href=okUrl(n.url);a.target='_blank';a.rel='noopener noreferrer nofollow';
+      var th=el('div','th');th.appendChild(el('span',null,pub));
+      if(okImg(n.thumb)){var im=document.createElement('img');im.src=okImg(n.thumb);im.alt='';im.loading='lazy';im.referrerPolicy='no-referrer';im.addEventListener('error',function(){im.remove()});th.appendChild(im)}
+      a.appendChild(th);var bd=el('div','bd');bd.appendChild(el('div','src',pub));bd.appendChild(el('h3',null,n.title));a.appendChild(bd);g.appendChild(a);
+    });
+    document.getElementById('wn').hidden=false;
+  }
+  fetch('/api/hub?do=feed').then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
+    if(d&&d.ready&&(d.news||[]).length)return d;
+    return fetch('data/hub-snapshot.json').then(function(r){return r.ok?r.json():null});
+  }).then(show).catch(function(){});
+})();
+</script>
 
 <!-- ═══ 활용 분야 ═══ -->
 <section class="sec sec-g">
@@ -720,7 +770,7 @@ section.cta .btn-w{color:var(--red)}
       <div>24시간 Full가동 · 6년 무중단<br>결제 확인 즉시 자동 개통</div>
     </div>
     <div><h4>서비스</h4><a href="#about">회사소개</a><a href="#price">요금제</a>
-      <a href="live.html">실시간 PC임대</a><a href="hub.html">AI 허브</a></div>
+      <a href="live.html">실시간 PC임대</a><a href="hub.html">AI 소식</a></div>
     <div><h4>고객지원</h4><a href="#qa">Q&amp;A안내</a>
       <a href="https://pf.kakao.com/_GxcgFxj/chat" target="_blank" rel="noopener">카카오톡 상담</a>
       <a href="terms.html">이용약관</a><a href="privacy.html">개인정보처리방침</a></div>
@@ -830,8 +880,8 @@ const SLIDES=[
   a:['실시간 PC 보기','live.html'],b:['요금제 확인하기','#price']},
  {k:'개인 고객을 위한 AI 데이터센터',
   h:'나만의 AI 서버를<br><span>서버실에 한 대</span>',
-  p:'AI가 밤새 일할 PC는 서버실에, 매일의 AI 소식과 작업 도구는 AI 허브에서.<br>AI 작업용이라고 더 받지 않습니다. 목록 가격 그대로.',
-  a:['AI 작업용 PC 보기','ai.html'],b:['AI 허브 보기','hub.html']},
+  p:'AI가 밤새 일할 PC는 서버실에, 이번 주 AI 뉴스와 인기 도구는 AI 소식에서.<br>AI 작업용이라고 더 받지 않습니다. 목록 가격 그대로.',
+  a:['AI 작업용 PC 보기','ai.html'],b:['AI 소식 보기','hub.html']},
  {k:'실물 PC 한 대 · 개별 공인 IP',
   h:'나눠 쓰는 자리가 아닌<br><span>나만의 서버 PC</span>',
   p:'PC 한 대를 통째로, 고유한 공인 IP로 씁니다.<br>여러 대를 써도 계정이 서로 묶이지 않습니다.',

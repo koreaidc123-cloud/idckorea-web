@@ -45,7 +45,7 @@ async function feed(req, res) {
   try {
     const [briefs, news, yt, srcs] = await Promise.all([
       sb('hub_briefs', { query: '?select=day,title,body,published_at&status=eq.published&order=day.desc&limit=1' }),
-      sb('hub_items', { query: '?select=id,source_id,title,url,summary,thumb,published_at,pinned&kind=eq.news&hidden=is.false&order=pinned.desc,published_at.desc.nullslast&limit=24' }),
+      sb('hub_items', { query: '?select=id,source_id,title,url,summary,thumb,published_at,pinned&kind=eq.news&hidden=is.false&order=pinned.desc,published_at.desc.nullslast&limit=90' }),
       sb('hub_items', { query: '?select=id,source_id,title,url,thumb,published_at,views,score,pinned&kind=eq.youtube&hidden=is.false&order=pinned.desc,score.desc&limit=12' }),
       sb('hub_sources', { query: '?select=id,name&limit=200' }),
     ]);

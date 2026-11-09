@@ -2200,16 +2200,18 @@ async function main() {
     await ctx.close();
   });
 
-  await scenario('HUB5', 'AI 허브 화면 — 표 없을 때 빈 화면 · 내용 있을 때 카드 · PC/390 폭 가로 넘침·콘솔 오류 없음 · 템플릿 복사', async () => {
+  await scenario('HUB5', 'AI 소식 화면 — 표 없을 때 빈 화면(브리핑 구간 숨김) · 내용 있을 때 주간 뉴스 사진 카드·주 선택·인기 도구 · PC/390 폭 가로 넘침·콘솔 오류 없음', async () => {
     const shapes = [{ viewport: { width: 1280, height: 900 } }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }];
     srv.fakeDb.setHub(false);
     try {
       for (const o of shapes) {
         const ctx = await newContext(o);
+        /* 기본 자료(data/hub-snapshot.json)도 없는 경우 — 진짜 빈 화면 */
+        await ctx.route('**/data/hub-snapshot.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"ready":false,"news":[],"youtube":[]}' }));
         const p = await openPage(ctx, '/hub');
-        await p.waitForFunction(() => /준비 중/.test(document.getElementById('hb-brief').innerText) && /아직 모인 뉴스가 없습니다/.test(document.getElementById('hb-news').innerText)
-          && /아직 모인 영상이 없습니다/.test(document.getElementById('hb-yt').innerText), null, { timeout: 8000 });
-        await p.waitForFunction(() => /로그인하시면/.test(document.getElementById('hb-me').innerText), null, { timeout: 8000 });
+        await p.waitForFunction(() => document.getElementById('brief').hidden && /모인 뉴스가 아직 없습니다/.test(document.getElementById('hb-news').innerText)
+          && /아직 모인 영상이 없습니다/.test(document.getElementById('hb-yt').innerText)
+          && /아직 집계할 소식이 없습니다/.test(document.getElementById('hb-tools').innerText), null, { timeout: 8000 });
         ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 빈 화면 가로 넘침');
         ok(!p.errors.length, '빈 화면 콘솔 오류 ' + p.errors.join('|'));
         await ctx.close();
@@ -2218,59 +2220,42 @@ async function main() {
     /* 브리핑 하나 게시해 두고 꽉 찬 화면 */
     db().hub_briefs.push({ id: 7101, day: '2026-11-07', title: '꽉 찬 화면 브리핑', body: '## 오늘\n- 하나\n긴 문장 '.repeat(5), status: 'published', source: 'admin', created_at: iso(Date.now()), published_at: iso(Date.now()), who: '대표' });
     for (const o of shapes) {
-      const ctx = await newContext(Object.assign({ permissions: ['clipboard-read', 'clipboard-write'] }, o));
+      const ctx = await newContext(Object.assign({ }, o));
       const p = await openPage(ctx, '/hub');
       await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nc').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 3, null, { timeout: 8000 });
       const s = await p.evaluate(() => ({
         badge: document.querySelector('#hb-yt .badge').textContent,
         ext: [...document.querySelectorAll('#hb-news a.hb-nc,#hb-yt a.hb-vc')].every(a => a.target === '_blank' && /noopener/.test(a.rel) && /^https?:/.test(a.href)),
-        tpl: document.querySelectorAll('#hb-tpl .hb-tc').length, guide: document.querySelectorAll('.hb-gc').length,
+        weeks: document.querySelectorAll('#hb-weeks .wk').length, big: document.querySelectorAll('#hb-news .hb-nc.big').length,
+        th: document.querySelectorAll('#hb-news .hb-nc .th').length, brief: !document.getElementById('brief').hidden,
+        noMe: !document.getElementById('hb-me') && !document.getElementById('hb-tpl'),
         upd: document.getElementById('hb-upd').textContent, on: (document.querySelector('.gnb a.on') || {}).textContent,
       }));
       ok(/^시간당 2,[45][0-9][0-9]회$/.test(s.badge), '시간당 배지 ' + s.badge);
-      ok(s.ext && s.tpl === 5 && s.guide >= 5 && s.upd && s.upd !== '확인 중…' && s.on === 'AI 허브', '화면 ' + JSON.stringify(s));
+      ok(s.ext && s.weeks === 3 && s.big === 1 && s.th >= 1 && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 소식', '화면 ' + JSON.stringify(s));
       ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 꽉 찬 화면 가로 넘침');
-      /* 템플릿 복사 */
-      await p.click('#hb-tpl [data-tpl="0"]');
-      await p.waitForFunction(() => /복사했습니다|복사가 막혀/.test(document.querySelector('#hb-tpl .hb-tc .ok').textContent), null, { timeout: 5000 });
-      const okMsg = await p.$eval('#hb-tpl .hb-tc .ok', e => e.textContent);
-      if (/복사했습니다/.test(okMsg)) {
-        const clip = await p.evaluate(() => navigator.clipboard.readText().catch(() => ''));
-        ok(!clip || /블로그 작가/.test(clip), '복사된 글 ' + clip.slice(0, 40));
-      }
       ok(!p.errors.length && !p.xss.length, '꽉 찬 화면 콘솔 오류 ' + p.errors.join('|'));
       await ctx.close();
     }
     db().hub_briefs.length = 0;
   });
 
-  await scenario('HUB6', '내 AI PC — 로그인 안 하면 401·로그인 안내 · 고객A 는 자기 PC(Y-004)만 · 끝난 주문 PC 안 보임 · 애니데스크·비밀번호 안 나감', async () => {
+  await scenario('HUB6', '내 AI PC API — 로그인 안 하면 401 · 고객A 는 자기 PC(Y-004)만 · 고객E 는 Y-013 만 · 애니데스크·비밀번호 안 나감 (화면 구간은 11-09 에 뺐고 API 만 남김)', async () => {
     ok((await hubGet('/api/hub?do=me')).status === 401, '로그인 없이 me 200');
     const ctx = await newContext();
     await loginCustomer(ctx, '11111111-1111-4111-8111-111111111111', { name: '고객A', phone: '010-1111-2222', via: 'kakao' });
     const p = await openPage(ctx, '/hub');
-    await p.waitForSelector('#hb-me .hb-pc', { timeout: 8000 });
-    const cards = await p.$$eval('#hb-me .hb-pc .pn', es => es.map(e => e.textContent));
-    ok(cards.join(',') === 'Y-004', '내 PC 목록 ' + cards.join(','));
-    const st = await p.$eval('#hb-me .hb-pc .st', e => e.className + ' ' + e.textContent);
-    ok(/on/.test(st) && /켜짐/.test(st), '켜짐 표시 ' + st);
     const api = await apiIn(p, '/api/hub?do=me');
     const raw = JSON.stringify(api.d);
-    ok(api.status === 200 && api.d.pcs.length === 1 && !/anydesk|pw_enc|ad"|10428876/.test(raw), '응답에 민감정보 ' + raw);
+    ok(api.status === 200 && api.d.pcs.length === 1 && api.d.pcs[0].pn === 'Y-004' && !/anydesk|pw_enc|ad"|10428876/.test(raw), '응답 ' + raw);
     ok(!p.errors.length, '콘솔 오류 ' + p.errors.join('|'));
     await ctx.close();
-    /* 다른 회원(고객E)은 자기 PC(Y-013)만 */
     const ctx2 = await newContext();
     await loginCustomer(ctx2, '55555555-5555-4555-8555-555555555555', { name: '고객E', phone: '010-4444-0005', via: 'kakao' });
     const p2 = await openPage(ctx2, '/hub');
-    await p2.waitForSelector('#hb-me .hb-pc', { timeout: 8000 });
-    ok((await p2.$$eval('#hb-me .hb-pc .pn', es => es.map(e => e.textContent))).join(',') === 'Y-013', '고객E 가 남의 PC 를 봄');
+    const api2 = await apiIn(p2, '/api/hub?do=me');
+    ok(api2.status === 200 && api2.d.pcs.map(x => x.pn).join(',') === 'Y-013', '고객E ' + JSON.stringify(api2.d));
     await ctx2.close();
-    /* 로그인 안 함 → 로그인 안내 (next=hub.html) */
-    const ctx3 = await newContext();
-    const p3 = await openPage(ctx3, '/hub');
-    await p3.waitForSelector('#hb-me a[href="login.html?next=hub.html"]', { timeout: 8000 });
-    await ctx3.close();
   });
 
   await scenario('HUB7', 'AI 허브 XSS — 제목·출처 이름·브리핑 본문에 <img onerror> 가 있어도 고객·관리자 화면에서 글자로만', async () => {
@@ -2285,7 +2270,7 @@ async function main() {
     const p = await openPage(ctx, '/hub');
     await p.waitForFunction(x => document.getElementById('hb-news').innerText.includes(x) && document.getElementById('hb-brief').innerText.includes(x), XSS, { timeout: 8000 });
     await sleep(300);
-    const s = await p.evaluate(() => ({ imgs: document.querySelectorAll('#hb-news img,#hb-brief img').length,
+    const s = await p.evaluate(() => ({ imgs: [...document.querySelectorAll('#hb-news img,#hb-brief img,#hb-tools img')].filter(i => i.hasAttribute('onerror') || !/^https:\/\//.test(i.getAttribute('src') || '') || i.closest('.bd')).length,
       js: [...document.querySelectorAll('a')].some(a => /^javascript:/i.test(a.getAttribute('href') || '')) }));
     ok(!p.xss.length && !s.imgs && !s.js, '고객 화면 XSS ' + JSON.stringify(s) + p.xss.join(','));
     await ctx.close();
