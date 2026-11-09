@@ -3,7 +3,7 @@
   "private": true,
   "description": "db/*.sql 을 진짜 PostgreSQL 16(PGlite)으로 미리 돌려 보는 도구",
   "scripts": {
-    "test": "node run.js ../../db schema.sql 02-heartbeat.sql 03-command.sql 04-expire.sql 07-만료정리.sql 08-반납초기화.sql 09-자동알림.sql 10-연장결제.sql 11-AI허브.sql 07-만료정리.sql 08-반납초기화.sql 09-자동알림.sql 10-연장결제.sql 11-AI허브.sql"
+    "test": "node run.js ../../db schema.sql 02-heartbeat.sql 03-command.sql 04-expire.sql 07-만료정리.sql 08-반납초기화.sql 09-자동알림.sql 10-연장결제.sql 11-AI허브.sql 12-AI소식-출처추가.sql 07-만료정리.sql 08-반납초기화.sql 09-자동알림.sql 10-연장결제.sql 11-AI허브.sql 12-AI소식-출처추가.sql"
   },
   "dependencies": { "@electric-sql/pglite": "0.2.17" }
 }

@@ -121,5 +121,5 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
 on conflict (url_or_channel_id) do nothing;
 
 -- ── 6. 확인 ──────────────────────────────────────────────────
--- 아래가 출처 개수(처음이면 41)를 보여 주면 끝입니다.
+-- 아래가 출처 개수(처음이면 40)를 보여 주면 끝입니다.
 select count(*) as "출처 개수" from hub_sources;
