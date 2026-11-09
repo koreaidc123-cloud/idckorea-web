@@ -322,36 +322,66 @@ const articleUrlOk = u => {
       publicHost(x.hostname) && !/(^|\.)news\.google\.com$/i.test(x.hostname);
   } catch (e) { return false; }
 };
+/* ★ Codex T-0245: DNS 로 확인한 그 공개 IP 로만 연결합니다 (확인과 연결 사이에 주소가 바뀌는 DNS 재바인딩 차단).
+   인증서는 원래 도메인 이름으로 확인합니다(servername). 전체 4초 안에 DNS·연결·읽기가 끝나야 하고,
+   쓰지 않는 응답은 바로 끊으며, 256KB 를 넘는 부분은 담지도 않습니다. */
+const https = require('https');
+function withTimeout(promise, ms, what) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(what + ' 시간 초과')), Math.max(1, ms)); })])
+    .finally(() => clearTimeout(t));
+}
+function pinnedGet(url, addr, ms) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const fam = addr.family === 6 ? 6 : 4;
+    const req = https.request({
+      hostname: u.hostname, servername: u.hostname, port: 443, path: u.pathname + u.search, method: 'GET',
+      lookup: (h, o, cb) => (o && o.all ? cb(null, [{ address: addr.address, family: fam }]) : cb(null, addr.address, fam)),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KVC-Hub/1.0)', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', 'Accept-Encoding': 'identity' },
+    }, res => {
+      const status = res.statusCode || 0, ctype = String(res.headers['content-type'] || ''), location = String(res.headers.location || '');
+      if (status >= 300 && status < 400) { res.destroy(); return resolve({ status, location }); }
+      if (status !== 200 || !/html/i.test(ctype)) { res.destroy(); return resolve({ status, ctype }); }
+      const parts = []; let got = 0; let done = false;
+      const finish = () => { if (done) return; done = true; res.destroy(); resolve({ status, ctype, text: Buffer.concat(parts).toString('utf8') }); };
+      res.on('data', c => {
+        if (done) return;
+        const room = ENRICH_BYTES - got;
+        const piece = c.length > room ? c.subarray(0, room) : c;
+        parts.push(piece); got += piece.length;
+        if (got >= ENRICH_BYTES || /<\/head\s*>/i.test(piece.toString('latin1'))) finish();
+      });
+      res.on('end', finish);
+      res.on('error', e => { if (!done) { done = true; reject(e); } });
+    });
+    req.setTimeout(Math.max(1, ms), () => req.destroy(new Error('시간 초과')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+let articleGet = pinnedGet;   // 시험에서는 가짜로 바꿉니다 (__setArticleGet)
 async function fetchMeta(url) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), ENRICH_MS);
+  const end = Date.now() + ENRICH_MS;
   try {
     let at = url;
     for (let hop = 0; hop < 2; hop++) {
       if (!articleUrlOk(at)) return null;
-      await assertPublicHost(new URL(at).hostname);
-      const r = await fetch(at, { signal: ctl.signal, redirect: 'manual',
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; KVC-Hub/1.0)', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' } });
+      const host = new URL(at).hostname;
+      const addrs = await withTimeout(lookupAll(host), end - Date.now(), 'DNS');
+      if (!addrs || !addrs.length || addrs.some(a => privateIp(a.address))) return null;
+      const left = end - Date.now();
+      if (left <= 0) return null;
+      const r = await withTimeout(articleGet(at, addrs[0], left), left, '기사');
       if (r.status >= 300 && r.status < 400) {
-        try { at = new URL(r.headers.get('location') || '', at).toString(); } catch (e) { return null; }
-        try { if (r.body) await r.body.cancel(); } catch (e) {}
+        try { at = new URL(r.location || '', at).toString(); } catch (e) { return null; }
         continue;
       }
-      if (!r.ok || !/html/i.test(r.headers.get('content-type') || '') || !r.body || typeof r.body.getReader !== 'function') return null;
-      const reader = r.body.getReader();
-      const parts = [];
-      let got = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        parts.push(Buffer.from(value)); got += value.length;
-        if (got >= ENRICH_BYTES || /<\/head\s*>/i.test(Buffer.from(value).toString('latin1'))) { try { await reader.cancel(); } catch (e) {} break; }
-      }
-      return pageMeta(Buffer.concat(parts).toString('utf8'), at);
+      if (r.status !== 200 || typeof r.text !== 'string') return null;
+      return pageMeta(r.text, at);
     }
     return null;
   } catch (e) { return null; }
-  finally { clearTimeout(timer); }
 }
 /* 표에 이미 있는 사진·요약을 먼저 채우고, 없는 것만 기사에서 읽어 옵니다 */
 async function enrich(rows) {
@@ -361,7 +391,7 @@ async function enrich(rows) {
   try {
     for (let i = 0; i < need.length; i += 40) {
       const part = need.slice(i, i + 40);
-      const list = part.map(r => '"' + r.url.replace(/["\\]/g, '') + '"').join(',');
+      const list = part.map(r => '"' + r.url.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"').join(',');
       const old = await sb('hub_items', { query: '?select=url,thumb,summary&thumb=not.is.null&url=in.(' + encodeURIComponent(list) + ')' }) || [];
       const byUrl = new Map(old.map(o => [o.url, o]));
       for (const r of part) {
@@ -502,7 +532,7 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 
 module.exports = {
   /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
-  __setLookup(fn) { lookupAll = fn; }, privateIp,
+  __setLookup(fn) { lookupAll = fn; }, __setArticleGet(fn) { articleGet = fn; }, privateIp,
   parseFeed, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

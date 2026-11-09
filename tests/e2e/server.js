@@ -52,6 +52,14 @@ Object.assign(process.env, {
 const fakeDb = require('./fake-supabase');
 /* AI 허브의 DNS 확인(내부망 막기)도 가짜로 — 진짜 DNS 를 묻지 않습니다. internal.e2e.test 만 내부 주소로 답합니다 */
 require('../../api/_hub').__setLookup(async h => (h === 'internal.e2e.test' ? [{ address: '10.0.0.5', family: 4 }] : [{ address: '203.0.113.10', family: 4 }]));
+/* AI 허브가 기사 대표 사진·설명(og:image)을 읽는 연결도 가짜로 — 진짜 인터넷에 나가지 않습니다 (2026-11-09) */
+require('../../api/_hub').__setArticleGet(async (url, addr) => {
+  feeds.articleHits = (feeds.articleHits || 0) + 1;
+  const u = new URL(url);
+  if (!/\.e2e\.test$/.test(u.hostname) || addr.address !== '203.0.113.10') throw new Error('시험 중 바깥 기사 연결: ' + u.hostname);
+  return { status: 200, ctype: 'text/html', text: '<!doctype html><html><head><meta property="og:image" content="https://img.e2e.test' + u.pathname + '.jpg">' +
+    '<meta property="og:description" content="가짜 기사 설명 ' + u.pathname + '"></head><body>본문</body></html>' };
+});
 
 /* ═══ 가짜 토스 ═══════════════════════════════════════════════════ */
 const toss = {
@@ -238,13 +246,6 @@ globalThis.fetch = async (url, opt) => {
   if (u.hostname === 'nid.naver.com' || u.hostname === 'openapi.naver.com') return fakeNaver(s, opt);
   if (u.hostname === 'oauth2.googleapis.com') return fakeGoogle(s);
   if (Object.prototype.hasOwnProperty.call(feeds.byUrl, s)) return fakeFeed(s);
-  /* AI 허브가 기사 대표 사진·설명(og:image)을 읽으러 오는 가짜 기사 (2026-11-09) */
-  if (/\.e2e\.test$/.test(u.hostname) && u.hostname !== 'internal.e2e.test') {
-    feeds.articleHits = (feeds.articleHits || 0) + 1;
-    return new Response('<!doctype html><html><head><meta property="og:image" content="https://img.e2e.test' + u.pathname + '.jpg">' +
-      '<meta property="og:description" content="가짜 기사 설명 ' + u.pathname + '"></head><body>본문</body></html>',
-      { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
-  }
   blocked.push(u.hostname + u.pathname);
   throw new Error('시험 중에는 바깥 주소를 부르지 않습니다: ' + u.hostname);
 };

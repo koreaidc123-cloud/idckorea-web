@@ -658,9 +658,15 @@ section.cta .btn-w{color:var(--red)}
   function okUrl(u){return typeof u==='string'&&/^https?:\/\//i.test(u)?u:''}
   function okImg(u){return typeof u==='string'&&/^https:\/\//i.test(u)?u:''}
   function show(d){
-    var list=((d&&d.news)||[]).filter(function(n){return okUrl(n.url)});
+    /* 한국 시각 이번 주(월요일부터) 기사만. 2건이 안 되면 최근 14일로 넓히고 제목도 바꿉니다 (Codex T-0245) */
+    var now=Date.now(),k=new Date(now+9*3600000),ws=Date.UTC(k.getUTCFullYear(),k.getUTCMonth(),k.getUTCDate()-((k.getUTCDay()+6)%7))-9*3600000;
+    var all=((d&&d.news)||[]).filter(function(n){return okUrl(n.url)});
+    function inRange(from){return all.filter(function(n){var t=Date.parse(n.at||'');return isFinite(t)&&t>=from&&t<=now+3600000})}
+    var list=inRange(ws),title='이번 주 AI 뉴스';
+    if(list.length<2){list=inRange(now-14*86400000);title='최근 AI 뉴스'}
     list=list.filter(function(n){return okImg(n.thumb)}).concat(list.filter(function(n){return !okImg(n.thumb)})).slice(0,4);
     if(list.length<2)return;
+    document.querySelector('#wn h2').textContent=title;
     var g=document.getElementById('wn-g');g.textContent='';
     list.forEach(function(n){
       var s0=String(n.summary||''),pub=/^출처 /.test(s0)?s0.slice(3):(n.source||'AI 뉴스');

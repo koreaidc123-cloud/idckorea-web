@@ -812,7 +812,8 @@ a.hb-tool:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var
   function weekStart(t){var d=new Date(t+9*3600000);var dow=(d.getUTCDay()+6)%7;
     return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-dow)-9*3600000}
   function md(t){var d=new Date(t+9*3600000);return (d.getUTCMonth()+1)+'.'+d.getUTCDate()}
-  function weekOf(n){var t=Date.parse(n.at||'');return isFinite(t)?weekStart(t):weekStart(Date.now())}
+  /* 날짜가 없거나 미래(1시간 넘게)인 글은 어느 주에도 넣지 않습니다 (Codex T-0245) */
+  function weekOf(n){var t=Date.parse(n.at||'');return isFinite(t)&&t<=Date.now()+3600000?weekStart(t):null}
   function weeks(){var now=weekStart(Date.now()),out=[];
     for(var k=0;k<3;k++){var st=now-k*7*86400000;out.push({st:st,label:k===0?'이번 주':k===1?'지난주':'2주 전',range:md(st)+' ~ '+md(st+6*86400000)})}
     return out}
@@ -882,7 +883,8 @@ a.hb-tool:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var
   function renderTools(news,yt){
     var box=$('hb-tools');box.textContent='';
     var since=Date.now()-14*86400000,docs=[];
-    (news||[]).concat(yt||[]).forEach(function(n){var t=Date.parse(n.at||'');if(!isFinite(t)||t>=since)docs.push(String(n.title||'')+' '+String(n.summary||''))});
+    var until=Date.now()+3600000;
+    (news||[]).concat(yt||[]).forEach(function(n){var t=Date.parse(n.at||'');if(isFinite(t)&&t>=since&&t<=until)docs.push(String(n.title||'')+' '+String(n.summary||''))});
     var rank=TOOLS.map(function(t){var c=0;docs.forEach(function(d){if(t[5])d=d.replace(t[5],' ');if(t[4].test(d))c++});return {t:t,c:c}})
       .filter(function(x){return x.c>0}).sort(function(a,b){return b.c-a.c}).slice(0,8);
     if(!rank.length){empty(box,'아직 집계할 소식이 없습니다','뉴스가 모이면 많이 나온 AI 도구 순위가 자동으로 나타납니다.');return}
