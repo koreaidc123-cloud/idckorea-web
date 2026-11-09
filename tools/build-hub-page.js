@@ -18,8 +18,8 @@ const navfit = cut('<style id="kvc-nav-fit">', '</style>');   // 중간 폭 메�
 const header = cut('<header class="hd">', '</div></header>')
   .replace('<a class="lg" href="#">', '<a class="lg" href="index.html">')
   .replace(/href="#(price|qa|about)"/g, 'href="index.html#$1"')
-  .replace('<a href="hub.html">', '<a class="on" href="hub.html">');
-if (!header.includes('<a class="on" href="hub.html">')) throw new Error('index.html 헤더에 AI 허브 링크가 없습니다');
+  .replace('<a href="ai.html">', '<a class="on" href="ai.html">');   // AI 소식은 AI 작업용 PC 메뉴 안의 부가 정보
+if (!header.includes('<a class="on" href="ai.html">')) throw new Error('index.html 헤더에 AI 작업용 PC 링크가 없습니다');
 const footer = cut('<footer class="ft">', '</div></footer>')
   .replace(/href="#(price|qa|about)"/g, 'href="index.html#$1"');
 const fi = idx.indexOf('<div class="kvc-float">');

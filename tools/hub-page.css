@@ -191,3 +191,22 @@ a.hb-tool:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var
 .hb-tool .ct{margin:0;font-size:12.5px;color:var(--ink3)}
 @media(max-width:1000px){.hb-tools{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:420px){.hb-tools{grid-template-columns:1fr 1fr;gap:10px}.hb-tool{padding:14px}.hb-tool h3{font-size:17px}}
+/* ── 분야 탭 · 신규 도구 (2026-11-09) ── */
+.hb-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:-18px 0 20px}
+.hb-tabs.sm{margin:-8px 0 18px}
+.hb-tabs .tb{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px;font-weight:700;color:var(--ink3);cursor:pointer;transition:all .2s}
+.hb-tabs .tb:hover{border-color:var(--blue)}
+.hb-tabs .tb.on{background:var(--ink,#0B1220);border-color:transparent;color:#fff}
+.hb-tabs.sm .tb{padding:6px 12px;font-size:13px}
+.hb-tool.dim{opacity:.62}
+.hb-new{margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px 24px}
+.hb-new h3{margin:0 0 14px;font-size:18px;color:var(--ink)}
+.hb-new h3 small{font-size:12.5px;font-weight:600;color:var(--ink3);margin-left:6px}
+.hb-new-l{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.hb-nt{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:12px;background:#F4F6FB;color:inherit;text-decoration:none;min-width:0;transition:background .2s}
+.hb-nt:hover{background:#E8EEFF}
+.hb-nt b{font-size:14.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-nt span{font-size:12.5px;line-height:1.5;color:var(--ink3);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+a.hb-tag{text-decoration:none}
+@media(max-width:1000px){.hb-new-l{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.hb-new-l{grid-template-columns:1fr}.hb-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}.hb-tabs .tb{flex:none}}

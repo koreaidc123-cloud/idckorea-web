@@ -2232,7 +2232,7 @@ async function main() {
         upd: document.getElementById('hb-upd').textContent, on: (document.querySelector('.gnb a.on') || {}).textContent,
       }));
       ok(/^시간당 2,[45][0-9][0-9]회$/.test(s.badge), '시간당 배지 ' + s.badge);
-      ok(s.ext && s.weeks === 3 && s.big === 1 && s.th >= 1 && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 소식', '화면 ' + JSON.stringify(s));
+      ok(s.ext && s.weeks === 3 && s.big === 1 && s.th >= 1 && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 작업용 PC', '화면 ' + JSON.stringify(s));
       ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 꽉 찬 화면 가로 넘침');
       ok(!p.errors.length && !p.xss.length, '꽉 찬 화면 콘솔 오류 ' + p.errors.join('|'));
       await ctx.close();

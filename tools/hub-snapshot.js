@@ -7,29 +7,33 @@ const fs = require('fs'), path = require('path');
 const hub = require('../api/_hub');
 const root = path.join(__dirname, '..');
 const sql = fs.readFileSync(path.join(root, 'db', '11-AI허브.sql'), 'utf8');
-const srcs = [...sql.matchAll(/\('(rss|youtube)', '([^']+)', '([^']+)', '[^']*'\)/g)].map((m, i) => ({ id: i + 1, kind: m[1], name: m[2], url_or_channel_id: m[3] }));
+const srcs = [...sql.matchAll(/\('(rss|youtube)', '([^']+)', '([^']+)', '([^']*)'\)/g)].map((m, i) => ({ id: i + 1, kind: m[1], name: m[2], url_or_channel_id: m[3], topic: m[4] }));
+const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' : /^(tools|dev)/.test(t) ? 'tools' : 'ko';
 (async () => {
   const now = Date.now(), news = [], yt = [], seen = new Set();
   await Promise.all(srcs.map(async s => {
     const url = hub.feedUrlOf(s);
     try {
       const r = await fetch(url, { headers: { 'User-Agent': 'KVC-Hub/1.0' } });
-      const items = hub.parseFeed(await r.text(), s.kind);
+      let items = hub.parseFeed(await r.text(), s.kind);
+      if (/_f$/.test(s.topic)) items = items.filter(hub.aiTopic);
       for (const it of items) {
         if (seen.has(it.url)) continue; seen.add(it.url);
         if (it.published_at && now - Date.parse(it.published_at) > 21 * 86400000) continue;
         if (s.kind === 'youtube') yt.push({ title: it.title, url: it.url, thumb: it.thumb || '', at: it.published_at, views: it.views, perHour: hub.ytScore(it.views, it.published_at, now), channel: s.name, pinned: false });
-        else news.push({ title: it.title, url: it.url, summary: it.summary || '', thumb: it.thumb || '', at: it.published_at, source: s.name, pinned: false });
+        else news.push({ title: it.title, url: it.url, summary: it.summary || '', thumb: it.thumb || '', at: it.published_at, source: s.name, cat: catOf(s.topic), pinned: false });
       }
       console.log('✔', s.name, items.length);
     } catch (e) { console.log('✘', s.name, String(e.message || e).slice(0, 80)); }
   }));
   news.sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
-  const top = news.slice(0, 90);
+  /* 분류마다 고르게 — 국내 70 · 해외 30 · 공식 30 · 도구 30 까지 */
+  const cap = { ko: 70, en: 30, official: 30, tools: 30 }, used = {};
+  const top = news.filter(n => (used[n.cat] = (used[n.cat] || 0) + 1) <= cap[n.cat]);
   /* 사진 없는 기사 — 6건씩 동시에 원문 대표 사진 */
   const need = top.filter(n => !n.thumb);
-  for (let i = 0; i < need.length; i += 6) {
-    await Promise.all(need.slice(i, i + 6).map(async n => {
+  for (let i = 0; i < need.length; i += 8) {
+    await Promise.all(need.slice(i, i + 8).map(async n => {
       const m = await hub.fetchMeta(n.url);
       if (!m) return;
       if (m.thumb) n.thumb = m.thumb;

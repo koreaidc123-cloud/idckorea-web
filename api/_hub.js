@@ -185,6 +185,10 @@ function parseFeed(xml, kind) {
   return out;
 }
 
+/* AI 관련 글인지 — 제목·요약에 AI 낱말이 있는지만 봅니다 */
+const AI_RE = /(\bAI\b|A\.I\.|인공지능|생성형|\bLLM|GPT|챗봇|에이전트|머신러닝|딥러닝|클로드|Claude|Gemini|제미나이|오픈AI|OpenAI|Anthropic|앤트로픽|엔비디아|NVIDIA|코파일럿|Copilot|딥시크|DeepSeek|\bAGI\b|파운데이션 모델)/i;
+const aiTopic = it => AI_RE.test(String(it.title || '') + ' ' + String(it.summary || ''));
+
 /* 유튜브 점수 = 올린 뒤 지난 시간당 조회수 (1시간 미만은 1시간으로 셈) */
 function ytScore(views, publishedIso, now = Date.now()) {
   if (!Number.isFinite(views) || views <= 0) return 0;
@@ -400,11 +404,11 @@ async function enrich(rows) {
       }
     }
   } catch (e) {}
-  /* 새 글부터 ENRICH_MAX 건 — 6건씩 동시에 */
+  /* 새 글부터 ENRICH_MAX 건 — 8건씩 동시에 (최대 3번 × 4초) */
   const todo = need.filter(r => !r.thumb && articleUrlOk(r.url))
     .sort((a, b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0)).slice(0, ENRICH_MAX);
-  for (let i = 0; i < todo.length; i += 6) {
-    await Promise.all(todo.slice(i, i + 6).map(async r => {
+  for (let i = 0; i < todo.length; i += 8) {
+    await Promise.all(todo.slice(i, i + 8).map(async r => {
       const m = await fetchMeta(r.url);
       if (!m) return;
       if (m.thumb) { r.thumb = m.thumb; fetched++; }
@@ -432,7 +436,7 @@ async function collect(by) {
   if (!ready()) return { ok: false, status: 503, error: 'DB 미연결' };
   let sources;
   try {
-    sources = await sb('hub_sources', { query: '?select=id,kind,name,url_or_channel_id,enabled&enabled=is.true&order=id.asc&limit=100' });
+    sources = await sb('hub_sources', { query: '?select=id,kind,name,url_or_channel_id,topic,enabled&enabled=is.true&order=id.asc&limit=100' });
   } catch (e) {
     if (missingTable(e)) return { ok: false, status: 409, error: 'AI 허브 표가 없습니다 — db/11-AI허브.sql 을 실행해 주세요', missing: true };
     throw e;
@@ -453,7 +457,9 @@ async function collect(by) {
     const src = g.src;
     if (g.err) { errors.push({ id: src.id, name: src.name, error: g.err }); continue; }
     perSource.push({ id: src.id, name: src.name, count: g.items.length });
-    for (const it of g.items) {
+    /* topic 끝이 _f 인 출처(종합 IT 매체·개발 커뮤니티)는 AI 관련 글만 담습니다 (2026-11-09) */
+    const items = /_f$/.test(String(src.topic || '')) ? g.items.filter(aiTopic) : g.items;
+    for (const it of items) {
       if (urls.has(it.url)) continue;          // 두 출처에 같은 글이 있으면 하나만
       urls.add(it.url);
       const kind = src.kind === 'youtube' ? 'youtube' : 'news';
@@ -532,7 +538,7 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 
 module.exports = {
   /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
-  __setLookup(fn) { lookupAll = fn; }, __setArticleGet(fn) { articleGet = fn; }, privateIp,
-  parseFeed, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
+  __setLookup(fn) { lookupAll = fn; }, __setArticleGet(fn) { articleGet = fn; }, __fetchFeedForTest: u => fetchFeed(u), privateIp,
+  parseFeed, aiTopic, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

@@ -7,7 +7,7 @@
 
 <section class="hb-dk hb-hero" style="--bg:url(img/idc-hall.jpg)">
   <div class="shell">
-    <span class="hb-tag"><i></i>AI 소식 · 매일 아침 자동 업데이트</span>
+    <a class="hb-tag" href="ai.html"><i></i>AI 작업용 PC · AI 소식 (매일 아침 자동 업데이트)</a>
     <h1>지금 뜨는 AI 도구와<br><em>이번 주 AI 뉴스</em></h1>
     <p class="hb-lead">국내·해외 언론의 AI 기사와 유튜브 AI 영상을 매일 모아,
       이번 주 가장 많이 나온 AI 도구와 주간 뉴스로 정리합니다.</p>
@@ -23,15 +23,21 @@
 </section>
 
 <section class="hb-sec" id="tools"><div class="shell">
-  <div class="hb-h"><div><span class="k">인기 AI 도구</span><h2>이번 주 뉴스에 많이 나온 AI 도구</h2>
-    <p>최근 2주 동안 모은 뉴스·영상 제목과 요약에서 도구 이름이 나온 횟수로 순위를 매깁니다. 매일 자동으로 바뀝니다.</p></div></div>
+  <div class="hb-h"><div><span class="k">인기 AI 도구 · 주간 순위</span><h2>분야별 AI 도구, 이번 주 순위</h2>
+    <p>최근 7일 동안 모은 국내·해외 뉴스와 영상에서 도구 이름이 나온 횟수로 순위를 매깁니다. 매일 아침 자동으로 다시 집계합니다.</p></div></div>
+  <div class="hb-tabs" id="hb-tool-tabs" role="tablist" aria-label="도구 분야"></div>
   <div class="hb-tools" id="hb-tools"><div class="hb-load">불러오는 중…</div></div>
+  <div class="hb-new" id="hb-new" hidden>
+    <h3>이번 주 새로 나온 AI 도구 <small>Product Hunt · AI 분야 신규 등록</small></h3>
+    <div class="hb-new-l" id="hb-new-l"></div>
+  </div>
 </div></section>
 
 <section class="hb-sec alt" id="news"><div class="shell">
   <div class="hb-h"><div><span class="k">주간 AI 뉴스</span><h2>이번 주 AI 뉴스</h2>
     <p>국내·해외 언론의 AI 기사를 매일 모아 주 단위로 정리합니다. 자세한 내용은 각 언론사 원문에서 확인해 주세요.</p></div></div>
   <div class="hb-weeks" id="hb-weeks" role="tablist" aria-label="주 선택"></div>
+  <div class="hb-tabs sm" id="hb-cats" role="tablist" aria-label="뉴스 분류"></div>
   <div class="hb-news" id="hb-news"><div class="hb-load">불러오는 중…</div></div>
   <div class="hb-more" id="hb-news-more" hidden><button class="btn btn-o" type="button" id="hb-news-btn">뉴스 더 보기</button></div>
 </div></section>
@@ -107,7 +113,18 @@
     box.appendChild(c);
   }
   /* ── 주간 뉴스 (2026-11-09) — 한국 시각 월요일부터 일요일까지를 한 주로 묶습니다 ── */
-  var NEWS=[],NEWS_SHOW=9,WEEK=0;
+  var NEWS=[],NEWS_SHOW=9,WEEK=0,NCAT='all';
+  var NEWS_CATS=[['all','전체'],['ko','국내'],['en','해외'],['official','공식 발표'],['tools','도구·개발']];
+  function inCat(n){return NCAT==='all'||(n.cat||'ko')===NCAT}
+  function renderCats(){
+    var box=$('hb-cats');box.textContent='';var w=weeks()[WEEK];
+    NEWS_CATS.forEach(function(c){
+      var cnt=NEWS.filter(function(n){return okUrl(n.url)&&weekOf(n)===w.st&&(c[0]==='all'||(n.cat||'ko')===c[0])}).length;
+      if(c[0]!=='all'&&!cnt)return;
+      var b=el('button','tb'+(NCAT===c[0]?' on':''),c[1]+' '+cnt);b.type='button';b.setAttribute('role','tab');b.setAttribute('aria-selected',NCAT===c[0]?'true':'false');
+      b.addEventListener('click',function(){NCAT=c[0];NEWS_SHOW=9;renderCats();renderNews()});box.appendChild(b);
+    });
+  }
   function weekStart(t){var d=new Date(t+9*3600000);var dow=(d.getUTCDay()+6)%7;
     return Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()-dow)-9*3600000}
   function md(t){var d=new Date(t+9*3600000);return (d.getUTCMonth()+1)+'.'+d.getUTCDate()}
@@ -140,14 +157,14 @@
       var cnt=NEWS.filter(function(n){return okUrl(n.url)&&weekOf(n)===w.st}).length;
       var b=el('button','wk'+(k===WEEK?' on':''));b.type='button';b.setAttribute('role','tab');b.setAttribute('aria-selected',k===WEEK?'true':'false');
       b.appendChild(el('b',null,w.label));b.appendChild(el('span',null,w.range+' · '+cnt+'건'));
-      b.addEventListener('click',function(){WEEK=k;NEWS_SHOW=9;renderWeeks();renderNews()});
+      b.addEventListener('click',function(){WEEK=k;NEWS_SHOW=9;NCAT='all';renderWeeks();renderCats();renderNews()});
       box.appendChild(b);
     });
   }
   function renderNews(){
     var box=$('hb-news');box.textContent='';
     var w=weeks()[WEEK];
-    var list=NEWS.filter(function(n){return okUrl(n.url)&&weekOf(n)===w.st});
+    var list=NEWS.filter(function(n){return okUrl(n.url)&&weekOf(n)===w.st&&inCat(n)});
     /* 사진 있는 기사를 앞으로 (같은 조건이면 최신순 그대로) */
     list=list.filter(function(n){return n.pinned}).concat(list.filter(function(n){return !n.pinned&&okImg(n.thumb)}),list.filter(function(n){return !n.pinned&&!okImg(n.thumb)}));
     if(!list.length){empty(box,w.label+' 모인 뉴스가 아직 없습니다','매일 아침 자동으로 새 소식을 모읍니다. 다른 주를 눌러 보세요.');$('hb-news-more').hidden=true;return}
@@ -155,48 +172,99 @@
     $('hb-news-more').hidden=list.length<=NEWS_SHOW;
   }
   /* ── 인기 AI 도구 — 최근 14일 뉴스·영상 글자에서 이름이 나온 글 수로 순위 (2026-11-09) ── */
+  /* ── 인기 AI 도구 — 분야별 주간 순위 (2026-11-09) ──
+     [이름, 분야, 만든 곳, 공식 주소(없으면 ''), 찾을 이름, (빼고 셀 이름)] — 최근 7일 뉴스·영상 글자에 이름이 나온 글 수로 셉니다 */
+  var TOOL_CATS=[['all','전체 TOP'],['llm','대화형 AI'],['img','이미지'],['vid','영상'],['dev','개발'],['audio','음성·음악'],['work','업무·검색']];
   var TOOLS=[
-    ['ChatGPT','대화형 AI','OpenAI','https://chatgpt.com',/chat\s?gpt|챗\s?gpt|챗지피티/i],
-    ['Claude','대화형 AI','Anthropic','https://claude.ai',/claude|클로드/i],
-    ['Gemini','대화형 AI','Google','https://gemini.google.com',/gemini|제미나이|제미니/i],
-    ['Codex','코딩 에이전트','OpenAI','',/codex|코덱스/i],
-    ['Claude Code','코딩 에이전트','Anthropic','',/claude\s?code|클로드\s?코드/i],
-    ['Cursor','코딩 도구','Anysphere','https://cursor.com',/\bcursor\b|커서\s?AI/i],
-    ['GitHub Copilot','코딩 도구','GitHub','',/github\s?copilot|깃허브\s?코파일럿/i],
-    ['Copilot','업무 AI','Microsoft','',/copilot|코파일럿/i,/github\s?copilot|깃허브\s?코파일럿/gi],
-    ['Perplexity','AI 검색','Perplexity','https://www.perplexity.ai',/perplexity|퍼플렉시티/i],
-    ['Grok','대화형 AI','xAI','',/\bgrok\b|그록/i],
-    ['DeepSeek','오픈 모델','DeepSeek','',/deepseek|딥시크/i],
-    ['Llama','오픈 모델','Meta','',/\bllama\b|라마\s?\d/i],
-    ['NotebookLM','자료 정리','Google','https://notebooklm.google.com',/notebook\s?lm|노트북\s?lm/i],
-    ['Midjourney','이미지 생성','Midjourney','',/midjourney|미드저니/i],
-    ['Sora','영상 생성','OpenAI','',/\bsora\b|소라\s?\d|오픈AI\s?소라/i],
-    ['Veo','영상 생성','Google','',/\bveo\s?\d?\b/i],
-    ['Kling','영상 생성','Kuaishou','',/\bkling\b|클링/i],
-    ['Runway','영상 생성','Runway','',/\brunway\b|런웨이/i],
-    ['Suno','음악 생성','Suno','',/\bsuno\b|수노/i],
-    ['HyperCLOVA X','국내 AI','네이버','',/hyperclova|하이퍼클로바/i],
-    ['에이닷','국내 AI','SK텔레콤','',/에이닷|a\.?dot/i],
-    ['Manus','AI 에이전트','Manus','',/\bmanus\b|마누스/i]
+    ['ChatGPT','llm','OpenAI','https://chatgpt.com',/chat\s?gpt|챗\s?gpt|챗지피티/i],
+    ['Claude','llm','Anthropic','https://claude.ai',/claude|클로드/i,/claude\s?code|클로드\s?코드/gi],
+    ['Gemini','llm','Google','https://gemini.google.com',/gemini|제미나이|제미니/i],
+    ['Grok','llm','xAI','https://grok.com',/\bgrok\b|그록/i],
+    ['DeepSeek','llm','DeepSeek','https://www.deepseek.com',/deepseek|딥시크/i],
+    ['Llama','llm','Meta','https://www.llama.com',/\bllama\b|라마\s?\d/i],
+    ['Mistral','llm','Mistral AI','https://mistral.ai',/mistral|미스트랄/i],
+    ['Qwen','llm','Alibaba','',/\bqwen\b|큐원|퉁이/i],
+    ['HyperCLOVA X','llm','네이버','',/hyperclova|하이퍼클로바/i],
+    ['Midjourney','img','Midjourney','https://www.midjourney.com',/midjourney|미드저니/i],
+    ['Nano Banana','img','Google','',/nano\s?banana|나노\s?바나나/i],
+    ['GPT 이미지','img','OpenAI','',/gpt[-\s]?image|dall[-·\s]?e|달리\s?\d/i],
+    ['Stable Diffusion','img','Stability AI','https://stability.ai',/stable\s?diffusion|스테이블\s?디퓨전|stability\s?ai/i],
+    ['Adobe Firefly','img','Adobe','https://firefly.adobe.com',/firefly|파이어플라이/i],
+    ['Ideogram','img','Ideogram','https://ideogram.ai',/ideogram/i],
+    ['FLUX','img','Black Forest Labs','',/\bflux\s?(\.?\d|pro|kontext)|black\s?forest/i],
+    ['Sora','vid','OpenAI','',/\bsora\b|소라\s?\d|오픈AI\s?소라/i],
+    ['Veo','vid','Google','',/\bveo\s?\d?\b|비오\s?\d/i],
+    ['Kling','vid','Kuaishou','https://klingai.com',/\bkling\b|클링/i],
+    ['Runway','vid','Runway','https://runwayml.com',/\brunway\b|런웨이/i],
+    ['Seedance','vid','ByteDance','',/seedance|시댄스/i],
+    ['Higgsfield','vid','Higgsfield','https://higgsfield.ai',/higgsfield|힉스필드/i],
+    ['Pika','vid','Pika','https://pika.art',/\bpika\b|피카\s?랩스/i],
+    ['HeyGen','vid','HeyGen','https://www.heygen.com',/heygen|헤이젠/i],
+    ['Claude Code','dev','Anthropic','',/claude\s?code|클로드\s?코드/i],
+    ['Codex','dev','OpenAI','',/codex|코덱스/i],
+    ['Cursor','dev','Anysphere','https://cursor.com',/\bcursor\b|커서\s?AI/i],
+    ['GitHub Copilot','dev','GitHub','',/github\s?copilot|깃허브\s?코파일럿/i],
+    ['Gemini CLI','dev','Google','',/gemini\s?cli|제미나이\s?CLI/i],
+    ['Windsurf','dev','Windsurf','',/windsurf|윈드서프/i],
+    ['Replit','dev','Replit','https://replit.com',/replit|리플릿/i],
+    ['Lovable','dev','Lovable','https://lovable.dev',/lovable|러버블/i],
+    ['Suno','audio','Suno','https://suno.com',/\bsuno\b|수노/i],
+    ['Udio','audio','Udio','',/\budio\b|유디오/i],
+    ['ElevenLabs','audio','ElevenLabs','https://elevenlabs.io',/elevenlabs|일레븐랩스/i],
+    ['Copilot','work','Microsoft','',/copilot|코파일럿/i,/github\s?copilot|깃허브\s?코파일럿/gi],
+    ['Perplexity','work','Perplexity','https://www.perplexity.ai',/perplexity|퍼플렉시티/i],
+    ['NotebookLM','work','Google','https://notebooklm.google.com',/notebook\s?lm|노트북\s?lm/i],
+    ['Notion AI','work','Notion','',/notion\s?ai|노션\s?AI/i],
+    ['Gamma','work','Gamma','https://gamma.app',/\bgamma\s?(app|AI)|감마\s?AI/i],
+    ['Manus','work','Manus','',/\bmanus\b|마누스/i],
+    ['Genspark','work','Genspark','',/genspark|젠스파크/i]
   ];
-  function renderTools(news,yt){
-    var box=$('hb-tools');box.textContent='';
-    var since=Date.now()-14*86400000,docs=[];
-    var until=Date.now()+3600000;
+  var TOOL_CAT=0,TOOL_RANK=null;
+  function catName(c){for(var i=0;i<TOOL_CATS.length;i++)if(TOOL_CATS[i][0]===c)return TOOL_CATS[i][1];return ''}
+  function countTools(news,yt){
+    var since=Date.now()-7*86400000,until=Date.now()+3600000,docs=[];
     (news||[]).concat(yt||[]).forEach(function(n){var t=Date.parse(n.at||'');if(isFinite(t)&&t>=since&&t<=until)docs.push(String(n.title||'')+' '+String(n.summary||''))});
-    var rank=TOOLS.map(function(t){var c=0;docs.forEach(function(d){if(t[5])d=d.replace(t[5],' ');if(t[4].test(d))c++});return {t:t,c:c}})
-      .filter(function(x){return x.c>0}).sort(function(a,b){return b.c-a.c}).slice(0,8);
-    if(!rank.length){empty(box,'아직 집계할 소식이 없습니다','뉴스가 모이면 많이 나온 AI 도구 순위가 자동으로 나타납니다.');return}
-    var max=rank[0].c;
-    rank.forEach(function(x,i){
-      var t=x.t,c=el(t[3]?'a':'div','hb-tool'+(i<3?' top':''));
+    return TOOLS.map(function(t,i){var c=0;docs.forEach(function(d){if(t[5])d=d.replace(t[5],' ');if(t[4].test(d))c++});return {t:t,c:c,i:i}});
+  }
+  function renderToolTabs(){
+    var box=$('hb-tool-tabs');box.textContent='';
+    TOOL_CATS.forEach(function(c,k){
+      var b=el('button','tb'+(k===TOOL_CAT?' on':''),c[1]);b.type='button';b.setAttribute('role','tab');b.setAttribute('aria-selected',k===TOOL_CAT?'true':'false');
+      b.addEventListener('click',function(){TOOL_CAT=k;renderToolTabs();renderTools()});box.appendChild(b);
+    });
+  }
+  function renderTools(){
+    var box=$('hb-tools');box.textContent='';
+    if(!TOOL_RANK){empty(box,'아직 집계할 소식이 없습니다','뉴스가 모이면 분야별 AI 도구 순위가 자동으로 나타납니다.');return}
+    var cat=TOOL_CATS[TOOL_CAT][0];
+    var list=TOOL_RANK.filter(function(x){return cat==='all'?x.c>0:x.t[1]===cat})
+      .sort(function(a,b){return b.c-a.c||a.i-b.i}).slice(0,8);
+    if(!list.length){empty(box,'이번 주에는 많이 나온 도구가 없습니다','분야 탭을 눌러 도구 목록을 보세요.');return}
+    var max=Math.max(1,list[0].c);
+    list.forEach(function(x,i){
+      var t=x.t,c=el(t[3]?'a':'div','hb-tool'+(x.c&&i<3?' top':'')+(x.c?'':' dim'));
       if(t[3]){c.href=t[3];c.target='_blank';c.rel='noopener noreferrer nofollow'}
-      var hd=el('div','hd');hd.appendChild(el('span','rk',String(i+1)));hd.appendChild(el('span','cat',t[1]));c.appendChild(hd);
+      var hd=el('div','hd');hd.appendChild(el('span','rk',String(i+1)));hd.appendChild(el('span','cat',catName(t[1])));c.appendChild(hd);
       c.appendChild(el('h3',null,t[0]));c.appendChild(el('p','by',t[2]));
-      var bar=el('div','bar'),fill=el('i');fill.style.width=Math.max(8,Math.round(x.c/max*100))+'%';bar.appendChild(fill);c.appendChild(bar);
-      c.appendChild(el('p','ct','최근 2주 '+x.c+'건에 등장'+(t[3]?' · 공식 사이트 →':'')));
+      var bar=el('div','bar'),fill=el('i');fill.style.width=(x.c?Math.max(8,Math.round(x.c/max*100)):0)+'%';bar.appendChild(fill);c.appendChild(bar);
+      c.appendChild(el('p','ct',(x.c?'최근 7일 '+x.c+'건에 등장':'이번 주 언급 없음')+(t[3]?' · 공식 사이트 →':'')));
       box.appendChild(c);
     });
+  }
+  /* Product Hunt AI 분야 신규 등록 — 출처 이름으로 고릅니다 */
+  function renderNewTools(news){
+    var since=Date.now()-7*86400000;
+    var list=(news||[]).filter(function(n){var t=Date.parse(n.at||'');return okUrl(n.url)&&/product\s?hunt/i.test(n.source||'')&&isFinite(t)&&t>=since}).slice(0,8);
+    if(!list.length){$('hb-new').hidden=true;return}
+    var box=$('hb-new-l');box.textContent='';
+    list.forEach(function(n){
+      var a=el('a','hb-nt');a.href=okUrl(n.url);a.target='_blank';a.rel='noopener noreferrer nofollow';
+      var parts=String(n.title||'').split(/\s[-–—:]\s/);
+      a.appendChild(el('b',null,parts[0]));
+      var sum=String(n.summary||'').replace(/\s*Discussion\s*\|\s*Link\s*$/i,'').trim();if(parts[1])a.appendChild(el('span',null,parts.slice(1).join(' · ')));else if(sum)a.appendChild(el('span',null,sum.slice(0,80)));
+      box.appendChild(a);
+    });
+    $('hb-new').hidden=false;
   }
   function renderYt(list){
     var box=$('hb-yt');box.textContent='';
@@ -223,7 +291,8 @@
       renderBrief(d.brief);NEWS=d.news||[];
       /* 이번 주가 비었으면 뉴스가 있는 가장 가까운 주를 먼저 보여 줍니다 */
       var ws=weeks();WEEK=0;for(var k=0;k<ws.length;k++){if(NEWS.some(function(n){return okUrl(n.url)&&weekOf(n)===ws[k].st})){WEEK=k;break}}
-      renderWeeks();renderNews();renderYt(d.youtube);renderTools(d.news,d.youtube);
+      renderWeeks();renderCats();renderNews();renderYt(d.youtube);
+      TOOL_RANK=(d.news||[]).length||(d.youtube||[]).length?countTools(d.news,d.youtube):null;renderToolTabs();renderTools();renderNewTools(d.news);
       $('hb-upd').textContent=d.updatedAt?ago(d.updatedAt):'아직 없음';
       $('hb-cnt-n').textContent=String((d.news||[]).length);$('hb-cnt-y').textContent=String((d.youtube||[]).length);
     }).catch(function(){
@@ -231,7 +300,7 @@
       empty($('hb-brief'),'잠시 연결이 원활하지 않습니다','조금 뒤 새로고침해 주세요.');
       empty($('hb-news'),'뉴스를 불러오지 못했습니다','조금 뒤 새로고침해 주세요.');
       empty($('hb-yt'),'영상을 불러오지 못했습니다','조금 뒤 새로고침해 주세요.');
-      empty($('hb-tools'),'도구 순위를 불러오지 못했습니다','조금 뒤 새로고침해 주세요.');
+      TOOL_RANK=null;renderToolTabs();renderTools();
     });
   }
   $('hb-news-btn').addEventListener('click',function(){NEWS_SHOW+=9;renderNews()});
