@@ -3,10 +3,34 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "functions": {
-    "api/hub.js": { "maxDuration": 30 },
-    "api/admin.js": { "maxDuration": 30 }
+    "api/hub.js": {
+      "maxDuration": 30
+    },
+    "api/admin.js": {
+      "maxDuration": 30
+    }
   },
   "crons": [
-    { "path": "/api/hub?do=collect", "schedule": "0 21 * * *" }
+    {
+      "path": "/api/hub?do=collect",
+      "schedule": "0 21 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "idckorea-dusky.vercel.app"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    }
   ]
 }

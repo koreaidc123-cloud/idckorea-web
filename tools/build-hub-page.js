@@ -27,7 +27,7 @@ const float = idx.slice(fi, idx.indexOf('</style>', fi) + 8);
 /* 로그인 상태를 헤더에 반영하는 작은 스크립트도 메인과 같게 가져옵니다 (로그인 후 "내 가상컴") */
 const li = idx.indexOf('/* 로그인 상태를 헤더에 반영');
 const loginJs = li > 0 ? '<script>\n' + idx.slice(li, idx.indexOf('</script>', li)).trim() + '\n</script>' : '';
-const url = 'https://idckorea-dusky.vercel.app/hub';
+const url = 'https://www.idckorea2.com/hub';
 const desc = '오늘의 AI 브리핑, 국내외 AI 뉴스, 유튜브 AI 트렌드, 원격PC 에서 클로드 코드·코덱스를 돌리는 방법과 복사해 쓰는 작업 템플릿을 한곳에 모았습니다.';
 const html = [
   '<!doctype html>',
@@ -46,7 +46,7 @@ const html = [
   '<meta property="og:title" content="AI 허브 — 개인 고객을 위한 AI 데이터센터 허브 | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
-  '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/idc-hall.jpg">',
+  '<meta property="og:image" content="https://www.idckorea2.com/img/idc-hall.jpg">',
   '<meta property="og:locale" content="ko_KR">',
   font,
   style,

@@ -21,7 +21,7 @@ const footer = cut('<footer class="ft">', '</div></footer>')
   .replace(/href="#(price|qa|about)"/g, 'href="index.html#$1"');
 const fi = idx.indexOf('<div class="kvc-float">');
 const float = idx.slice(fi, idx.indexOf('</style>', fi) + 8);
-const url = 'https://idckorea-dusky.vercel.app/ai';
+const url = 'https://www.idckorea2.com/ai';
 const desc = '클로드 코드·코덱스를 24시간 돌릴 윈도우 원격PC. 라이젠 3700X 메모리 32GB, 30일 65,000원(부가세 별도). 노트북을 덮어도 일하는 PC를 따로 두세요.';
 const css = fs.readFileSync(path.join(__dirname, 'ai-page.css'), 'utf8');
 const html = [
@@ -41,7 +41,7 @@ const html = [
   '<meta property="og:title" content="원격PC 임대로 AI를 밤새 돌리세요 | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
-  '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/hero1.jpg">',
+  '<meta property="og:image" content="https://www.idckorea2.com/img/hero1.jpg">',
   '<meta property="og:locale" content="ko_KR">',
   font,
   style,

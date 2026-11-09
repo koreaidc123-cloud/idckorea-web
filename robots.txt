@@ -36,4 +36,4 @@ Disallow: /fail.html
 Disallow: /diag.html
 Disallow: /api/
 
-Sitemap: https://idckorea-dusky.vercel.app/sitemap.xml
+Sitemap: https://www.idckorea2.com/sitemap.xml
