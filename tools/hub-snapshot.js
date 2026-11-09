@@ -41,7 +41,9 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
     }));
   }
   yt.sort((a, b) => b.perHour - a.perHour);
-  const out = { ok: true, ready: true, snapshot: true, brief: null, news: top, youtube: yt.slice(0, 12), updatedAt: new Date(now).toISOString() };
+  const wk = news.concat(yt).filter(n => { const t = Date.parse(n.at); return t >= now - 7 * 86400000 && t <= now + 3600000; })
+    .map(n => String(n.title || '') + ' ' + String(n.summary || '').slice(0, 160));
+  const out = { ok: true, ready: true, snapshot: true, brief: null, news: top, youtube: yt.slice(0, 12), week: wk, updatedAt: new Date(now).toISOString() };
   fs.mkdirSync(path.join(root, 'data'), { recursive: true });
   fs.writeFileSync(path.join(root, 'data', 'hub-snapshot.json'), JSON.stringify(out));
   console.log(`뉴스 ${top.length}건 (사진 ${top.filter(n => n.thumb).length}) · 영상 ${out.youtube.length}편 → data/hub-snapshot.json`);

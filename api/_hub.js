@@ -186,7 +186,11 @@ function parseFeed(xml, kind) {
 }
 
 /* AI 관련 글인지 — 제목·요약에 AI 낱말이 있는지만 봅니다 */
-const AI_RE = /(\bAI\b|A\.I\.|인공지능|생성형|\bLLM|GPT|챗봇|에이전트|머신러닝|딥러닝|클로드|Claude|Gemini|제미나이|오픈AI|OpenAI|Anthropic|앤트로픽|엔비디아|NVIDIA|코파일럿|Copilot|딥시크|DeepSeek|\bAGI\b|파운데이션 모델)/i;
+/* ★ Codex T-0248: "에이전트"·"GPT" 같은 일반 낱말만으로는 통과시키지 않습니다 (여행 에이전트, GPT 파티션).
+   AI 낱말 · 대표 AI 회사 · 대표 AI 도구 이름이 있어야 AI 글로 봅니다. */
+/* ★ Codex T-0248: "에이전트"·"GPT" 같은 일반 낱말만으로는 통과시키지 않습니다 (여행 에이전트, GPT 파티션).
+   AI 낱말 · 대표 AI 회사 · 대표 AI 도구 이름이 있어야 AI 글로 봅니다. */
+const AI_RE = /(\bAI\b|A\.I\.|인공지능|생성형|\bLLM|챗\s?GPT|ChatGPT|\bGPT-?\d|챗봇|AI\s?에이전트|에이전틱|머신러닝|딥러닝|파운데이션 모델|\bAGI\b|클로드|Claude|Gemini|제미나이|오픈AI|OpenAI|Anthropic|앤트로픽|딥마인드|DeepMind|엔비디아|NVIDIA|코파일럿|Copilot|딥시크|DeepSeek|\bSora\b|미드저니|Midjourney|허깅페이스|Hugging\s?Face|퍼플렉시티|Perplexity|\bGrok\b|\bLlama\b)/i;
 const aiTopic = it => AI_RE.test(String(it.title || '') + ' ' + String(it.summary || ''));
 
 /* 유튜브 점수 = 올린 뒤 지난 시간당 조회수 (1시간 미만은 1시간으로 셈) */
