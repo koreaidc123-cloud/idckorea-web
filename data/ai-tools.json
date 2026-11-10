@@ -487,5 +487,91 @@
    "d": "LG가 만든 AI 모델. 공개 모델은 직접 돌릴 수 있음.",
    "k": "exaone|엑사원"
   }
+ ],
+ "biz": [
+  {
+   "k": "shop",
+   "n": "쇼핑몰·스마트스토어",
+   "d": "상세페이지 글, 상품 사진 손보기, 주문 정리 자동화",
+   "use": "주문 정리처럼 매일 도는 자동화는 꺼지지 않는 서버실 PC에 맡기세요.",
+   "t": [
+    "ChatGPT",
+    "Nano Banana",
+    "GPT 이미지",
+    "Perplexity",
+    "n8n",
+    "Make"
+   ]
+  },
+  {
+   "k": "mkt",
+   "n": "마케팅·SNS",
+   "d": "광고 문구, 카드뉴스 그림, 숏폼 영상, 배경음악",
+   "use": "여러 계정·작업을 PC별로 나눠 돌리기 좋습니다(PC마다 개별 공인 IP).",
+   "t": [
+    "ChatGPT",
+    "Claude",
+    "Midjourney",
+    "Kling",
+    "HeyGen",
+    "Suno"
+   ]
+  },
+  {
+   "k": "design",
+   "n": "디자인·영상 제작",
+   "d": "시안 그림, 이미지 합성, 영상 생성과 편집",
+   "use": "내 PC에서 직접 돌리는 생성 도구는 그래픽카드가 필요합니다. 사양 업그레이드는 별도 문의.",
+   "t": [
+    "Midjourney",
+    "Adobe Firefly",
+    "Stable Diffusion",
+    "ComfyUI",
+    "Runway",
+    "Higgsfield"
+   ]
+  },
+  {
+   "k": "dev",
+   "n": "개발·IT",
+   "d": "코드 작성·수정, 시험, 업무 자동화 서버",
+   "use": "클로드 코드·코덱스를 켜 둔 PC에서 돌리고, 휴대폰으로 지시하세요.",
+   "t": [
+    "Claude Code",
+    "Codex",
+    "Cursor",
+    "GitHub Copilot",
+    "Gemini CLI",
+    "n8n"
+   ]
+  },
+  {
+   "k": "office",
+   "n": "사무·회계·업무",
+   "d": "문서 요약, 회의록, 발표 자료, 반복 클릭 자동화",
+   "use": "윈도우 반복 작업 자동화는 켜 둔 PC에서 밤새 돌릴 수 있습니다.",
+   "t": [
+    "Microsoft Copilot",
+    "NotebookLM",
+    "Gamma",
+    "Notion AI",
+    "Power Automate",
+    "Perplexity"
+   ]
+  },
+  {
+   "k": "edu",
+   "n": "교육·강의·크리에이터",
+   "d": "강의 자료 정리, 목소리 녹음, 영상 대본",
+   "use": "자료 정리·음성 만들기는 웹 도구로 충분하고, 편집 PC가 필요하면 원격PC를 쓰세요.",
+   "t": [
+    "NotebookLM",
+    "ChatGPT",
+    "ElevenLabs",
+    "Gamma",
+    "Suno",
+    "뤼튼"
+   ]
+  }
  ]
 }

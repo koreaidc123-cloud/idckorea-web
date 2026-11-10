@@ -766,6 +766,25 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
 @media(max-width:1000px){.hc-grid{grid-template-columns:repeat(2,1fr)}.tl-grid{grid-template-columns:repeat(2,1fr)}.hb-news.nr{grid-template-columns:1fr}}
 @media(max-width:600px){.hc-grid{gap:10px}.hc .tx{left:12px;right:12px;bottom:10px}.hc .tx b{font-size:16px}.hc .tx span{display:none}
   .tl-grid{grid-template-columns:1fr}.tl-q,.tl-q input{width:100%}.hb-nr .th{width:84px}.tl-legend{margin-top:-14px}}
+/* ── 업종별 추천 (2026-11-10) ── */
+.bz-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.bz{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s,transform .2s}
+.bz:hover{box-shadow:var(--sh);transform:translateY(-3px)}
+.bz .th{position:relative;aspect-ratio:16/8;background:#0B1736;overflow:hidden}
+.bz .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bz .th:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,12,30,0) 40%,rgba(6,12,30,.8))}
+.bz .th b{position:absolute;left:18px;bottom:14px;z-index:1;color:#fff;font-size:19px;letter-spacing:-.02em}
+.bz .bd{padding:16px 18px 18px;display:flex;flex-direction:column;gap:12px;flex:1}
+.bz .d{margin:0;font-size:14px;color:var(--ink2);line-height:1.55}
+.bz .bt{display:flex;flex-direction:column;gap:6px}
+.bt-i{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;color:var(--ink);text-decoration:none;font-size:14.5px;font-weight:700;transition:background .2s}
+a.bt-i:hover{background:#F2F5FC}
+.bt-i i{flex:none;width:28px;height:28px;border-radius:8px;color:#fff;font-style:normal;font-size:11.5px;font-weight:900;display:inline-flex;align-items:center;justify-content:center}
+.bt-i span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-i em{font-style:normal;font-size:11px;padding:2px 8px}
+.bz .use{margin:auto 0 0;font-size:13px;line-height:1.55;color:var(--ink3);background:#F6F8FC;border-radius:10px;padding:10px 12px}
+@media(max-width:1000px){.bz-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.bz-grid{grid-template-columns:1fr}}
 
 </style>
 </head>
@@ -799,9 +818,9 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
     <a class="hb-tag" href="ai.html"><i></i>AI 작업용 PC · AI 소식</a>
     <h1>요즘 쓰는 AI 도구,<br><em>분야별로 한눈에</em></h1>
     <p class="hb-lead">대화형 AI부터 이미지·영상·코딩·자동화까지. 도구마다 <b>원격PC에서 어떻게 쓰는지</b> 함께 정리했고,
-      매일 모은 국내 AI 소식으로 이번 주 화제 도구를 보여 드립니다.</p>
+      AI 전문지·기업 공식 발표에서 모은 소식으로 이번 주 화제 도구를 보여 드립니다.</p>
     <nav class="hb-jump" aria-label="AI 소식 바로가기">
-      <a href="#cats">분야별 도구</a><a href="#tools">도구 모음</a><a href="#news">최신 AI 소식</a>
+      <a href="#cats">분야별 도구</a><a href="#biz">업종별 추천</a><a href="#tools">도구 모음</a><a href="#news">최신 AI 소식</a>
     </nav>
   </div>
   <div class="hb-bar"><div class="shell">
@@ -817,7 +836,13 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
   <div class="hc-grid" id="hc-grid"></div>
 </div></section>
 
-<section class="hb-sec alt" id="tools"><div class="shell">
+<section class="hb-sec alt" id="biz"><div class="shell">
+  <div class="hb-h"><div><span class="k">업종별 추천</span><h2>내 일에 맞는 AI 도구</h2>
+    <p>업종마다 많이 쓰는 도구를 골랐습니다. 도구 이름을 누르면 공식 사이트로 이동합니다.</p></div></div>
+  <div class="bz-grid" id="bz-grid"></div>
+</div></section>
+
+<section class="hb-sec" id="tools"><div class="shell">
   <div class="hb-h"><div><span class="k">AI 도구 모음</span><h2>원격PC에서 이렇게 씁니다</h2>
     <p>도구마다 원격PC와 어울리는 정도를 표시했습니다. <b>24시간 켜 두기</b>·<b>윈도우 설치</b> 도구는 내 PC를 끄면 멈추니 서버실 PC에 맡기기 좋습니다.</p></div></div>
   <div class="tl-legend">
@@ -833,9 +858,9 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
   <p class="ai-src">도구 이름과 소개는 각 회사의 상표·서비스를 안내하기 위한 것이며, 한국 가상컴과 제휴 관계가 아닙니다. 요금·기능은 공식 사이트에서 확인해 주세요.</p>
 </div></section>
 
-<section class="hb-sec" id="news"><div class="shell">
+<section class="hb-sec alt" id="news"><div class="shell">
   <div class="hb-h"><div><span class="k">최신 AI 소식</span><h2>지금 나온 AI 소식</h2>
-    <p>기업이 직접 낸 <b>공식 발표</b>와 <b>언론 보도</b>를 나눠 보여 드립니다. 같은 소식을 여러 언론이 보도하면 <b>언론 N곳 보도</b>로 표시합니다. 누르면 각 매체 원문으로 이동합니다.</p></div></div>
+    <p>기업이 직접 낸 <b>공식 발표</b>, <b>AI 전문지</b>, <b>개발자 커뮤니티</b> 소식만 모읍니다. 같은 소식을 여러 매체가 다루면 <b>매체 N곳 보도</b>로 표시합니다. 누르면 원문으로 이동합니다.</p></div></div>
   <div class="hb-tabs sm" id="hb-cats" role="tablist" aria-label="소식 분류"></div>
   <div class="hb-news nr" id="hb-news"><div class="hb-load">불러오는 중…</div></div>
   <div class="hb-more" id="hb-news-more" hidden><button class="btn btn-o" type="button" id="hb-news-btn">소식 더 보기</button></div>
@@ -938,6 +963,22 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
       g.appendChild(b);
     });
   }
+  function renderBiz(list){
+    var g=$('bz-grid');g.textContent='';
+    (list||[]).forEach(function(b){
+      var c=el('article','bz');
+      var th=el('div','th');var im=el('img');im.src='img/hb-'+String(b.k).replace(/[^a-z]/g,'')+'.webp';im.alt='';im.loading='lazy';im.decoding='async';th.appendChild(im);
+      th.appendChild(el('b',null,b.n));c.appendChild(th);
+      var bd=el('div','bd');bd.appendChild(el('p','d',b.d));
+      var ul=el('div','bt');(b.t||[]).forEach(function(n){
+        var t=null;for(var i=0;i<TOOLS.length;i++)if(TOOLS[i].n===n){t=TOOLS[i];break}
+        if(!t)return;var a=el(t.u?'a':'span','bt-i');if(t.u){a.href=t.u;a.target='_blank';a.rel='noopener noreferrer nofollow'}
+        var col=CAT_COLOR[t.c]||CAT_COLOR.llm;var mk=el('i',null,mono(t.n));mk.style.background='linear-gradient(135deg,'+col[0]+','+col[1]+')';a.appendChild(mk);a.appendChild(el('span',null,t.n));
+        a.appendChild(el('em','rb r-'+t.r,RLABEL[t.r]||''));ul.appendChild(a);
+      });
+      bd.appendChild(ul);bd.appendChild(el('p','use',b.use));c.appendChild(bd);g.appendChild(c);
+    });
+  }
   function renderToolTabs(){
     var box=$('hb-tool-tabs');box.textContent='';
     [['all','전체']].concat(CATS).forEach(function(c){
@@ -977,10 +1018,10 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
   /* ── 최신 AI 소식 (2026-11-10) ─────────────────────────────
      · 한국어 제목만 (영어 기사는 대표 지시로 뺌)
      · 사진·요약은 보여 주지 않습니다 — 매체별 이용 허락을 확인하기 전까지 제목·매체명·날짜·원문 링크만 (저작권)
-     · 분류: 공식 발표(기업 뉴스룸) · 언론 보도 · 개발 커뮤니티
-     · 같은 소식을 다른 매체 여러 곳이 보도했으면 "언론 N곳 보도" (제목 낱말이 많이 겹치는 글을 3일 안에서 묶음) */
+     · 분류: 공식 발표(기업 뉴스룸) · AI 전문지 · 개발 커뮤니티 (일반 언론은 11-10 대표 지시로 제외)
+     · 같은 소식을 다른 매체 여러 곳이 보도했으면 "매체 N곳 보도" (제목 낱말이 많이 겹치는 글을 3일 안에서 묶음) */
   var NEWS=[],NEWS_SHOW=12,NCAT='all';
-  var NEWS_CATS=[['all','전체'],['official','공식 발표'],['multi','여러 언론 보도'],['ko','언론 보도'],['dev','개발 커뮤니티']];
+  var NEWS_CATS=[['all','전체'],['official','공식 발표'],['multi','여러 매체 보도'],['ko','AI 전문지'],['dev','개발 커뮤니티']];
   /* 한국어 제목 — 한글 4자 이상 + 한글이 영문자의 절반 이상 (서버와 같은 기준) */
   var KO={test:function(t){var s=String(t||''),h=(s.match(/[가-힣]/g)||[]).length,l=(s.match(/[A-Za-z]/g)||[]).length;return h>=4&&h*2>=l}};
   function catOf(n){var c=n.cat||'ko';return c==='official'?'official':(c==='tools'||c==='dev')?'dev':'ko'}
@@ -991,7 +1032,7 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
     list.forEach(function(n,i){
       var srcs={};srcs[n.source||'']=1;var ti=Date.parse(n.at||'');
       list.forEach(function(m,j){
-        /* 언론 기사끼리만, 3일 안에서만 (Codex T-0254·T-0257) */
+        /* AI 전문지 기사끼리만, 3일 안에서만 (Codex T-0254·T-0257) */
         if(i===j||srcs[m.source||'']||catOf(m)!=='ko')return;
         var tj=Date.parse(m.at||'');if(!isFinite(ti)||!isFinite(tj)||Math.abs(ti-tj)>3*86400000)return;
         var a=sets[i],b=sets[j],inter=0,ka=Object.keys(a),kb=Object.keys(b);if(ka.length<3||kb.length<3)return;
@@ -1018,8 +1059,8 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
     var cat=toolCatOf(n.title),th=el('span','th c-'+cat);var im=el('img');im.src='img/hc-'+cat+'.webp';im.alt='';im.loading='lazy';im.decoding='async';th.appendChild(im);a.appendChild(th);
     var bd=el('div','bd'),top=el('div','tg'),c=catOf(n);
     if(n.pinned)top.appendChild(el('em','pin','추천'));
-    top.appendChild(el('span','bd-'+c,c==='official'?'공식 발표':c==='dev'?'개발 커뮤니티':'언론 보도'));
-    if(n._press>=2)top.appendChild(el('span','bd-multi','언론 '+n._press+'곳 보도'));
+    top.appendChild(el('span','bd-'+c,c==='official'?'공식 발표':c==='dev'?'개발 커뮤니티':'AI 전문지'));
+    if(n._press>=2)top.appendChild(el('span','bd-multi','매체 '+n._press+'곳 보도'));
     var t=TOOL_OF_TITLE[n.url];if(t)top.appendChild(el('span','bd-tool',t));
     bd.appendChild(top);bd.appendChild(el('h3',null,n.title));
     var pub=n.source||'';
@@ -1064,7 +1105,9 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
       CATS=(t.cats||[]).filter(function(c){return Array.isArray(c)&&c.length>=3});
       TOOLS=(t.tools||[]).map(function(x,i){return {n:String(x.n||''),c:String(x.c||''),m:String(x.m||''),u:okUrl(x.u)?x.u:'',r:String(x.r||'web'),d:String(x.d||''),_k:rx(x.k),_x:rx(x.x,'gi'),_i:i}}).filter(function(x){return x.n});
       $('hb-cnt-t').textContent=String(TOOLS.length);
-      renderCatsGrid();renderToolTabs();renderTools();
+      renderCatsGrid();renderBiz(t.biz);renderToolTabs();renderTools();
+      /* 홈 카드에서 hub.html#cat-분야 로 들어오면 그 분야를 바로 보여 줍니다 */
+      var hm=/^#cat-([a-z]+)$/.exec(location.hash||'');if(hm&&CATS.some(function(c){return c[0]===hm[1]})){TOOL_CAT=hm[1];renderToolTabs();renderTools();setTimeout(function(){$('tools').scrollIntoView()},60)}
       return feedP;
     }).then(function(d){
       renderBrief(d.brief);

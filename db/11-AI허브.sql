@@ -75,6 +75,7 @@ alter table hub_briefs  enable row level security;
 
 -- ── 5. 기본 출처 (2026-11-08 개발 중 한 번씩 열어 RSS 가 오는 것을 확인함) ──
 --   한국어 출처만 씁니다 (2026-11-10 대표 지시 — 영어 기사·영어 채널 제외).
+--   일반 언론(종합 IT 매체)은 가십이 될 수 있어 빼고, AI 전문지·기업 공식 발표·개발자 커뮤니티만 씁니다 (2026-11-10 대표 지시).
 --   저작권 조사(_보고서/AI소식_출처_저작권조사_2026-11-10.md): 구글 뉴스 RSS(비상업 전용)·지디넷코리아(발췌 링크 금지)는 뺐고,
 --   바이라인네트워크·삼성전자 뉴스룸은 약관 확인 전이라 뺐습니다. 남은 곳도 제목·매체명·링크만 보여 줍니다(사진·요약 안 씀).
 --   뉴스: 구글 뉴스 검색 RSS · AI 전문지 · 국내 IT 언론(AI 기사만) · 기업 공식 뉴스룸(AI 글만, 공식 발표로 표시) · 긱뉴스
@@ -84,11 +85,6 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
   ('rss', 'AI타임스', 'https://www.aitimes.com/rss/allArticle.xml', 'news_ko'),
   ('rss', '인공지능신문', 'https://www.aitimes.kr/rss/allArticle.xml', 'news_ko'),
   ('rss', 'AI포스트', 'https://www.aipostkorea.com/rss/allArticle.xml', 'news_ko'),
-  ('rss', '전자신문', 'https://rss.etnews.com/Section902.xml', 'news_ko_f'),
-  ('rss', '블로터', 'https://www.bloter.net/rss/allArticle.xml', 'news_ko_f'),
-  ('rss', '디지털투데이', 'https://www.digitaltoday.co.kr/rss/allArticle.xml', 'news_ko_f'),
-  ('rss', '테크M', 'https://www.techm.kr/rss/allArticle.xml', 'news_ko_f'),
-  ('rss', 'IT조선', 'https://it.chosun.com/rss/allArticle.xml', 'news_ko_f'),
   ('rss', 'SK텔레콤 뉴스룸', 'https://news.sktelecom.com/feed', 'official_f'),
   ('rss', 'SK하이닉스 뉴스룸', 'https://news.skhynix.co.kr/feed/', 'official_f'),
   ('rss', '구글 코리아 블로그', 'https://blog.google/intl/ko-kr/rss/', 'official_f'),
@@ -115,5 +111,5 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
 on conflict (url_or_channel_id) do nothing;
 
 -- ── 6. 확인 ──────────────────────────────────────────────────
--- 아래가 출처 개수(처음이면 31)를 보여 주면 끝입니다.
+-- 아래가 출처 개수(처음이면 26)를 보여 주면 끝입니다.
 select count(*) as "출처 개수" from hub_sources;

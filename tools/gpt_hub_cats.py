@@ -9,6 +9,13 @@ OUT = Path(__file__).resolve().parent.parent / "_보고서" / "hub_cat_img"
 RULE = ("고급 테크 브랜드 일러스트, 가로 4:3, 배경은 짙은 남색(#0B1736)에서 파랑(#1E3FA8)으로 은은한 그라데이션, "
         "가운데에 매끈한 3D 유리·금속 질감 오브제 하나(오른쪽 아래 약간 치우침), 부드러운 파란 림라이트, 미니멀, 여백 넉넉. "
         "글자·숫자·로고·상표·실존 회사 마크·사람 얼굴 절대 금지. image_gen 도구로 생성해 지정 경로에 PNG 로 저장하고 경로만 답한다.")
+JOBS_BIZ = [
+        ("biz-shop.png", "오브제: 유리 쇼핑백과 작은 상품 상자들, 반투명 장바구니 아이콘 모양 빛"),
+        ("biz-mkt.png", "오브제: 유리 확성기와 위로 오르는 막대그래프, 하트·말풍선 모양 빛 입자"),
+        ("biz-design.png", "오브제: 유리 팔레트와 붓, 겹쳐진 사진 프레임과 필름 조각"),
+        ("biz-dev.png", "오브제: 겹쳐진 유리 터미널 창 두 개와 꺾쇠 괄호 기호, 작은 서버 랙"),
+        ("biz-office.png", "오브제: 유리 계산기와 표 문서, 서류철과 빛나는 체크 표시"),
+        ("biz-edu.png", "오브제: 유리 졸업모와 펼쳐진 책, 작은 마이크와 재생 버튼")]
 JOBS = [("llm.png", "오브제: 반투명 유리로 된 말풍선 두 개가 겹쳐 있고 안쪽에 작은 빛나는 점 세 개"),
         ("img.png", "오브제: 유리 액자 프레임 안에 무지갯빛 붓 자국과 작은 산·해 모양, 옆에 떠 있는 붓"),
         ("vid.png", "오브제: 금속 필름 클래퍼보드와 반투명 재생 버튼 삼각형, 필름 띠가 살짝 휘어 있음"),
@@ -29,4 +36,4 @@ def run(n, p):
     return "실패 " + n
 OUT.mkdir(parents=True, exist_ok=True)
 with ThreadPoolExecutor(3) as ex:
-    for r in ex.map(lambda j: run(*j), JOBS): print(r, flush=True)
+    for r in ex.map(lambda j: run(*j), JOBS + JOBS_BIZ): print(r, flush=True)

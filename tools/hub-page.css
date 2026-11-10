@@ -280,3 +280,22 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
 @media(max-width:1000px){.hc-grid{grid-template-columns:repeat(2,1fr)}.tl-grid{grid-template-columns:repeat(2,1fr)}.hb-news.nr{grid-template-columns:1fr}}
 @media(max-width:600px){.hc-grid{gap:10px}.hc .tx{left:12px;right:12px;bottom:10px}.hc .tx b{font-size:16px}.hc .tx span{display:none}
   .tl-grid{grid-template-columns:1fr}.tl-q,.tl-q input{width:100%}.hb-nr .th{width:84px}.tl-legend{margin-top:-14px}}
+/* ── 업종별 추천 (2026-11-10) ── */
+.bz-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.bz{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transition:box-shadow .2s,transform .2s}
+.bz:hover{box-shadow:var(--sh);transform:translateY(-3px)}
+.bz .th{position:relative;aspect-ratio:16/8;background:#0B1736;overflow:hidden}
+.bz .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bz .th:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,12,30,0) 40%,rgba(6,12,30,.8))}
+.bz .th b{position:absolute;left:18px;bottom:14px;z-index:1;color:#fff;font-size:19px;letter-spacing:-.02em}
+.bz .bd{padding:16px 18px 18px;display:flex;flex-direction:column;gap:12px;flex:1}
+.bz .d{margin:0;font-size:14px;color:var(--ink2);line-height:1.55}
+.bz .bt{display:flex;flex-direction:column;gap:6px}
+.bt-i{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;color:var(--ink);text-decoration:none;font-size:14.5px;font-weight:700;transition:background .2s}
+a.bt-i:hover{background:#F2F5FC}
+.bt-i i{flex:none;width:28px;height:28px;border-radius:8px;color:#fff;font-style:normal;font-size:11.5px;font-weight:900;display:inline-flex;align-items:center;justify-content:center}
+.bt-i span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-i em{font-style:normal;font-size:11px;padding:2px 8px}
+.bz .use{margin:auto 0 0;font-size:13px;line-height:1.55;color:var(--ink3);background:#F6F8FC;border-radius:10px;padding:10px 12px}
+@media(max-width:1000px){.bz-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.bz-grid{grid-template-columns:1fr}}
