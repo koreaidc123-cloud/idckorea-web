@@ -27,7 +27,7 @@ const float = idx.slice(fi, idx.indexOf('</style>', fi) + 8);
 /* 로그인 상태를 헤더에 반영하는 작은 스크립트도 메인과 같게 가져옵니다 (로그인 후 "내 가상컴") */
 const li = idx.indexOf('/* 로그인 상태를 헤더에 반영');
 const loginJs = li > 0 ? '<script>\n' + idx.slice(li, idx.indexOf('</script>', li)).trim() + '\n</script>' : '';
-const url = 'https://idckorea-dusky.vercel.app/hub';
+const url = 'https://www.idckorea2.co.kr/hub';
 const desc = '국내·해외 언론의 AI 기사와 유튜브 AI 영상을 매일 자동으로 모아 주간 AI 뉴스와 인기 AI 도구 순위로 정리합니다.';
 const html = [
   '<!doctype html>',
@@ -46,7 +46,7 @@ const html = [
   '<meta property="og:title" content="AI 소식 — 주간 AI 뉴스와 인기 AI 도구 | 한국 가상컴">',
   `<meta property="og:description" content="${desc}">`,
   `<meta property="og:url" content="${url}">`,
-  '<meta property="og:image" content="https://idckorea-dusky.vercel.app/img/idc-hall.jpg">',
+  '<meta property="og:image" content="https://www.idckorea2.co.kr/img/idc-hall.jpg">',
   '<meta property="og:locale" content="ko_KR">',
   font,
   style,
