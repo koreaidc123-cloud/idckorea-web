@@ -75,25 +75,20 @@ alter table hub_briefs  enable row level security;
 
 -- ── 5. 기본 출처 (2026-11-08 개발 중 한 번씩 열어 RSS 가 오는 것을 확인함) ──
 --   한국어 출처만 씁니다 (2026-11-10 대표 지시 — 영어 기사·영어 채널 제외).
+--   저작권 조사(_보고서/AI소식_출처_저작권조사_2026-11-10.md): 구글 뉴스 RSS(비상업 전용)·지디넷코리아(발췌 링크 금지)는 뺐고,
+--   바이라인네트워크·삼성전자 뉴스룸은 약관 확인 전이라 뺐습니다. 남은 곳도 제목·매체명·링크만 보여 줍니다(사진·요약 안 씀).
 --   뉴스: 구글 뉴스 검색 RSS · AI 전문지 · 국내 IT 언론(AI 기사만) · 기업 공식 뉴스룸(AI 글만, 공식 발표로 표시) · 긱뉴스
 --   유튜브: AI 본부 관찰 채널 중 AI 도구 · 개발 · 공식 채널만 (드라마·코미디 채널과 경쟁사 채널은 뺐습니다)
 --   필요 없는 곳은 관리자 화면 [AI 허브 관리 → 출처] 에서 끄시면 됩니다.
 insert into hub_sources (kind, name, url_or_channel_id, topic) values
-  ('rss', '구글 뉴스 · AI 인공지능', 'https://news.google.com/rss/search?q=AI%20%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
-  ('rss', '구글 뉴스 · 클로드 코드', 'https://news.google.com/rss/search?q=%ED%81%B4%EB%A1%9C%EB%93%9C%20%EC%BD%94%EB%93%9C&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
   ('rss', 'AI타임스', 'https://www.aitimes.com/rss/allArticle.xml', 'news_ko'),
   ('rss', '인공지능신문', 'https://www.aitimes.kr/rss/allArticle.xml', 'news_ko'),
   ('rss', 'AI포스트', 'https://www.aipostkorea.com/rss/allArticle.xml', 'news_ko'),
-  ('rss', '구글 뉴스 · 생성형 AI', 'https://news.google.com/rss/search?q=%EC%83%9D%EC%84%B1%ED%98%95%20AI&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
-  ('rss', '구글 뉴스 · AI 에이전트', 'https://news.google.com/rss/search?q=AI%20%EC%97%90%EC%9D%B4%EC%A0%84%ED%8A%B8&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
-  ('rss', '지디넷코리아', 'https://feeds.feedburner.com/zdkorea', 'news_ko_f'),
   ('rss', '전자신문', 'https://rss.etnews.com/Section902.xml', 'news_ko_f'),
   ('rss', '블로터', 'https://www.bloter.net/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '디지털투데이', 'https://www.digitaltoday.co.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '테크M', 'https://www.techm.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', 'IT조선', 'https://it.chosun.com/rss/allArticle.xml', 'news_ko_f'),
-  ('rss', '바이라인네트워크', 'https://byline.network/feed/', 'news_ko_f'),
-  ('rss', '삼성전자 뉴스룸', 'https://news.samsung.com/kr/feed', 'official_f'),
   ('rss', 'SK텔레콤 뉴스룸', 'https://news.sktelecom.com/feed', 'official_f'),
   ('rss', 'SK하이닉스 뉴스룸', 'https://news.skhynix.co.kr/feed/', 'official_f'),
   ('rss', '구글 코리아 블로그', 'https://blog.google/intl/ko-kr/rss/', 'official_f'),
@@ -120,5 +115,5 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
 on conflict (url_or_channel_id) do nothing;
 
 -- ── 6. 확인 ──────────────────────────────────────────────────
--- 아래가 출처 개수(처음이면 38)를 보여 주면 끝입니다.
+-- 아래가 출처 개수(처음이면 31)를 보여 주면 끝입니다.
 select count(*) as "출처 개수" from hub_sources;

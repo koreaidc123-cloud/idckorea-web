@@ -11,7 +11,7 @@ const srcs = [...sql.matchAll(/\('(rss|youtube)', '([^']+)', '([^']+)', '([^']*)
 const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' : /^(tools|dev)/.test(t) ? 'tools' : 'ko';
 (async () => {
   const now = Date.now(), news = [], yt = [], seen = new Set();
-  await Promise.all(srcs.map(async s => {
+  await Promise.all(srcs.filter(s => s.kind !== 'youtube' || hub.YT_RSS_OK()).map(async s => {
     const url = hub.feedUrlOf(s);
     try {
       const r = await fetch(url, { headers: { 'User-Agent': 'KVC-Hub/1.0' } });
@@ -21,7 +21,7 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
       for (const it of items) {
         if (seen.has(it.url)) continue; seen.add(it.url);
         if (it.published_at && now - Date.parse(it.published_at) > 21 * 86400000) continue;
-        if (s.kind === 'youtube') yt.push({ title: it.title, url: it.url, thumb: it.thumb || '', at: it.published_at, views: it.views, perHour: hub.ytScore(it.views, it.published_at, now), channel: s.name, pinned: false });
+        if (s.kind === 'youtube') { if (hub.YT_RSS_OK()) yt.push({ title: it.title, url: it.url, thumb: it.thumb || '', at: it.published_at, views: it.views, perHour: hub.ytScore(it.views, it.published_at, now), channel: s.name, pinned: false }); }
         else news.push({ title: it.title, url: it.url, summary: it.summary || '', thumb: it.thumb || '', at: it.published_at, source: s.name, cat: catOf(s.topic), pinned: false });
       }
       console.log('✔', s.name, items.length);

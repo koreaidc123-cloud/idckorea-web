@@ -2210,7 +2210,7 @@ async function main() {
         await ctx.route('**/data/hub-snapshot.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"ready":false,"news":[],"youtube":[]}' }));
         const p = await openPage(ctx, '/hub');
         await p.waitForFunction(() => document.getElementById('brief').hidden && /모인 소식이 아직 없습니다/.test(document.getElementById('hb-news').innerText)
-          && /아직 모인 영상이 없습니다/.test(document.getElementById('hb-yt').innerText)
+          && document.getElementById('yt').hidden
           && /아직 집계할 소식이 없습니다/.test(document.getElementById('hb-tools').innerText), null, { timeout: 8000 });
         ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 빈 화면 가로 넘침');
         ok(!p.errors.length, '빈 화면 콘솔 오류 ' + p.errors.join('|'));

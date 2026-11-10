@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
---  AI 소식 출처 24곳 추가   (2026-11-09)
+--  AI 소식 출처 19곳 추가   (2026-11-09)
 --
 --  ★ db/11-AI허브.sql 을 11-09 이전에 이미 돌리셨을 때만 실행합니다.
 --    (11-09 이후의 db/11 에는 이 출처가 이미 들어 있습니다. 다시 돌려도 겹치지 않습니다)
@@ -11,16 +11,11 @@
 -- ═══════════════════════════════════════════════════════════════
 insert into hub_sources (kind, name, url_or_channel_id, topic) values
   ('rss', 'AI포스트', 'https://www.aipostkorea.com/rss/allArticle.xml', 'news_ko'),
-  ('rss', '구글 뉴스 · 생성형 AI', 'https://news.google.com/rss/search?q=%EC%83%9D%EC%84%B1%ED%98%95%20AI&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
-  ('rss', '구글 뉴스 · AI 에이전트', 'https://news.google.com/rss/search?q=AI%20%EC%97%90%EC%9D%B4%EC%A0%84%ED%8A%B8&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
-  ('rss', '지디넷코리아', 'https://feeds.feedburner.com/zdkorea', 'news_ko_f'),
   ('rss', '전자신문', 'https://rss.etnews.com/Section902.xml', 'news_ko_f'),
   ('rss', '블로터', 'https://www.bloter.net/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '디지털투데이', 'https://www.digitaltoday.co.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '테크M', 'https://www.techm.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', 'IT조선', 'https://it.chosun.com/rss/allArticle.xml', 'news_ko_f'),
-  ('rss', '바이라인네트워크', 'https://byline.network/feed/', 'news_ko_f'),
-  ('rss', '삼성전자 뉴스룸', 'https://news.samsung.com/kr/feed', 'official_f'),
   ('rss', 'SK텔레콤 뉴스룸', 'https://news.sktelecom.com/feed', 'official_f'),
   ('rss', 'SK하이닉스 뉴스룸', 'https://news.skhynix.co.kr/feed/', 'official_f'),
   ('rss', '구글 코리아 블로그', 'https://blog.google/intl/ko-kr/rss/', 'official_f'),
@@ -38,6 +33,6 @@ on conflict (url_or_channel_id) do nothing;
 
 update hub_sources set topic = 'dev_f' where url_or_channel_id = 'UCUpJs89fSBXNolQGOYKn0YQ';
 update hub_sources set topic = 'office_f' where url_or_channel_id = 'UCZ6UHYBQFBe14WUgxlgmYfg';
-update hub_sources set enabled = false where name in ('The Verge · AI', 'TechCrunch · AI', 'Wired · AI', 'MIT Technology Review · AI', 'Ars Technica · AI', 'OpenAI 뉴스', 'Google AI 블로그', 'Google DeepMind', 'NVIDIA 블로그', 'Hugging Face 블로그', 'GitHub 블로그 · AI', 'Product Hunt · AI', 'Higgsfield AI', 'Anthropic', 'Google for Developers');
+update hub_sources set enabled = false where name in ('구글 뉴스 · AI 인공지능', '구글 뉴스 · 클로드 코드', '구글 뉴스 · 생성형 AI', '구글 뉴스 · AI 에이전트', '지디넷코리아', '바이라인네트워크', '삼성전자 뉴스룸', 'The Verge · AI', 'TechCrunch · AI', 'Wired · AI', 'MIT Technology Review · AI', 'Ars Technica · AI', 'OpenAI 뉴스', 'Google AI 블로그', 'Google DeepMind', 'NVIDIA 블로그', 'Hugging Face 블로그', 'GitHub 블로그 · AI', 'Product Hunt · AI', 'Higgsfield AI', 'Anthropic', 'Google for Developers');
 
 select count(*) filter (where enabled) as "켜진 출처", count(*) as "전체" from hub_sources;

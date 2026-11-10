@@ -51,6 +51,7 @@ Object.assign(process.env, {
 
 const fakeDb = require('./fake-supabase');
 /* AI 허브의 DNS 확인(내부망 막기)도 가짜로 — 진짜 DNS 를 묻지 않습니다. internal.e2e.test 만 내부 주소로 답합니다 */
+process.env.KVC_YT_RSS = '1';   // 시험에서는 유튜브 RSS 기능도 시험합니다 (운영은 꺼짐)
 require('../../api/_hub').__setLookup(async h => (h === 'internal.e2e.test' ? [{ address: '10.0.0.5', family: 4 }] : [{ address: '203.0.113.10', family: 4 }]));
 /* AI 허브가 기사 대표 사진·설명(og:image)을 읽는 연결도 가짜로 — 진짜 인터넷에 나가지 않습니다 (2026-11-09) */
 require('../../api/_hub').__setArticleGet(async (url, addr) => {

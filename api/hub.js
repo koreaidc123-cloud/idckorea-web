@@ -63,7 +63,7 @@ async function feed(req, res) {
       news: (news || []).filter(n => hub.KO_RE.test(n.title || '')).map(n => { const ok = hub.MEDIA_OK.has(nameOf.get(n.source_id)); const sm = String(n.summary || ''); return { title: n.title, url: n.url,
         summary: ok ? sm : (/^출처 /.test(sm) ? sm.slice(0, 63) : ''), thumb: ok ? (n.thumb || '') : '',
         at: n.published_at, source: nameOf.get(n.source_id) || '', cat: catOf.get(n.source_id) || 'ko', pinned: !!n.pinned }; }),
-      youtube: (yt || []).filter(v => hub.KO_RE.test(v.title || '')).map(v => ({ title: v.title, url: v.url, thumb: v.thumb || '', at: v.published_at,
+      youtube: (hub.YT_RSS_OK() ? (yt || []) : []).filter(v => hub.KO_RE.test(v.title || '')).map(v => ({ title: v.title, url: v.url, thumb: v.thumb || '', at: v.published_at,
         views: v.views == null ? null : Number(v.views), perHour: Number(v.score) || 0,
         channel: nameOf.get(v.source_id) || '', pinned: !!v.pinned })),
       week: (week || []).filter(w => !(Date.parse(w.published_at) > Date.now() + 3600000)).map(w => String(w.title || '')).filter(t => hub.KO_RE.test(t)),   // 순위 계산용 제목만

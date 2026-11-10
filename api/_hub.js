@@ -305,6 +305,9 @@ async function fetchFeed(url) {
 /* ★ 2026-11-10 대표 지시(저작권): 매체별 이용 허락을 확인한 출처만 사진·요약을 씁니다.
    여기에 출처 이름을 넣은 곳만 기사 대표 사진을 읽고, 공개 목록에도 사진·요약을 보냅니다. 지금은 비어 있습니다. */
 const MEDIA_OK = new Set([]);
+/* 유튜브 채널 RSS 는 약관상 허용 여부를 확인하지 못해 수집·표시하지 않습니다 (2026-11-10).
+   허용된 방식(YouTube Data API 또는 임베드 플레이어)으로 바꾼 뒤에 켭니다. */
+const YT_RSS_OK = () => process.env.KVC_YT_RSS === '1';   // 운영 Vercel 에는 넣지 않음 (시험 서버만 1)
 const KO_RE = /[가-힣]/;
 const ENRICH_MAX = 24, ENRICH_BYTES = 256 * 1024, ENRICH_MS = 4000;
 function metaContent(html, key) {
@@ -455,7 +458,7 @@ async function collect(by) {
   const rows = [];
   const urls = new Set();
   /* 받기는 전부 동시에, 정리는 출처 번호 순서대로 (같은 글이 두 곳에 있으면 늘 앞 출처 것을 씀) */
-  const got = await Promise.all((sources || []).map(async src => {
+  const got = await Promise.all((sources || []).filter(src => src.kind !== 'youtube' || YT_RSS_OK()).map(async src => {
     const url = feedUrlOf(src);
     if (!url) return { src, err: '주소 형식이 올바르지 않습니다' };
     try { return { src, items: parseFeed(await fetchFeed(url), src.kind) }; }
@@ -548,6 +551,6 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 module.exports = {
   /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
   __setLookup(fn) { lookupAll = fn; }, __setArticleGet(fn) { articleGet = fn; }, __fetchFeedForTest: u => fetchFeed(u), privateIp,
-  parseFeed, aiTopic, MEDIA_OK, KO_RE, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
+  parseFeed, aiTopic, MEDIA_OK, KO_RE, YT_RSS_OK, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

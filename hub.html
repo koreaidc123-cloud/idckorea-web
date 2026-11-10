@@ -744,7 +744,7 @@ a.hb-tag{text-decoration:none}
     <p class="hb-lead">기업 공식 발표와 국내 언론의 AI 소식, 한국어 AI 유튜브를 매일 모아
       요즘 많이 쓰는 AI 도구와 함께 정리합니다.</p>
     <nav class="hb-jump" aria-label="AI 소식 바로가기">
-      <a href="#tools">인기 AI 도구</a><a href="#news">최신 AI 소식</a><a href="#yt">유튜브 트렌드</a><a href="#brief">AI 브리핑</a>
+      <a href="#tools">인기 AI 도구</a><a href="#news">최신 AI 소식</a><a href="#brief">AI 브리핑</a>
     </nav>
   </div>
   <div class="hb-bar"><div class="shell">
@@ -770,7 +770,8 @@ a.hb-tag{text-decoration:none}
   <div class="hb-more" id="hb-news-more" hidden><button class="btn btn-o" type="button" id="hb-news-btn">뉴스 더 보기</button></div>
 </div></section>
 
-<section class="hb-sec" id="yt"><div class="shell">
+<!-- 유튜브: 채널 RSS 약관 확인 전이라 숨김 (2026-11-10). YouTube Data API 로 바꾼 뒤 hidden 을 뺍니다 -->
+<section class="hb-sec" id="yt" hidden><div class="shell">
   <div class="hb-h"><div><span class="k">유튜브 트렌드</span><h2>요즘 많이 보는 AI 영상</h2>
     <p>한국어 AI·개발·IT 채널의 새 영상을 <b>올린 뒤 시간당 조회수</b> 순으로 모았습니다. 여러 채널을 고루 보시도록 한 채널은 2편까지만 보여 드립니다.</p></div></div>
   <div class="hb-yt" id="hb-yt"><div class="hb-load">불러오는 중…</div></div>
@@ -1005,7 +1006,7 @@ a.hb-tag{text-decoration:none}
       renderBrief(d.brief);
       NEWS=(d.news||[]).filter(function(n){return KO.test(n.title||'')});cluster(NEWS);
       d.youtube=(d.youtube||[]).filter(function(v){return KO.test(v.title||'')});
-      renderCats();renderNews();renderYt(d.youtube);
+      renderCats();renderNews();if((d.youtube||[]).length){$('yt').hidden=false;renderYt(d.youtube)}
       WEEKDOCS=Array.isArray(d.week)?d.week.slice(0,3000):null;
       TOOL_RANK=(d.news||[]).length||(d.youtube||[]).length?countTools(d.news,d.youtube):null;renderToolTabs();renderTools();
       $('hb-upd').textContent=d.updatedAt?ago(d.updatedAt):'아직 없음';
