@@ -32,7 +32,7 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
   const cap = { ko: 120, en: 0, official: 40, tools: 40 }, used = {};
   const top = news.filter(n => (used[n.cat] = (used[n.cat] || 0) + 1) <= cap[n.cat]);
   /* 저작권(2026-11-10): 허락 확인된 출처(MEDIA_OK)만 사진·요약을 남기고, 나머지는 제목·매체명·링크만 */
-  for (const n of top) if (!hub.MEDIA_OK.has(n.source)) { n.thumb = ''; n.summary = /^출처 /.test(n.summary) ? n.summary.slice(0, 63) : ''; }
+  for (const n of top) if (!hub.MEDIA_OK.has(n.source)) { n.thumb = ''; n.summary = ''; }
   const need = top.filter(n => !n.thumb && hub.MEDIA_OK.has(n.source));
   for (let i = 0; i < need.length; i += 8) {
     await Promise.all(need.slice(i, i + 8).map(async n => {

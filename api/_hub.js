@@ -308,7 +308,7 @@ const MEDIA_OK = new Set([]);
 /* 유튜브 채널 RSS 는 약관상 허용 여부를 확인하지 못해 수집·표시하지 않습니다 (2026-11-10).
    허용된 방식(YouTube Data API 또는 임베드 플레이어)으로 바꾼 뒤에 켭니다. */
 const YT_RSS_OK = () => process.env.KVC_YT_RSS === '1';   // 운영 Vercel 에는 넣지 않음 (시험 서버만 1)
-const KO_RE = /[가-힣]/;
+const KO_RE = { test: t => { const s = String(t || ''); const h = (s.match(/[가-힣]/g) || []).length, l = (s.match(/[A-Za-z]/g) || []).length; return h >= 4 && h * 2 >= l; } };   // 한국어 제목 판별 (Codex T-0254: 한글 몇 자만 붙은 영어 제목 차단)
 const ENRICH_MAX = 24, ENRICH_BYTES = 256 * 1024, ENRICH_MS = 4000;
 function metaContent(html, key) {
   const re = /<meta\b[^<>]*>/gi;
@@ -492,7 +492,8 @@ async function collect(by) {
   /* 저장이 중간에 실패해도 멈추지 않고 오류로 남깁니다 — 마지막 수집 기록은 꼭 남도록 (Codex T-0225).
      다음 수집 때 같은 주소는 덮어쓰므로 다시 돌려도 겹치지 않습니다. */
   for (let i = 0; i < fresh.length; i += 200) {
-    const chunk = fresh.slice(i, i + 200).map(r => { const o = Object.assign({}, r); delete o._src; return o; });
+    /* 허락 안 된 출처의 사진·요약은 저장도 하지 않습니다 (Codex T-0254) */
+    const chunk = fresh.slice(i, i + 200).map(r => { const o = Object.assign({}, r); if (o.kind === 'news' && !MEDIA_OK.has(o._src)) { o.summary = null; o.thumb = null; } delete o._src; return o; });
     try {
       await sb('hub_items', {
         method: 'POST', query: '?on_conflict=url', body: chunk,

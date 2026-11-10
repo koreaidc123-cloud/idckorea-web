@@ -2029,7 +2029,8 @@ async function main() {
     const bad = it.find(x => x.url === 'https://news.e2e.test/a/2');
     ok(bad && bad.title === '위험한 제목 & 기호' && !/[<>]/.test(bad.title + bad.summary), '태그를 못 벗김: ' + JSON.stringify(bad));
     const first = it.find(x => x.url === 'https://news.e2e.test/a/1');
-    ok(first.summary && !/[<>]|alert/.test(first.summary), '요약에 태그·스크립트 ' + first.summary);
+    ok(first.summary == null && first.thumb == null, '허락 안 된 출처의 요약·사진이 저장됨 ' + first.summary + ' ' + first.thumb);   // 2026-11-10 저작권: MEDIA_OK 출처만 저장
+    ok(!/[<>]|alert/.test(first.title), '제목에 태그·스크립트 ' + first.title);
     const fast = it.find(x => x.url.endsWith('vidFast0002')), slow = it.find(x => x.url.endsWith('vidSlow0001'));
     ok(fast.views === 5000 && Math.abs(fast.score - 2500) < 5 && Math.abs(slow.score - 100) < 1 && /^https:\/\/i1\.ytimg\.com\//.test(fast.thumb), '유튜브 점수 ' + JSON.stringify([fast, slow]));
     const last = db().settings.find(s => s.k === 'hub_last_collect');
@@ -2211,7 +2212,7 @@ async function main() {
         const p = await openPage(ctx, '/hub');
         await p.waitForFunction(() => document.getElementById('brief').hidden && /모인 소식이 아직 없습니다/.test(document.getElementById('hb-news').innerText)
           && document.getElementById('yt').hidden
-          && /아직 집계할 소식이 없습니다/.test(document.getElementById('hb-tools').innerText), null, { timeout: 8000 });
+          && document.querySelectorAll('#hb-tools .tc').length >= 6, null, { timeout: 8000 });
         ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 빈 화면 가로 넘침');
         ok(!p.errors.length, '빈 화면 콘솔 오류 ' + p.errors.join('|'));
         await ctx.close();
@@ -2222,17 +2223,17 @@ async function main() {
     for (const o of shapes) {
       const ctx = await newContext(Object.assign({ }, o));
       const p = await openPage(ctx, '/hub');
-      await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nc').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 2, null, { timeout: 8000 });
+      await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nr').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 2, null, { timeout: 8000 });
       const s = await p.evaluate(() => ({
         badge: document.querySelector('#hb-yt .badge').textContent,
-        ext: [...document.querySelectorAll('#hb-news a.hb-nc,#hb-yt a.hb-vc')].every(a => a.target === '_blank' && /noopener/.test(a.rel) && /^https?:/.test(a.href)),
-        cats: document.querySelectorAll('#hb-cats .tb').length, txt: document.querySelectorAll('#hb-news .hb-nc.txt').length,
-        noImg: !document.querySelector('#hb-news img') && !document.getElementById('hb-weeks'), brief: !document.getElementById('brief').hidden,
+        ext: [...document.querySelectorAll('#hb-news a.hb-nr,#hb-yt a.hb-vc')].every(a => a.target === '_blank' && /noopener/.test(a.rel) && /^https?:/.test(a.href)),
+        cats: document.querySelectorAll('#hb-cats .tb').length, txt: document.querySelectorAll('#hb-news .hb-nr').length, tools: document.querySelectorAll('#hb-tools .tc').length,
+        noImg: [...document.querySelectorAll('#hb-news img,#hb-tools img')].every(i => /\/img\/hc-[a-z]+\.webp$/.test(i.src)) && !document.getElementById('hb-weeks'), brief: !document.getElementById('brief').hidden,
         noMe: !document.getElementById('hb-me') && !document.getElementById('hb-tpl'),
         upd: document.getElementById('hb-upd').textContent, on: (document.querySelector('.gnb a.on') || {}).textContent,
       }));
       ok(/^시간당 2,[45][0-9][0-9]회$/.test(s.badge), '시간당 배지 ' + s.badge);
-      ok(s.ext && s.cats >= 2 && s.txt >= 1 && s.noImg && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 작업용 PC', '화면 ' + JSON.stringify(s));
+      ok(s.ext && s.cats >= 2 && s.txt >= 1 && s.tools >= 6 && s.noImg && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 작업용 PC', '화면 ' + JSON.stringify(s));
       ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 꽉 찬 화면 가로 넘침');
       ok(!p.errors.length && !p.xss.length, '꽉 찬 화면 콘솔 오류 ' + p.errors.join('|'));
       await ctx.close();
@@ -2262,15 +2263,15 @@ async function main() {
     const now = Date.now();
     db().hub_sources.push({ id: 9100, kind: 'rss', name: XSS, url_or_channel_id: 'https://xss.e2e.test/rss.xml', topic: XSS, enabled: false, created_at: iso(now) });
     db().hub_items.push(
-      { id: 9101, source_id: 9100, kind: 'news', title: XSS + ' 뉴스', url: 'https://xss.e2e.test/1?"><img src=x onerror=alert(1)>', summary: XSS, thumb: null, published_at: iso(now - 60000), views: null, score: 0, hidden: false, pinned: true, created_at: iso(now) },
-      { id: 9102, source_id: 9100, kind: 'youtube', title: XSS + ' 영상', url: 'javascript:alert(1)', summary: null, thumb: 'javascript:alert(1)', published_at: iso(now - 60000), views: 10, score: 99999, hidden: false, pinned: false, created_at: iso(now) },
+      { id: 9101, source_id: 9100, kind: 'news', title: XSS + ' 위험한 제목이 들어간 시험용 뉴스', url: 'https://xss.e2e.test/1?"><img src=x onerror=alert(1)>', summary: XSS, thumb: null, published_at: iso(now - 60000), views: null, score: 0, hidden: false, pinned: true, created_at: iso(now) },
+      { id: 9102, source_id: 9100, kind: 'youtube', title: XSS + ' 위험한 제목이 들어간 시험용 영상', url: 'javascript:alert(1)', summary: null, thumb: 'javascript:alert(1)', published_at: iso(now - 60000), views: 10, score: 99999, hidden: false, pinned: false, created_at: iso(now) },
     );
     db().hub_briefs.push({ id: 9103, day: '2026-11-06', title: XSS, body: '# ' + XSS + '\n- ' + XSS + '\n' + XSS, status: 'published', source: 'admin', created_at: iso(now), published_at: iso(now), who: XSS });
     const ctx = await newContext();
     const p = await openPage(ctx, '/hub');
     await p.waitForFunction(x => document.getElementById('hb-news').innerText.includes(x) && document.getElementById('hb-brief').innerText.includes(x), XSS, { timeout: 8000 });
     await sleep(300);
-    const s = await p.evaluate(() => ({ imgs: [...document.querySelectorAll('#hb-news img,#hb-brief img,#hb-tools img')].filter(i => i.hasAttribute('onerror') || !/^https:\/\//.test(i.getAttribute('src') || '') || i.closest('.bd')).length,
+    const s = await p.evaluate(() => ({ imgs: [...document.querySelectorAll('#hb-news img,#hb-brief img,#hb-tools img')].filter(i => i.hasAttribute('onerror') || !(/^https:\/\//.test(i.getAttribute('src') || '') || /^img\/hc-[a-z]+\.webp$/.test(i.getAttribute('src') || '')) || i.closest('.bd')).length,
       js: [...document.querySelectorAll('a')].some(a => /^javascript:/i.test(a.getAttribute('href') || '')) }));
     ok(!p.xss.length && !s.imgs && !s.js, '고객 화면 XSS ' + JSON.stringify(s) + p.xss.join(','));
     await ctx.close();
