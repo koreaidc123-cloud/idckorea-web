@@ -302,6 +302,10 @@ async function fetchFeed(url) {
    · https 공개 주소만 · 다른 곳으로 넘기면 한 번까지 (넘긴 곳도 같은 검사) · 앞 256KB 만 읽음 · 4초 제한
    · 구글 뉴스 주소는 기사 원문이 아니라서 열지 않습니다
    · 이미 사진을 받아 둔 기사는 다시 열지 않습니다 (표에 있는 값을 그대로 씀) */
+/* ★ 2026-11-10 대표 지시(저작권): 매체별 이용 허락을 확인한 출처만 사진·요약을 씁니다.
+   여기에 출처 이름을 넣은 곳만 기사 대표 사진을 읽고, 공개 목록에도 사진·요약을 보냅니다. 지금은 비어 있습니다. */
+const MEDIA_OK = new Set([]);
+const KO_RE = /[가-힣]/;
 const ENRICH_MAX = 24, ENRICH_BYTES = 256 * 1024, ENRICH_MS = 4000;
 function metaContent(html, key) {
   const re = /<meta\b[^<>]*>/gi;
@@ -393,7 +397,7 @@ async function fetchMeta(url) {
 }
 /* 표에 이미 있는 사진·요약을 먼저 채우고, 없는 것만 기사에서 읽어 옵니다 */
 async function enrich(rows) {
-  const need = rows.filter(r => r.kind === 'news' && !r.thumb);
+  const need = rows.filter(r => r.kind === 'news' && !r.thumb && MEDIA_OK.has(r._src));
   if (!need.length) return { reused: 0, fetched: 0 };
   let reused = 0, fetched = 0;
   try {
@@ -468,7 +472,7 @@ async function collect(by) {
       urls.add(it.url);
       const kind = src.kind === 'youtube' ? 'youtube' : 'news';
       rows.push({
-        source_id: src.id, kind, title: it.title, url: it.url, summary: it.summary, thumb: it.thumb,
+        _src: src.name, source_id: src.id, kind, title: it.title, url: it.url, summary: it.summary, thumb: it.thumb,
         published_at: it.published_at, views: kind === 'youtube' ? it.views : null,
         score: kind === 'youtube' ? ytScore(it.views, it.published_at, now) : 0,
       });
@@ -477,14 +481,15 @@ async function collect(by) {
 
   /* 30일보다 오래된 글은 처음부터 넣지 않습니다 */
   const cutoff = now - KEEP_DAYS * 86400000;
-  const fresh = rows.filter(r => !r.published_at || Date.parse(r.published_at) >= cutoff);
+  /* 한국어 제목만 (2026-11-10 대표 지시 — 영어 기사·영상 제외) */
+  const fresh = rows.filter(r => (!r.published_at || Date.parse(r.published_at) >= cutoff) && KO_RE.test(r.title || ''));
   let pics = { reused: 0, fetched: 0 };
   try { pics = await enrich(fresh); } catch (e) { errors.push({ id: null, name: '사진', error: String((e && e.message) || e).slice(0, 120) }); }
   let saved = 0;
   /* 저장이 중간에 실패해도 멈추지 않고 오류로 남깁니다 — 마지막 수집 기록은 꼭 남도록 (Codex T-0225).
      다음 수집 때 같은 주소는 덮어쓰므로 다시 돌려도 겹치지 않습니다. */
   for (let i = 0; i < fresh.length; i += 200) {
-    const chunk = fresh.slice(i, i + 200);
+    const chunk = fresh.slice(i, i + 200).map(r => { const o = Object.assign({}, r); delete o._src; return o; });
     try {
       await sb('hub_items', {
         method: 'POST', query: '?on_conflict=url', body: chunk,
@@ -543,6 +548,6 @@ const cleanLine = (s, max) => plain(String(s == null ? '' : s), max);
 module.exports = {
   /* 시험 전용 — 가짜 DNS 를 끼웁니다 (tests/e2e/server.js). 운영 코드는 부르지 않습니다 */
   __setLookup(fn) { lookupAll = fn; }, __setArticleGet(fn) { articleGet = fn; }, __fetchFeedForTest: u => fetchFeed(u), privateIp,
-  parseFeed, aiTopic, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
+  parseFeed, aiTopic, MEDIA_OK, KO_RE, pageMeta, firstImg, fetchMeta, plain, ytScore, feedUrlOf, publicHost, collect, lastCollect, missingTable,
   kstDay, validDay, cleanBody, cleanLine, CHANNEL_RE, LAST_KEY, KEEP_DAYS,
 };

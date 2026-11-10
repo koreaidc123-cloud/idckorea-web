@@ -1,10 +1,11 @@
 -- ═══════════════════════════════════════════════════════════════
---  AI 소식 출처 21곳 추가   (2026-11-09)
+--  AI 소식 출처 24곳 추가   (2026-11-09)
 --
 --  ★ db/11-AI허브.sql 을 11-09 이전에 이미 돌리셨을 때만 실행합니다.
 --    (11-09 이후의 db/11 에는 이 출처가 이미 들어 있습니다. 다시 돌려도 겹치지 않습니다)
 --  · 국내 IT 언론(지디넷·전자신문·블로터 등)은 topic 이 news_ko_f 라서 AI 기사만 골라 담습니다.
---  · 공식 발표(OpenAI·구글·딥마인드·엔비디아·허깅페이스·깃허브), 해외 AI 매체, 신규 AI 도구(Product Hunt), 개발자 커뮤니티(긱뉴스)
+--  · 기업 공식 뉴스룸(삼성전자·SK텔레콤·SK하이닉스·구글 코리아, AI 글만), 개발자 커뮤니티(긱뉴스). 한국어 출처만.
+--  · 예전 db/11 에 있던 영어 출처는 끕니다(아래 update).
 --  · 2026-11-09 에 주소마다 한 번씩 받아 RSS 가 오는 것을 확인했습니다.
 --  필요 없는 곳은 관리자 화면 [AI 허브 관리 → 출처] 에서 끄시면 됩니다.
 -- ═══════════════════════════════════════════════════════════════
@@ -19,17 +20,24 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
   ('rss', '테크M', 'https://www.techm.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', 'IT조선', 'https://it.chosun.com/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '바이라인네트워크', 'https://byline.network/feed/', 'news_ko_f'),
-  ('rss', 'Wired · AI', 'https://www.wired.com/feed/tag/ai/latest/rss', 'news_en'),
-  ('rss', 'MIT Technology Review · AI', 'https://www.technologyreview.com/topic/artificial-intelligence/feed', 'news_en'),
-  ('rss', 'Ars Technica · AI', 'https://arstechnica.com/ai/feed/', 'news_en'),
-  ('rss', 'OpenAI 뉴스', 'https://openai.com/news/rss.xml', 'official'),
-  ('rss', 'Google AI 블로그', 'https://blog.google/technology/ai/rss/', 'official'),
-  ('rss', 'Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'official'),
-  ('rss', 'NVIDIA 블로그', 'https://blogs.nvidia.com/feed/', 'official'),
-  ('rss', 'Hugging Face 블로그', 'https://huggingface.co/blog/feed.xml', 'official'),
-  ('rss', 'GitHub 블로그 · AI', 'https://github.blog/ai-and-ml/feed/', 'official'),
-  ('rss', 'Product Hunt · AI', 'https://www.producthunt.com/feed?category=artificial-intelligence', 'tools'),
-  ('rss', '긱뉴스', 'https://news.hada.io/rss/news', 'dev_f')
+  ('rss', '삼성전자 뉴스룸', 'https://news.samsung.com/kr/feed', 'official_f'),
+  ('rss', 'SK텔레콤 뉴스룸', 'https://news.sktelecom.com/feed', 'official_f'),
+  ('rss', 'SK하이닉스 뉴스룸', 'https://news.skhynix.co.kr/feed/', 'official_f'),
+  ('rss', '구글 코리아 블로그', 'https://blog.google/intl/ko-kr/rss/', 'official_f'),
+  ('rss', '긱뉴스', 'https://news.hada.io/rss/news', 'dev_f'),
+  ('youtube', '테디노트 TeddyNote', 'UCt2wAAXgm87ACiQnDHQEW6Q', 'ai_tools'),
+  ('youtube', '빵형의 개발도상국', 'UC2L1DgDMD5pJ-35G47Objfw', 'ai_tools'),
+  ('youtube', '일잘러 장피엠', 'UCSkpTOEl_zW6b4Y7M_Prefg', 'ai_tools'),
+  ('youtube', 'GPTers 커뮤니티', 'UCLL4StPwMllEZJ6bYI4Ds3w', 'ai_tools'),
+  ('youtube', '엔드플랜 Endplan AI', 'UCUpkgT9Entggw2fMBprWM4w', 'ai_tools'),
+  ('youtube', '코딩애플', 'UCSLrpBAzr-ROVGHQ5EmxnUg', 'dev_f'),
+  ('youtube', '드림코딩', 'UC_4u-bXaba7yrRz_6x6kb_w', 'dev_f'),
+  ('youtube', 'ITSub잇섭', 'UCdUcjkyZtf-1WJyPPiETF1g', 'tech_f'),
+  ('youtube', '테크몽 Techmong', 'UCFX6adXoyQKxft933NB3rmA', 'tech_f')
 on conflict (url_or_channel_id) do nothing;
 
-select count(*) as "출처 개수" from hub_sources;
+update hub_sources set topic = 'dev_f' where url_or_channel_id = 'UCUpJs89fSBXNolQGOYKn0YQ';
+update hub_sources set topic = 'office_f' where url_or_channel_id = 'UCZ6UHYBQFBe14WUgxlgmYfg';
+update hub_sources set enabled = false where name in ('The Verge · AI', 'TechCrunch · AI', 'Wired · AI', 'MIT Technology Review · AI', 'Ars Technica · AI', 'OpenAI 뉴스', 'Google AI 블로그', 'Google DeepMind', 'NVIDIA 블로그', 'Hugging Face 블로그', 'GitHub 블로그 · AI', 'Product Hunt · AI', 'Higgsfield AI', 'Anthropic', 'Google for Developers');
+
+select count(*) filter (where enabled) as "켜진 출처", count(*) as "전체" from hub_sources;

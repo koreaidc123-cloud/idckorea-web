@@ -46,10 +46,10 @@ async function feed(req, res) {
     const [briefs, news, yt, srcs, week] = await Promise.all([
       sb('hub_briefs', { query: '?select=day,title,body,published_at&status=eq.published&order=day.desc&limit=1' }),
       sb('hub_items', { query: '?select=id,source_id,title,url,summary,thumb,published_at,pinned&kind=eq.news&hidden=is.false&order=pinned.desc,published_at.desc.nullslast&limit=150' }),
-      sb('hub_items', { query: '?select=id,source_id,title,url,thumb,published_at,views,score,pinned&kind=eq.youtube&hidden=is.false&order=pinned.desc,score.desc&limit=12' }),
+      sb('hub_items', { query: '?select=id,source_id,title,url,thumb,published_at,views,score,pinned&kind=eq.youtube&hidden=is.false&order=pinned.desc,score.desc&limit=80' }),
       sb('hub_sources', { query: '?select=id,name,topic&limit=200' }),
       /* ★ Codex T-0248: 도구 순위는 최근 7일 글 전체(제목·요약)로 셉니다 — 공개 목록 개수 제한과 따로 */
-      sb('hub_items', { query: '?select=title,summary&hidden=is.false&published_at=gte.' + new Date(Date.now() - 7 * 86400000).toISOString() + '&published_at=lte.' + new Date(Date.now() + 3600000).toISOString() + '&limit=2000' }),
+      sb('hub_items', { query: '?select=title,published_at&hidden=is.false&published_at=gte.' + new Date(Date.now() - 7 * 86400000).toISOString() + '&limit=2000' }),
     ]);
     const nameOf = new Map((srcs || []).map(s => [s.id, s.name]));
     /* 분류: 국내 · 해외 · 공식 발표 · 도구·개발 (출처 topic 으로) */
@@ -59,12 +59,14 @@ async function feed(req, res) {
     return res.status(200).json({
       ok: true, ready: true,
       brief: b ? { day: b.day, title: b.title, body: b.body, publishedAt: b.published_at } : null,
-      news: (news || []).map(n => ({ title: n.title, url: n.url, summary: n.summary || '', thumb: n.thumb || '',
-        at: n.published_at, source: nameOf.get(n.source_id) || '', cat: catOf.get(n.source_id) || 'ko', pinned: !!n.pinned })),
-      youtube: (yt || []).map(v => ({ title: v.title, url: v.url, thumb: v.thumb || '', at: v.published_at,
+      /* 저작권: 허락 확인된 출처(MEDIA_OK)만 사진·요약을 보냅니다. 나머지는 제목·매체명·링크만 (2026-11-10) */
+      news: (news || []).filter(n => hub.KO_RE.test(n.title || '')).map(n => { const ok = hub.MEDIA_OK.has(nameOf.get(n.source_id)); const sm = String(n.summary || ''); return { title: n.title, url: n.url,
+        summary: ok ? sm : (/^출처 /.test(sm) ? sm.slice(0, 63) : ''), thumb: ok ? (n.thumb || '') : '',
+        at: n.published_at, source: nameOf.get(n.source_id) || '', cat: catOf.get(n.source_id) || 'ko', pinned: !!n.pinned }; }),
+      youtube: (yt || []).filter(v => hub.KO_RE.test(v.title || '')).map(v => ({ title: v.title, url: v.url, thumb: v.thumb || '', at: v.published_at,
         views: v.views == null ? null : Number(v.views), perHour: Number(v.score) || 0,
         channel: nameOf.get(v.source_id) || '', pinned: !!v.pinned })),
-      week: (week || []).map(w => String(w.title || '') + ' ' + String(w.summary || '').slice(0, 160)),
+      week: (week || []).filter(w => !(Date.parse(w.published_at) > Date.now() + 3600000)).map(w => String(w.title || '')).filter(t => hub.KO_RE.test(t)),   // 순위 계산용 제목만
       updatedAt: last && last.at || null,
     });
   } catch (e) {

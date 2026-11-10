@@ -17,6 +17,7 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
       const r = await fetch(url, { headers: { 'User-Agent': 'KVC-Hub/1.0' } });
       let items = hub.parseFeed(await r.text(), s.kind);
       if (/_f$/.test(s.topic)) items = items.filter(hub.aiTopic);
+      items = items.filter(it => hub.KO_RE.test(it.title || ''));   // 한국어만 (2026-11-10)
       for (const it of items) {
         if (seen.has(it.url)) continue; seen.add(it.url);
         if (it.published_at && now - Date.parse(it.published_at) > 21 * 86400000) continue;
@@ -28,10 +29,11 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
   }));
   news.sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
   /* 분류마다 고르게 — 국내 70 · 해외 30 · 공식 30 · 도구 30 까지 */
-  const cap = { ko: 70, en: 30, official: 30, tools: 30 }, used = {};
+  const cap = { ko: 120, en: 0, official: 40, tools: 40 }, used = {};
   const top = news.filter(n => (used[n.cat] = (used[n.cat] || 0) + 1) <= cap[n.cat]);
-  /* 사진 없는 기사 — 6건씩 동시에 원문 대표 사진 */
-  const need = top.filter(n => !n.thumb);
+  /* 저작권(2026-11-10): 허락 확인된 출처(MEDIA_OK)만 사진·요약을 남기고, 나머지는 제목·매체명·링크만 */
+  for (const n of top) if (!hub.MEDIA_OK.has(n.source)) { n.thumb = ''; n.summary = /^출처 /.test(n.summary) ? n.summary.slice(0, 63) : ''; }
+  const need = top.filter(n => !n.thumb && hub.MEDIA_OK.has(n.source));
   for (let i = 0; i < need.length; i += 8) {
     await Promise.all(need.slice(i, i + 8).map(async n => {
       const m = await hub.fetchMeta(n.url);
@@ -42,8 +44,8 @@ const catOf = t => /^news_en/.test(t) ? 'en' : /^official/.test(t) ? 'official' 
   }
   yt.sort((a, b) => b.perHour - a.perHour);
   const wk = news.concat(yt).filter(n => { const t = Date.parse(n.at); return t >= now - 7 * 86400000 && t <= now + 3600000; })
-    .map(n => String(n.title || '') + ' ' + String(n.summary || '').slice(0, 160));
-  const out = { ok: true, ready: true, snapshot: true, brief: null, news: top, youtube: yt.slice(0, 12), week: wk, updatedAt: new Date(now).toISOString() };
+    .map(n => String(n.title || ''));   // 순위 계산용 제목만 (요약문은 공개하지 않음)
+  const out = { ok: true, ready: true, snapshot: true, brief: null, news: top, youtube: yt.slice(0, 80), week: wk, updatedAt: new Date(now).toISOString() };
   fs.mkdirSync(path.join(root, 'data'), { recursive: true });
   fs.writeFileSync(path.join(root, 'data', 'hub-snapshot.json'), JSON.stringify(out));
   console.log(`뉴스 ${top.length}건 (사진 ${top.filter(n => n.thumb).length}) · 영상 ${out.youtube.length}편 → data/hub-snapshot.json`);

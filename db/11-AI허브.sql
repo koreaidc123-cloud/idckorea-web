@@ -74,7 +74,8 @@ alter table hub_items   enable row level security;
 alter table hub_briefs  enable row level security;
 
 -- ── 5. 기본 출처 (2026-11-08 개발 중 한 번씩 열어 RSS 가 오는 것을 확인함) ──
---   뉴스: 구글 뉴스 검색 RSS 2개 · AI타임스 · 인공지능신문 · 영어 2개 (The Verge AI · TechCrunch AI)
+--   한국어 출처만 씁니다 (2026-11-10 대표 지시 — 영어 기사·영어 채널 제외).
+--   뉴스: 구글 뉴스 검색 RSS · AI 전문지 · 국내 IT 언론(AI 기사만) · 기업 공식 뉴스룸(AI 글만, 공식 발표로 표시) · 긱뉴스
 --   유튜브: AI 본부 관찰 채널 중 AI 도구 · 개발 · 공식 채널만 (드라마·코미디 채널과 경쟁사 채널은 뺐습니다)
 --   필요 없는 곳은 관리자 화면 [AI 허브 관리 → 출처] 에서 끄시면 됩니다.
 insert into hub_sources (kind, name, url_or_channel_id, topic) values
@@ -82,8 +83,6 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
   ('rss', '구글 뉴스 · 클로드 코드', 'https://news.google.com/rss/search?q=%ED%81%B4%EB%A1%9C%EB%93%9C%20%EC%BD%94%EB%93%9C&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
   ('rss', 'AI타임스', 'https://www.aitimes.com/rss/allArticle.xml', 'news_ko'),
   ('rss', '인공지능신문', 'https://www.aitimes.kr/rss/allArticle.xml', 'news_ko'),
-  ('rss', 'The Verge · AI', 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', 'news_en'),
-  ('rss', 'TechCrunch · AI', 'https://techcrunch.com/category/artificial-intelligence/feed/', 'news_en'),
   ('rss', 'AI포스트', 'https://www.aipostkorea.com/rss/allArticle.xml', 'news_ko'),
   ('rss', '구글 뉴스 · 생성형 AI', 'https://news.google.com/rss/search?q=%EC%83%9D%EC%84%B1%ED%98%95%20AI&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
   ('rss', '구글 뉴스 · AI 에이전트', 'https://news.google.com/rss/search?q=AI%20%EC%97%90%EC%9D%B4%EC%A0%84%ED%8A%B8&hl=ko&gl=KR&ceid=KR:ko', 'news_ko'),
@@ -94,32 +93,32 @@ insert into hub_sources (kind, name, url_or_channel_id, topic) values
   ('rss', '테크M', 'https://www.techm.kr/rss/allArticle.xml', 'news_ko_f'),
   ('rss', 'IT조선', 'https://it.chosun.com/rss/allArticle.xml', 'news_ko_f'),
   ('rss', '바이라인네트워크', 'https://byline.network/feed/', 'news_ko_f'),
-  ('rss', 'Wired · AI', 'https://www.wired.com/feed/tag/ai/latest/rss', 'news_en'),
-  ('rss', 'MIT Technology Review · AI', 'https://www.technologyreview.com/topic/artificial-intelligence/feed', 'news_en'),
-  ('rss', 'Ars Technica · AI', 'https://arstechnica.com/ai/feed/', 'news_en'),
-  ('rss', 'OpenAI 뉴스', 'https://openai.com/news/rss.xml', 'official'),
-  ('rss', 'Google AI 블로그', 'https://blog.google/technology/ai/rss/', 'official'),
-  ('rss', 'Google DeepMind', 'https://deepmind.google/blog/rss.xml', 'official'),
-  ('rss', 'NVIDIA 블로그', 'https://blogs.nvidia.com/feed/', 'official'),
-  ('rss', 'Hugging Face 블로그', 'https://huggingface.co/blog/feed.xml', 'official'),
-  ('rss', 'GitHub 블로그 · AI', 'https://github.blog/ai-and-ml/feed/', 'official'),
-  ('rss', 'Product Hunt · AI', 'https://www.producthunt.com/feed?category=artificial-intelligence', 'tools'),
+  ('rss', '삼성전자 뉴스룸', 'https://news.samsung.com/kr/feed', 'official_f'),
+  ('rss', 'SK텔레콤 뉴스룸', 'https://news.sktelecom.com/feed', 'official_f'),
+  ('rss', 'SK하이닉스 뉴스룸', 'https://news.skhynix.co.kr/feed/', 'official_f'),
+  ('rss', '구글 코리아 블로그', 'https://blog.google/intl/ko-kr/rss/', 'official_f'),
   ('rss', '긱뉴스', 'https://news.hada.io/rss/news', 'dev_f'),
   ('youtube', 'AI튜터랩', 'UC1wnOopnBuSvd-98O1Is84A', 'ai_tools'),
   ('youtube', '큐레이터 단비', 'UCb-_7QY_hLOGRWWPPV61i7A', 'ai_tools'),
   ('youtube', '왼손 WENSON AI', 'UC4AVc-iIPWIDl6TTi92TS2Q', 'ai_video'),
-  ('youtube', '오빠두엑셀', 'UCZ6UHYBQFBe14WUgxlgmYfg', 'ai_tools'),
+  ('youtube', '오빠두엑셀', 'UCZ6UHYBQFBe14WUgxlgmYfg', 'office_f'),
   ('youtube', '조코딩', 'UCQNE2JmbasNYbjGAcuBiRRg', 'ai_tools'),
-  ('youtube', '노마드 코더', 'UCUpJs89fSBXNolQGOYKn0YQ', 'web'),
+  ('youtube', '노마드 코더', 'UCUpJs89fSBXNolQGOYKn0YQ', 'dev_f'),
   ('youtube', '브랜드마이트', 'UC2UlnSkX86o0fq6k0odIxhA', 'ai_video'),
   ('youtube', 'AI디렉터 소미', 'UCQCTxgiDiqLkoWB1AGpHLbQ', 'ai_ads'),
   ('youtube', 'AI CUT STUDIO', 'UCnqhvgk49LwPNIqRUslhyQw', 'shorts'),
   ('youtube', 'Newtake_KR', 'UC1e7dJSza0kBSScjlwwuaug', 'official_tool'),
-  ('youtube', 'Higgsfield AI', 'UCh13OyDSm-Kb8ij3yZArtFg', 'official_tool'),
-  ('youtube', 'Anthropic', 'UCrDwWp7EBBv4NwvScIpBDOA', 'official_tool'),
-  ('youtube', 'Google for Developers', 'UC_x5XG1OV2P6uZZ5FSM9Ttw', 'official_tool')
+  ('youtube', '테디노트 TeddyNote', 'UCt2wAAXgm87ACiQnDHQEW6Q', 'ai_tools'),
+  ('youtube', '빵형의 개발도상국', 'UC2L1DgDMD5pJ-35G47Objfw', 'ai_tools'),
+  ('youtube', '일잘러 장피엠', 'UCSkpTOEl_zW6b4Y7M_Prefg', 'ai_tools'),
+  ('youtube', 'GPTers 커뮤니티', 'UCLL4StPwMllEZJ6bYI4Ds3w', 'ai_tools'),
+  ('youtube', '엔드플랜 Endplan AI', 'UCUpkgT9Entggw2fMBprWM4w', 'ai_tools'),
+  ('youtube', '코딩애플', 'UCSLrpBAzr-ROVGHQ5EmxnUg', 'dev_f'),
+  ('youtube', '드림코딩', 'UC_4u-bXaba7yrRz_6x6kb_w', 'dev_f'),
+  ('youtube', 'ITSub잇섭', 'UCdUcjkyZtf-1WJyPPiETF1g', 'tech_f'),
+  ('youtube', '테크몽 Techmong', 'UCFX6adXoyQKxft933NB3rmA', 'tech_f')
 on conflict (url_or_channel_id) do nothing;
 
 -- ── 6. 확인 ──────────────────────────────────────────────────
--- 아래가 출처 개수(처음이면 40)를 보여 주면 끝입니다.
+-- 아래가 출처 개수(처음이면 38)를 보여 주면 끝입니다.
 select count(*) as "출처 개수" from hub_sources;

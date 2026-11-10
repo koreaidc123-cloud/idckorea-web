@@ -2200,7 +2200,7 @@ async function main() {
     await ctx.close();
   });
 
-  await scenario('HUB5', 'AI 소식 화면 — 표 없을 때 빈 화면(브리핑 구간 숨김) · 내용 있을 때 주간 뉴스 사진 카드·주 선택·인기 도구 · PC/390 폭 가로 넘침·콘솔 오류 없음', async () => {
+  await scenario('HUB5', 'AI 소식 화면 — 표 없을 때 빈 화면(브리핑 구간 숨김) · 내용 있을 때 글자 카드(사진·주간 탭 없음)·분류 탭·인기 도구 · PC/390 폭 가로 넘침·콘솔 오류 없음', async () => {
     const shapes = [{ viewport: { width: 1280, height: 900 } }, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }];
     srv.fakeDb.setHub(false);
     try {
@@ -2209,7 +2209,7 @@ async function main() {
         /* 기본 자료(data/hub-snapshot.json)도 없는 경우 — 진짜 빈 화면 */
         await ctx.route('**/data/hub-snapshot.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"ready":false,"news":[],"youtube":[]}' }));
         const p = await openPage(ctx, '/hub');
-        await p.waitForFunction(() => document.getElementById('brief').hidden && /모인 뉴스가 아직 없습니다/.test(document.getElementById('hb-news').innerText)
+        await p.waitForFunction(() => document.getElementById('brief').hidden && /모인 소식이 아직 없습니다/.test(document.getElementById('hb-news').innerText)
           && /아직 모인 영상이 없습니다/.test(document.getElementById('hb-yt').innerText)
           && /아직 집계할 소식이 없습니다/.test(document.getElementById('hb-tools').innerText), null, { timeout: 8000 });
         ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 빈 화면 가로 넘침');
@@ -2222,17 +2222,17 @@ async function main() {
     for (const o of shapes) {
       const ctx = await newContext(Object.assign({ }, o));
       const p = await openPage(ctx, '/hub');
-      await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nc').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 3, null, { timeout: 8000 });
+      await p.waitForFunction(() => document.querySelectorAll('#hb-news .hb-nc').length >= 1 && document.querySelectorAll('#hb-yt .hb-vc').length === 2, null, { timeout: 8000 });
       const s = await p.evaluate(() => ({
         badge: document.querySelector('#hb-yt .badge').textContent,
         ext: [...document.querySelectorAll('#hb-news a.hb-nc,#hb-yt a.hb-vc')].every(a => a.target === '_blank' && /noopener/.test(a.rel) && /^https?:/.test(a.href)),
-        weeks: document.querySelectorAll('#hb-weeks .wk').length, big: document.querySelectorAll('#hb-news .hb-nc.big').length,
-        th: document.querySelectorAll('#hb-news .hb-nc .th').length, brief: !document.getElementById('brief').hidden,
+        cats: document.querySelectorAll('#hb-cats .tb').length, txt: document.querySelectorAll('#hb-news .hb-nc.txt').length,
+        noImg: !document.querySelector('#hb-news img') && !document.getElementById('hb-weeks'), brief: !document.getElementById('brief').hidden,
         noMe: !document.getElementById('hb-me') && !document.getElementById('hb-tpl'),
         upd: document.getElementById('hb-upd').textContent, on: (document.querySelector('.gnb a.on') || {}).textContent,
       }));
       ok(/^시간당 2,[45][0-9][0-9]회$/.test(s.badge), '시간당 배지 ' + s.badge);
-      ok(s.ext && s.weeks === 3 && s.big === 1 && s.th >= 1 && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 작업용 PC', '화면 ' + JSON.stringify(s));
+      ok(s.ext && s.cats >= 2 && s.txt >= 1 && s.noImg && s.brief && s.noMe && s.upd && s.upd !== '확인 중…' && s.on === 'AI 작업용 PC', '화면 ' + JSON.stringify(s));
       ok(await noOverflow(p, o.viewport.width), o.viewport.width + ' 꽉 찬 화면 가로 넘침');
       ok(!p.errors.length && !p.xss.length, '꽉 찬 화면 콘솔 오류 ' + p.errors.join('|'));
       await ctx.close();
