@@ -1,64 +1,491 @@
 {
-  "_": "AI 소식 · 도구 모음 (2026-11-10). 소개 글은 한국 가상컴이 직접 씀. 로고·회사 이미지는 쓰지 않음. 요금·한국어 지원 등 바뀌기 쉬운 정보는 넣지 않음. r: on=24시간 켜 두면 좋은 도구, win=윈도우에 설치해 쓰는 도구, gpu=내 PC에서 직접 돌리면 그래픽카드 필요, web=웹 브라우저로 충분. k=이름 찾기 정규식, x=빼고 셀 이름",
-  "cats": [
-    ["llm", "대화형 AI", "질문·글쓰기·요약을 맡기는 AI 비서"],
-    ["img", "이미지 생성", "글로 설명하면 그림을 만들어 주는 도구"],
-    ["vid", "영상 생성", "글·사진으로 짧은 영상을 만드는 도구"],
-    ["dev", "개발·코딩", "코드를 쓰고 고치는 AI 개발 도구"],
-    ["auto", "자동화·에이전트", "반복 업무를 대신 돌리는 도구"],
-    ["audio", "음성·음악", "목소리·음악을 만드는 도구"],
-    ["work", "업무·검색", "자료 조사·문서·발표에 쓰는 도구"],
-    ["ko", "국내 AI", "국내 기업이 만든 AI 서비스"]
+ "_": "AI 소식 · 도구 모음 (2026-11-10). 소개 글은 한국 가상컴이 직접 씀. 로고·회사 이미지는 쓰지 않음. 요금·한국어 지원 등 바뀌기 쉬운 정보는 넣지 않음. r: on=24시간 켜 두면 좋은 도구, win=윈도우에 설치해 쓰는 도구, gpu=내 PC에서 직접 돌리면 그래픽카드 필요, web=웹 브라우저로 충분. k=이름 찾기 정규식, x=빼고 셀 이름",
+ "cats": [
+  [
+   "llm",
+   "대화형 AI",
+   "질문·글쓰기·요약을 맡기는 AI 비서"
   ],
-  "tools": [
-    {"n":"ChatGPT","c":"llm","m":"OpenAI","u":"https://chatgpt.com","r":"web","d":"가장 널리 쓰이는 대화형 AI. 글쓰기·요약·번역·이미지까지 한곳에서.","k":"chat\\s?gpt|챗\\s?gpt|챗지피티"},
-    {"n":"Claude","c":"llm","m":"Anthropic","u":"https://claude.ai","r":"web","d":"긴 문서 읽기와 글쓰기에 강한 대화형 AI. 데스크톱 앱도 있음.","k":"claude|클로드","x":"claude\\s?code|클로드\\s?코드"},
-    {"n":"Gemini","c":"llm","m":"Google","u":"https://gemini.google.com","r":"web","d":"구글의 대화형 AI. 구글 문서·메일 등과 함께 쓰기 좋음.","k":"gemini|제미나이|제미니","x":"gemini\\s?cli|제미나이\\s?cli"},
-    {"n":"Grok","c":"llm","m":"xAI","u":"https://grok.com","r":"web","d":"xAI가 만든 대화형 AI.","k":"\\bgrok\\b|그록"},
-    {"n":"DeepSeek","c":"llm","m":"DeepSeek","u":"https://www.deepseek.com","r":"gpu","d":"공개 모델로도 나와 내 PC에서 직접 돌릴 수 있는 AI. 직접 돌리면 그래픽카드 필요.","k":"deepseek|딥시크"},
-    {"n":"Llama","c":"llm","m":"Meta","u":"https://www.llama.com","r":"gpu","d":"메타가 공개한 AI 모델. 내 PC에 설치해 쓰려면 그래픽카드 필요.","k":"\\bllama\\b|라마\\s?\\d"},
-    {"n":"Mistral","c":"llm","m":"Mistral AI","u":"https://mistral.ai","r":"gpu","d":"유럽의 AI 회사가 만든 모델. 공개 모델은 직접 돌릴 수 있음.","k":"mistral|미스트랄"},
-    {"n":"Perplexity","c":"work","m":"Perplexity","u":"https://www.perplexity.ai","r":"web","d":"출처 링크와 함께 답을 찾아 주는 AI 검색.","k":"perplexity|퍼플렉시티"},
-    {"n":"NotebookLM","c":"work","m":"Google","u":"https://notebooklm.google.com","r":"web","d":"올린 자료만 읽고 요약·질문에 답하는 구글의 자료 정리 도구.","k":"notebook\\s?lm|노트북\\s?lm"},
-    {"n":"Gamma","c":"work","m":"Gamma","u":"https://gamma.app","r":"web","d":"주제만 넣으면 발표 자료 초안을 만들어 주는 도구.","k":"gamma\\.app|gamma\\s?(ai|app|앱)|감마\\s?(AI|앱)|\\bgamma\\b.{0,20}(PPT|프레젠테이션|presentation|slides?|슬라이드)"},
-    {"n":"Notion AI","c":"work","m":"Notion","u":"https://www.notion.com","r":"web","d":"노션 문서 안에서 쓰는 AI. 회의록 정리·글 다듬기.","k":"notion\\s?ai|노션\\s?AI"},
-    {"n":"Microsoft Copilot","c":"work","m":"Microsoft","u":"","r":"win","d":"윈도우·오피스와 함께 쓰는 마이크로소프트의 AI 비서.","k":"copilot|코파일럿","x":"github\\s?copilot|깃허브\\s?코파일럿"},
-    {"n":"Genspark","c":"work","m":"Genspark","u":"","r":"web","d":"여러 AI를 묶어 조사·자료 만들기를 대신하는 서비스.","k":"genspark|젠스파크"},
-    {"n":"Midjourney","c":"img","m":"Midjourney","u":"https://www.midjourney.com","r":"web","d":"분위기 있는 그림·일러스트로 유명한 이미지 생성 AI.","k":"midjourney|미드저니"},
-    {"n":"Nano Banana","c":"img","m":"Google","u":"","r":"web","d":"구글의 이미지 생성·편집 모델. 제미나이에서 사용.","k":"nano\\s?banana|나노\\s?바나나"},
-    {"n":"GPT 이미지","c":"img","m":"OpenAI","u":"","r":"web","d":"ChatGPT 안에서 그림을 만들고 고치는 기능.","k":"gpt[-\\s]?image|dall[-·\\s]?e|달리\\s?\\d"},
-    {"n":"Stable Diffusion","c":"img","m":"Stability AI","u":"https://stability.ai","r":"gpu","d":"내 PC에 설치해 쓰는 대표 이미지 생성 AI. 그래픽카드 필요.","k":"stable\\s?diffusion|스테이블\\s?디퓨전|stability\\s?ai"},
-    {"n":"ComfyUI","c":"img","m":"Comfy","u":"","r":"gpu","d":"이미지·영상 생성 과정을 블록처럼 이어 붙이는 설치형 도구. 그래픽카드 필요.","k":"comfy\\s?ui|컴피\\s?UI"},
-    {"n":"FLUX","c":"img","m":"Black Forest Labs","u":"","r":"gpu","d":"사실적인 그림에 강한 이미지 모델. 직접 돌리면 그래픽카드 필요.","k":"\\bflux\\b.{0,20}(이미지|image|모델|model|kontext|pro|\\d)|black\\s?forest"},
-    {"n":"Adobe Firefly","c":"img","m":"Adobe","u":"https://firefly.adobe.com","r":"web","d":"어도비의 이미지 생성 AI. 포토샵 등과 함께 사용.","k":"firefly|파이어플라이"},
-    {"n":"Ideogram","c":"img","m":"Ideogram","u":"https://ideogram.ai","r":"web","d":"그림 속 글자 표현에 강한 이미지 생성 AI.","k":"ideogram"},
-    {"n":"Sora","c":"vid","m":"OpenAI","u":"","r":"web","d":"OpenAI의 영상 생성 AI.","k":"\\bsora\\b|소라\\s?\\d|오픈AI\\s?소라"},
-    {"n":"Veo","c":"vid","m":"Google","u":"","r":"web","d":"구글의 영상 생성 모델.","k":"\\bveo\\s?\\d|google\\s?veo|구글\\s?비오|비오\\s?\\d"},
-    {"n":"Kling","c":"vid","m":"Kuaishou","u":"https://klingai.com","r":"web","d":"사진·글로 짧은 영상을 만드는 영상 생성 AI.","k":"\\bkling\\b|클링"},
-    {"n":"Runway","c":"vid","m":"Runway","u":"https://runwayml.com","r":"web","d":"영상 생성과 편집 기능을 함께 갖춘 도구.","k":"runway\\s?(ml|gen|aleph|act)|runwayml|런웨이\\s?(ML|Gen|AI)|AI.{0,10}런웨이"},
-    {"n":"Seedance","c":"vid","m":"ByteDance","u":"","r":"web","d":"바이트댄스의 영상 생성 모델.","k":"seedance|시댄스"},
-    {"n":"Higgsfield","c":"vid","m":"Higgsfield","u":"https://higgsfield.ai","r":"web","d":"여러 영상·이미지 모델을 한곳에서 쓰는 제작 도구.","k":"higgsfield|힉스필드"},
-    {"n":"Pika","c":"vid","m":"Pika","u":"https://pika.art","r":"web","d":"짧은 영상 효과를 쉽게 만드는 영상 생성 AI.","k":"pika\\s?(labs|art|\\d)|pika\\.art|피카\\s?(랩스|AI)"},
-    {"n":"HeyGen","c":"vid","m":"HeyGen","u":"https://www.heygen.com","r":"web","d":"AI 아바타가 말하는 영상을 만드는 도구.","k":"heygen|헤이젠"},
-    {"n":"Claude Code","c":"dev","m":"Anthropic","u":"","r":"on","d":"컴퓨터에서 직접 코드를 쓰고 고치는 AI. 켜 둔 PC에서 휴대폰으로 원격 지시 가능.","k":"claude\\s?code|클로드\\s?코드"},
-    {"n":"Codex","c":"dev","m":"OpenAI","u":"","r":"on","d":"OpenAI의 코딩 에이전트. 작업을 맡겨 두고 결과를 받는 방식.","k":"codex|코덱스"},
-    {"n":"Gemini CLI","c":"dev","m":"Google","u":"","r":"on","d":"터미널에서 쓰는 구글의 코딩 AI.","k":"gemini\\s?cli|제미나이\\s?CLI"},
-    {"n":"Cursor","c":"dev","m":"Anysphere","u":"https://cursor.com","r":"win","d":"AI가 들어간 코드 편집기. 윈도우에 설치해 사용.","k":"cursor\\s?(ai|ide|에디터|editor|agent|에이전트)|cursor\\.com|anysphere|커서\\s?AI|AI\\s?코딩.{0,8}커서|커서.{0,8}(코딩|IDE)"},
-    {"n":"GitHub Copilot","c":"dev","m":"GitHub","u":"","r":"win","d":"코드 편집기 안에서 다음 코드를 제안하는 AI.","k":"github\\s?copilot|깃허브\\s?코파일럿"},
-    {"n":"Windsurf","c":"dev","m":"Windsurf","u":"","r":"win","d":"AI 코딩 기능을 갖춘 코드 편집기.","k":"windsurf|윈드서프"},
-    {"n":"Replit","c":"dev","m":"Replit","u":"https://replit.com","r":"web","d":"브라우저에서 앱을 만들고 바로 띄워 보는 개발 도구.","k":"replit|리플릿"},
-    {"n":"Lovable","c":"dev","m":"Lovable","u":"https://lovable.dev","r":"web","d":"말로 설명하면 웹 앱을 만들어 주는 도구.","k":"lovable|러버블"},
-    {"n":"n8n","c":"auto","m":"n8n","u":"https://n8n.io","r":"on","d":"여러 서비스를 이어 자동으로 일하게 하는 자동화 도구. 내 PC에 설치하면 24시간 켜 둬야 함.","k":"\\bn8n\\b"},
-    {"n":"Make","c":"auto","m":"Make","u":"https://www.make.com","r":"web","d":"블록을 이어 업무 자동화를 만드는 웹 서비스.","k":"make\\.com|메이크\\s?(자동화|닷컴)"},
-    {"n":"Zapier","c":"auto","m":"Zapier","u":"https://zapier.com","r":"web","d":"앱과 앱을 연결해 반복 작업을 자동으로 처리.","k":"zapier|재피어"},
-    {"n":"Power Automate","c":"auto","m":"Microsoft","u":"","r":"win","d":"윈도우 PC의 마우스·키보드 작업을 자동으로 반복시키는 도구.","k":"power\\s?automate|파워\\s?오토메이트"},
-    {"n":"Manus","c":"auto","m":"Manus","u":"","r":"web","d":"조사부터 결과물까지 스스로 단계를 밟는 AI 에이전트.","k":"\\bmanus\\b|마누스"},
-    {"n":"Suno","c":"audio","m":"Suno","u":"https://suno.com","r":"web","d":"가사와 분위기만 넣으면 노래를 만드는 음악 생성 AI.","k":"\\bsuno\\b|수노"},
-    {"n":"Udio","c":"audio","m":"Udio","u":"","r":"web","d":"음악을 만들어 주는 생성 AI.","k":"\\budio\\b|유디오"},
-    {"n":"ElevenLabs","c":"audio","m":"ElevenLabs","u":"https://elevenlabs.io","r":"web","d":"글을 자연스러운 목소리로 읽어 주는 음성 생성 AI.","k":"elevenlabs|일레븐랩스"},
-    {"n":"HyperCLOVA X","c":"ko","m":"네이버","u":"","r":"web","d":"네이버가 만든 한국어 중심 AI.","k":"hyperclova|하이퍼클로바|클로바\\s?X"},
-    {"n":"에이닷","c":"ko","m":"SK텔레콤","u":"","r":"web","d":"SK텔레콤의 AI 비서 서비스.","k":"에이닷|\\ba\\.?dot\\b"},
-    {"n":"뤼튼","c":"ko","m":"뤼튼테크놀로지스","u":"https://wrtn.ai","r":"web","d":"여러 AI를 한국어로 쉽게 쓰게 만든 국내 서비스.","k":"뤼튼|wrtn"},
-    {"n":"엑사원","c":"ko","m":"LG AI연구원","u":"","r":"gpu","d":"LG가 만든 AI 모델. 공개 모델은 직접 돌릴 수 있음.","k":"exaone|엑사원"}
+  [
+   "img",
+   "이미지 생성",
+   "글로 설명하면 그림을 만들어 주는 도구"
+  ],
+  [
+   "vid",
+   "영상 생성",
+   "글·사진으로 짧은 영상을 만드는 도구"
+  ],
+  [
+   "dev",
+   "개발·코딩",
+   "코드를 쓰고 고치는 AI 개발 도구"
+  ],
+  [
+   "auto",
+   "자동화·에이전트",
+   "반복 업무를 대신 돌리는 도구"
+  ],
+  [
+   "audio",
+   "음성·음악",
+   "목소리·음악을 만드는 도구"
+  ],
+  [
+   "work",
+   "업무·검색",
+   "자료 조사·문서·발표에 쓰는 도구"
+  ],
+  [
+   "ko",
+   "국내 AI",
+   "국내 기업이 만든 AI 서비스"
   ]
+ ],
+ "tools": [
+  {
+   "n": "ChatGPT",
+   "c": "llm",
+   "m": "OpenAI",
+   "u": "https://chatgpt.com",
+   "r": "web",
+   "d": "가장 널리 쓰이는 대화형 AI. 글쓰기·요약·번역·이미지까지 한곳에서.",
+   "k": "chat\\s?gpt|챗\\s?gpt|챗지피티"
+  },
+  {
+   "n": "Claude",
+   "c": "llm",
+   "m": "Anthropic",
+   "u": "https://claude.ai",
+   "r": "web",
+   "d": "긴 문서 읽기와 글쓰기에 강한 대화형 AI. 데스크톱 앱도 있음.",
+   "k": "claude|클로드",
+   "x": "claude\\s?code|클로드\\s?코드"
+  },
+  {
+   "n": "Gemini",
+   "c": "llm",
+   "m": "Google",
+   "u": "https://gemini.google.com",
+   "r": "web",
+   "d": "구글의 대화형 AI. 구글 문서·메일 등과 함께 쓰기 좋음.",
+   "k": "gemini|제미나이|제미니",
+   "x": "gemini\\s?cli|제미나이\\s?cli"
+  },
+  {
+   "n": "Grok",
+   "c": "llm",
+   "m": "xAI",
+   "u": "https://grok.com",
+   "r": "web",
+   "d": "xAI가 만든 대화형 AI.",
+   "k": "\\bgrok\\b|그록"
+  },
+  {
+   "n": "DeepSeek",
+   "c": "llm",
+   "m": "DeepSeek",
+   "u": "https://www.deepseek.com",
+   "r": "gpu",
+   "d": "웹 채팅으로 바로 쓰거나, 공개 모델을 내 PC에서 직접 돌릴 수 있는 AI(직접 돌리면 그래픽카드 필요).",
+   "k": "deepseek|딥시크"
+  },
+  {
+   "n": "Llama",
+   "c": "llm",
+   "m": "Meta",
+   "u": "https://www.llama.com",
+   "r": "gpu",
+   "d": "메타가 공개한 AI 모델. 내 PC에 설치해 쓰려면 그래픽카드 필요.",
+   "k": "\\bllama\\b|라마\\s?\\d"
+  },
+  {
+   "n": "Mistral",
+   "c": "llm",
+   "m": "Mistral AI",
+   "u": "https://mistral.ai",
+   "r": "gpu",
+   "d": "웹 채팅(Le Chat)으로 쓰거나, 공개 모델을 직접 돌릴 수 있는 유럽의 AI(직접 돌리면 그래픽카드 필요).",
+   "k": "mistral|미스트랄"
+  },
+  {
+   "n": "Perplexity",
+   "c": "work",
+   "m": "Perplexity",
+   "u": "https://www.perplexity.ai",
+   "r": "web",
+   "d": "출처 링크와 함께 답을 찾아 주는 AI 검색.",
+   "k": "perplexity|퍼플렉시티"
+  },
+  {
+   "n": "NotebookLM",
+   "c": "work",
+   "m": "Google",
+   "u": "https://notebooklm.google.com",
+   "r": "web",
+   "d": "올린 자료만 읽고 요약·질문에 답하는 구글의 자료 정리 도구.",
+   "k": "notebook\\s?lm|노트북\\s?lm"
+  },
+  {
+   "n": "Gamma",
+   "c": "work",
+   "m": "Gamma",
+   "u": "https://gamma.app",
+   "r": "web",
+   "d": "주제만 넣으면 발표 자료 초안을 만들어 주는 도구.",
+   "k": "gamma\\.app|gamma\\s?(ai|app|앱)|감마\\s?(AI|앱)|\\bgamma\\b.{0,20}(PPT|프레젠테이션|presentation|slides?|슬라이드)"
+  },
+  {
+   "n": "Notion AI",
+   "c": "work",
+   "m": "Notion",
+   "u": "https://www.notion.com",
+   "r": "web",
+   "d": "노션 문서 안에서 쓰는 AI. 회의록 정리·글 다듬기.",
+   "k": "notion\\s?ai|노션\\s?AI"
+  },
+  {
+   "n": "Microsoft Copilot",
+   "c": "work",
+   "m": "Microsoft",
+   "u": "",
+   "r": "win",
+   "d": "윈도우·오피스와 함께 쓰는 마이크로소프트의 AI 비서.",
+   "k": "copilot|코파일럿",
+   "x": "github\\s?copilot|깃허브\\s?코파일럿"
+  },
+  {
+   "n": "Genspark",
+   "c": "work",
+   "m": "Genspark",
+   "u": "",
+   "r": "web",
+   "d": "여러 AI를 묶어 조사·자료 만들기를 대신하는 서비스.",
+   "k": "genspark|젠스파크"
+  },
+  {
+   "n": "Midjourney",
+   "c": "img",
+   "m": "Midjourney",
+   "u": "https://www.midjourney.com",
+   "r": "web",
+   "d": "분위기 있는 그림·일러스트로 유명한 이미지 생성 AI.",
+   "k": "midjourney|미드저니"
+  },
+  {
+   "n": "Nano Banana",
+   "c": "img",
+   "m": "Google",
+   "u": "",
+   "r": "web",
+   "d": "구글의 이미지 생성·편집 모델. 제미나이에서 사용.",
+   "k": "nano\\s?banana|나노\\s?바나나"
+  },
+  {
+   "n": "GPT 이미지",
+   "c": "img",
+   "m": "OpenAI",
+   "u": "",
+   "r": "web",
+   "d": "ChatGPT 안에서 그림을 만들고 고치는 기능.",
+   "k": "gpt[-\\s]?image|dall[-·\\s]?e|달리\\s?\\d"
+  },
+  {
+   "n": "Stable Diffusion",
+   "c": "img",
+   "m": "Stability AI",
+   "u": "https://stability.ai",
+   "r": "gpu",
+   "d": "내 PC에 설치해 쓰는 대표 이미지 생성 AI. 그래픽카드 필요.",
+   "k": "stable\\s?diffusion|스테이블\\s?디퓨전|stability\\s?ai"
+  },
+  {
+   "n": "ComfyUI",
+   "c": "img",
+   "m": "Comfy",
+   "u": "",
+   "r": "gpu",
+   "d": "이미지·영상 생성 과정을 블록처럼 이어 붙이는 설치형 도구. 그래픽카드 필요.",
+   "k": "comfy\\s?ui|컴피\\s?UI"
+  },
+  {
+   "n": "FLUX",
+   "c": "img",
+   "m": "Black Forest Labs",
+   "u": "",
+   "r": "gpu",
+   "d": "사실적인 그림에 강한 이미지 모델. 직접 돌리면 그래픽카드 필요.",
+   "k": "\\bflux\\b.{0,20}(이미지|image|모델|model|kontext|pro|\\d)|black\\s?forest"
+  },
+  {
+   "n": "Adobe Firefly",
+   "c": "img",
+   "m": "Adobe",
+   "u": "https://firefly.adobe.com",
+   "r": "web",
+   "d": "어도비의 이미지 생성 AI. 포토샵 등과 함께 사용.",
+   "k": "firefly|파이어플라이"
+  },
+  {
+   "n": "Ideogram",
+   "c": "img",
+   "m": "Ideogram",
+   "u": "https://ideogram.ai",
+   "r": "web",
+   "d": "그림 속 글자 표현에 강한 이미지 생성 AI.",
+   "k": "ideogram"
+  },
+  {
+   "n": "Sora",
+   "c": "vid",
+   "m": "OpenAI",
+   "u": "",
+   "r": "web",
+   "d": "OpenAI의 영상 생성 AI.",
+   "k": "\\bsora\\b|소라\\s?\\d|오픈AI\\s?소라"
+  },
+  {
+   "n": "Veo",
+   "c": "vid",
+   "m": "Google",
+   "u": "",
+   "r": "web",
+   "d": "구글의 영상 생성 모델.",
+   "k": "\\bveo\\s?\\d|google\\s?veo|구글\\s?비오|비오\\s?\\d"
+  },
+  {
+   "n": "Kling",
+   "c": "vid",
+   "m": "Kuaishou",
+   "u": "https://klingai.com",
+   "r": "web",
+   "d": "사진·글로 짧은 영상을 만드는 영상 생성 AI.",
+   "k": "\\bkling\\b|클링"
+  },
+  {
+   "n": "Runway",
+   "c": "vid",
+   "m": "Runway",
+   "u": "https://runwayml.com",
+   "r": "web",
+   "d": "영상 생성과 편집 기능을 함께 갖춘 도구.",
+   "k": "runway\\s?(ml|gen|aleph|act)|runwayml|런웨이\\s?(ML|Gen|AI)|AI.{0,10}런웨이"
+  },
+  {
+   "n": "Seedance",
+   "c": "vid",
+   "m": "ByteDance",
+   "u": "",
+   "r": "web",
+   "d": "바이트댄스의 영상 생성 모델.",
+   "k": "seedance|시댄스"
+  },
+  {
+   "n": "Higgsfield",
+   "c": "vid",
+   "m": "Higgsfield",
+   "u": "https://higgsfield.ai",
+   "r": "web",
+   "d": "여러 영상·이미지 모델을 한곳에서 쓰는 제작 도구.",
+   "k": "higgsfield|힉스필드"
+  },
+  {
+   "n": "Pika",
+   "c": "vid",
+   "m": "Pika",
+   "u": "https://pika.art",
+   "r": "web",
+   "d": "짧은 영상 효과를 쉽게 만드는 영상 생성 AI.",
+   "k": "pika\\s?(labs|art|\\d)|pika\\.art|피카\\s?(랩스|AI)"
+  },
+  {
+   "n": "HeyGen",
+   "c": "vid",
+   "m": "HeyGen",
+   "u": "https://www.heygen.com",
+   "r": "web",
+   "d": "AI 아바타가 말하는 영상을 만드는 도구.",
+   "k": "heygen|헤이젠"
+  },
+  {
+   "n": "Claude Code",
+   "c": "dev",
+   "m": "Anthropic",
+   "u": "",
+   "r": "on",
+   "d": "컴퓨터에서 직접 코드를 쓰고 고치는 AI. 켜 둔 PC에서 휴대폰으로 원격 지시 가능.",
+   "k": "claude\\s?code|클로드\\s?코드"
+  },
+  {
+   "n": "Codex",
+   "c": "dev",
+   "m": "OpenAI",
+   "u": "",
+   "r": "on",
+   "d": "OpenAI의 코딩 에이전트. 작업을 맡겨 두고 결과를 받는 방식.",
+   "k": "codex|코덱스"
+  },
+  {
+   "n": "Gemini CLI",
+   "c": "dev",
+   "m": "Google",
+   "u": "",
+   "r": "on",
+   "d": "터미널에서 쓰는 구글의 코딩 AI.",
+   "k": "gemini\\s?cli|제미나이\\s?CLI"
+  },
+  {
+   "n": "Cursor",
+   "c": "dev",
+   "m": "Anysphere",
+   "u": "https://cursor.com",
+   "r": "win",
+   "d": "AI가 들어간 코드 편집기. 윈도우에 설치해 사용.",
+   "k": "cursor\\s?(ai|ide|에디터|editor|agent|에이전트)|cursor\\.com|anysphere|커서\\s?AI|AI\\s?코딩.{0,8}커서|커서.{0,8}(코딩|IDE)"
+  },
+  {
+   "n": "GitHub Copilot",
+   "c": "dev",
+   "m": "GitHub",
+   "u": "",
+   "r": "win",
+   "d": "코드 편집기 안에서 다음 코드를 제안하는 AI.",
+   "k": "github\\s?copilot|깃허브\\s?코파일럿"
+  },
+  {
+   "n": "Windsurf",
+   "c": "dev",
+   "m": "Windsurf",
+   "u": "",
+   "r": "win",
+   "d": "AI 코딩 기능을 갖춘 코드 편집기.",
+   "k": "windsurf|윈드서프"
+  },
+  {
+   "n": "Replit",
+   "c": "dev",
+   "m": "Replit",
+   "u": "https://replit.com",
+   "r": "web",
+   "d": "브라우저에서 앱을 만들고 바로 띄워 보는 개발 도구.",
+   "k": "replit|리플릿"
+  },
+  {
+   "n": "Lovable",
+   "c": "dev",
+   "m": "Lovable",
+   "u": "https://lovable.dev",
+   "r": "web",
+   "d": "말로 설명하면 웹 앱을 만들어 주는 도구.",
+   "k": "lovable|러버블"
+  },
+  {
+   "n": "n8n",
+   "c": "auto",
+   "m": "n8n",
+   "u": "https://n8n.io",
+   "r": "on",
+   "d": "여러 서비스를 이어 자동으로 일하게 하는 자동화 도구. 내 PC에 설치하면 24시간 켜 둬야 함.",
+   "k": "\\bn8n\\b"
+  },
+  {
+   "n": "Make",
+   "c": "auto",
+   "m": "Make",
+   "u": "https://www.make.com",
+   "r": "web",
+   "d": "블록을 이어 업무 자동화를 만드는 웹 서비스.",
+   "k": "make\\.com|메이크\\s?(자동화|닷컴)"
+  },
+  {
+   "n": "Zapier",
+   "c": "auto",
+   "m": "Zapier",
+   "u": "https://zapier.com",
+   "r": "web",
+   "d": "앱과 앱을 연결해 반복 작업을 자동으로 처리.",
+   "k": "zapier|재피어"
+  },
+  {
+   "n": "Power Automate",
+   "c": "auto",
+   "m": "Microsoft",
+   "u": "",
+   "r": "win",
+   "d": "윈도우 PC의 마우스·키보드 작업을 자동으로 반복시키는 도구.",
+   "k": "power\\s?automate|파워\\s?오토메이트"
+  },
+  {
+   "n": "Manus",
+   "c": "auto",
+   "m": "Manus",
+   "u": "",
+   "r": "web",
+   "d": "조사부터 결과물까지 스스로 단계를 밟는 AI 에이전트.",
+   "k": "\\bmanus\\b|마누스"
+  },
+  {
+   "n": "Suno",
+   "c": "audio",
+   "m": "Suno",
+   "u": "https://suno.com",
+   "r": "web",
+   "d": "가사와 분위기만 넣으면 노래를 만드는 음악 생성 AI.",
+   "k": "\\bsuno\\b|수노"
+  },
+  {
+   "n": "Udio",
+   "c": "audio",
+   "m": "Udio",
+   "u": "",
+   "r": "web",
+   "d": "음악을 만들어 주는 생성 AI.",
+   "k": "\\budio\\b|유디오"
+  },
+  {
+   "n": "ElevenLabs",
+   "c": "audio",
+   "m": "ElevenLabs",
+   "u": "https://elevenlabs.io",
+   "r": "web",
+   "d": "글을 자연스러운 목소리로 읽어 주는 음성 생성 AI.",
+   "k": "elevenlabs|일레븐랩스"
+  },
+  {
+   "n": "HyperCLOVA X",
+   "c": "ko",
+   "m": "네이버",
+   "u": "",
+   "r": "web",
+   "d": "네이버가 만든 한국어 중심 AI.",
+   "k": "hyperclova|하이퍼클로바|클로바\\s?X"
+  },
+  {
+   "n": "에이닷",
+   "c": "ko",
+   "m": "SK텔레콤",
+   "u": "",
+   "r": "web",
+   "d": "SK텔레콤의 AI 비서 서비스.",
+   "k": "에이닷|\\ba\\.?dot\\b"
+  },
+  {
+   "n": "뤼튼",
+   "c": "ko",
+   "m": "뤼튼테크놀로지스",
+   "u": "https://wrtn.ai",
+   "r": "web",
+   "d": "여러 AI를 한국어로 쉽게 쓰게 만든 국내 서비스.",
+   "k": "뤼튼|wrtn"
+  },
+  {
+   "n": "엑사원",
+   "c": "ko",
+   "m": "LG AI연구원",
+   "u": "",
+   "r": "gpu",
+   "d": "LG가 만든 AI 모델. 공개 모델은 직접 돌릴 수 있음.",
+   "k": "exaone|엑사원"
+  }
+ ]
 }

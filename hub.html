@@ -968,7 +968,7 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
     var q=TOOL_Q.trim().toLowerCase();
     var list=TOOLS.filter(function(x){return (TOOL_CAT==='all'||x.c===TOOL_CAT)&&(!q||x.n.toLowerCase().indexOf(q)>=0||String(x.m).toLowerCase().indexOf(q)>=0)})
       .sort(function(a,b){return (COUNT[b.n]||0)-(COUNT[a.n]||0)||a._i-b._i});
-    if(!list.length){empty(box,'찾는 도구가 없습니다','다른 이름이나 분야로 찾아 보세요.');return}
+    if(!list.length){empty(box,'찾는 도구가 없습니다','다른 이름이나 분야로 찾아 보세요.');$('tl-more').hidden=true;return}
     list.slice(0,TOOL_SHOW).forEach(function(x){box.appendChild(toolCard(x))});
     $('tl-more').hidden=list.length<=TOOL_SHOW;$('tl-more-b').textContent='도구 '+(list.length-TOOL_SHOW)+'개 더 보기';
   }
@@ -991,7 +991,9 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
     list.forEach(function(n,i){
       var srcs={};srcs[n.source||'']=1;var ti=Date.parse(n.at||'');
       list.forEach(function(m,j){
-        if(i===j||srcs[m.source||'']||catOf(m)!=='ko')return;   // 언론 기사끼리만 (Codex T-0254)var tj=Date.parse(m.at||'');if(!isFinite(ti)||!isFinite(tj)||Math.abs(ti-tj)>3*86400000)return;
+        /* 언론 기사끼리만, 3일 안에서만 (Codex T-0254·T-0257) */
+        if(i===j||srcs[m.source||'']||catOf(m)!=='ko')return;
+        var tj=Date.parse(m.at||'');if(!isFinite(ti)||!isFinite(tj)||Math.abs(ti-tj)>3*86400000)return;
         var a=sets[i],b=sets[j],inter=0,ka=Object.keys(a),kb=Object.keys(b);if(ka.length<3||kb.length<3)return;
         ka.forEach(function(x){if(b[x])inter++});
         if(inter>=3&&inter/Math.min(ka.length,kb.length)>=0.5)srcs[m.source||'']=1;
@@ -1052,10 +1054,12 @@ a.tc:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--bl
   function loadAll(){
     var toolsP=fetch('data/ai-tools.json').then(function(r){if(!r.ok)throw 0;return r.json()}).catch(function(){return {cats:[],tools:[]}});
     /* DB 수집 전이거나 비어 있으면 기본 자료(data/hub-snapshot.json)를 대신 씁니다 */
+    /* 서버가 실패해도(네트워크·HTTP 오류) 기본 자료로 넘어갑니다 (Codex T-0257) */
+    function snap(d){return fetch('data/hub-snapshot.json').then(function(r){if(!r.ok)throw 0;return r.json()}).catch(function(){if(d)return d;throw 0})}
     var feedP=fetch('/api/hub?do=feed',{credentials:'same-origin'}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
       if(d&&d.ready&&((d.news||[]).length||(d.youtube||[]).length))return d;
-      return fetch('data/hub-snapshot.json').then(function(r){if(!r.ok)return d;return r.json()}).catch(function(){return d});
-    });
+      return snap(d);
+    },function(){return snap(null)});
     toolsP.then(function(t){
       CATS=(t.cats||[]).filter(function(c){return Array.isArray(c)&&c.length>=3});
       TOOLS=(t.tools||[]).map(function(x,i){return {n:String(x.n||''),c:String(x.c||''),m:String(x.m||''),u:okUrl(x.u)?x.u:'',r:String(x.r||'web'),d:String(x.d||''),_k:rx(x.k),_x:rx(x.x,'gi'),_i:i}}).filter(function(x){return x.n});
